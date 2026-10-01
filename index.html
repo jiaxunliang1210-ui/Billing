@@ -1,0 +1,1585 @@
+<!doctype html>
+<html lang="zh" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ETK · L3H 开单系统</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&family=Questrial&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+:root{
+  --paper:#F5F6F3; --card:#FFFFFF; --ink:#1D2330; --muted:#636B7A; --line:#DADDD6;
+  --pen:#2447A8; --pen-soft:#E6ECFA; --carbon:#F1EA8A; --carbon-soft:#FBF8D6;
+  --stamp:#C9362A; --ok:#2E7A4E; --ok-soft:#E3F2E8; --warn:#9A6408; --warn-soft:#FBF0D9;
+  --bad:#B42318; --bad-soft:#FCE6E3;
+  --sans:"Barlow",-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+  --cond:"Barlow Condensed","Barlow",-apple-system,"PingFang SC",sans-serif;
+  color-scheme:light;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --paper:#14171C; --card:#1C2027; --ink:#E7E9EE; --muted:#9AA2B1; --line:#2C323C;
+    --pen:#86A3FF; --pen-soft:#1F2A47; --carbon:#5A5520; --carbon-soft:#2A2816;
+    --stamp:#FF7466; --ok:#6CCB93; --ok-soft:#18301F; --warn:#F2B84B; --warn-soft:#33280F;
+    --bad:#FF8A7A; --bad-soft:#3A1A17; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#14171C; --card:#1C2027; --ink:#E7E9EE; --muted:#9AA2B1; --line:#2C323C;
+  --pen:#86A3FF; --pen-soft:#1F2A47; --carbon:#5A5520; --carbon-soft:#2A2816;
+  --stamp:#FF7466; --ok:#6CCB93; --ok-soft:#18301F; --warn:#F2B84B; --warn-soft:#33280F;
+  --bad:#FF8A7A; --bad-soft:#3A1A17; color-scheme:dark;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.5 var(--sans);-webkit-text-size-adjust:100%}
+button,input,select,textarea{font:inherit;color:inherit}
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--paper);border-bottom:1px solid var(--line)}
+.top-row{display:flex;align-items:baseline;gap:12px;padding:12px 16px 4px;max-width:1100px;margin:0 auto}
+.brand{font:700 26px/1 var(--cond);letter-spacing:.01em}
+.brand b{color:var(--pen);font-weight:700}
+.sync{font-size:12px;color:var(--muted)}
+.sync.cloud{color:var(--ok)}
+.tabs{display:flex;gap:4px;overflow-x:auto;padding:6px 12px 0;max-width:1100px;margin:0 auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tab{border:0;background:none;padding:8px 12px 10px;font:600 16px var(--cond);color:var(--muted);border-bottom:3px solid transparent;white-space:nowrap;cursor:pointer}
+.tab[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--pen)}
+.tab .n{display:inline-block;min-width:18px;padding:0 5px;margin-left:4px;border-radius:9px;background:var(--bad);color:#fff;font:600 12px/18px var(--sans);text-align:center}
+main{max-width:1100px;margin:0 auto;padding:16px 16px 80px}
+section[hidden]{display:none}
+h2{font:600 22px/1.2 var(--cond);margin:8px 0 12px}
+h3{font:600 18px/1.2 var(--cond);margin:20px 0 8px}
+.hint{color:var(--muted);font-size:13px;margin:4px 0 12px}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px}
+.grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+label.f{display:flex;flex-direction:column;gap:3px;font-size:13px;color:var(--muted)}
+label.f.wide{grid-column:1/-1}
+input,select,textarea{background:var(--card);border:1px solid var(--line);border-radius:7px;padding:9px 10px;min-height:40px;width:100%}
+textarea{min-height:90px;resize:vertical}
+input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible,a:focus-visible{outline:2px solid var(--pen);outline-offset:1px}
+input.do-in{font:700 20px var(--cond);color:var(--stamp);letter-spacing:.04em}
+.btn{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:9px 14px;min-height:40px;cursor:pointer;font-weight:600}
+.btn.primary{background:var(--pen);border-color:var(--pen);color:#fff}
+.btn.danger{color:var(--bad)}
+.btn.small{padding:5px 10px;min-height:32px;font-size:13px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:var(--card);padding:8px 12px;min-height:38px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--pen);color:#fff}
+.calc{margin-top:12px;padding:12px 14px;border-radius:8px;background:var(--carbon-soft);border-left:5px solid var(--carbon);font-variant-numeric:tabular-nums}
+.calc .big{font:700 28px/1.1 var(--cond)}
+.calc .line{color:var(--muted);font-size:14px}
+.msgs{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.msg{padding:8px 10px;border-radius:7px;font-size:14px}
+.msg.bad{background:var(--bad-soft);color:var(--bad)}
+.msg.warn{background:var(--warn-soft);color:var(--warn)}
+.msg.ok{background:var(--ok-soft);color:var(--ok)}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--card)}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap;font-size:14px}
+th{font:600 14px var(--cond);color:var(--muted);background:var(--card);position:sticky;top:0}
+td.num,th.num{text-align:right}
+tr:last-child td{border-bottom:0}
+.dono{font:700 16px var(--cond);color:var(--stamp);letter-spacing:.03em}
+.chip{display:inline-block;padding:1px 8px;border-radius:10px;font-size:12px;font-weight:600}
+.chip.D{background:var(--pen-soft);color:var(--pen)}
+.chip.N{background:#26304a;color:#fff}
+.chip.billed{background:var(--ok-soft);color:var(--ok)}
+.chip.unbilled{background:var(--warn-soft);color:var(--warn)}
+.chip.void{background:var(--line);color:var(--muted)}
+.chip.paid{background:var(--ok-soft);color:var(--ok)}
+.chip.overdue{background:var(--bad-soft);color:var(--bad)}
+.stats{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));margin-bottom:14px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px}
+.stat .v{font:700 26px/1.1 var(--cond);font-variant-numeric:tabular-nums}
+.stat .k{color:var(--muted);font-size:13px}
+.issue{border:1px solid var(--line);border-left-width:5px;border-radius:9px;background:var(--card);padding:10px 12px;margin-bottom:10px}
+.issue.bad{border-left-color:var(--bad)}
+.issue.warn{border-left-color:var(--warn)}
+.issue.ok{border-left-color:var(--ok)}
+.issue h4{margin:0 0 4px;font:600 17px var(--cond)}
+.issue ul{margin:6px 0 0;padding-left:18px}
+.issue li{margin:3px 0}
+details.paste summary{cursor:pointer;color:var(--pen);font-weight:600;margin:14px 0 6px}
+.cust{border:1px solid var(--line);border-radius:10px;background:var(--card);padding:12px;margin-bottom:10px}
+.cust .name{font:600 18px var(--cond)}
+.cust .rates{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.vchips{display:flex;flex-wrap:wrap;gap:6px}
+.vchip{border:1px solid var(--line);border-radius:16px;padding:4px 6px 4px 12px;display:inline-flex;gap:6px;align-items:center;font:600 15px var(--cond);background:var(--card)}
+.vchip button{border:0;background:none;color:var(--muted);cursor:pointer;font-size:16px;padding:0 4px}
+#toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:10px 16px;border-radius:8px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:60;max-width:90vw}
+#toast.on{opacity:1}
+.modal{position:fixed;inset:0;background:rgba(10,12,16,.5);display:flex;align-items:flex-end;justify-content:center;z-index:50;padding:env(safe-area-inset-top,0px) 0 0}
+.modal[hidden]{display:none}
+.modal .box{background:var(--card);width:100%;max-width:640px;max-height:92vh;overflow:auto;border-radius:14px 14px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0px))}
+@media (min-width:700px){.modal{align-items:center}.modal .box{border-radius:14px}}
+.sheets{display:flex;flex-direction:column;gap:14px;margin-top:12px}
+.sheet-wrap{overflow:hidden;border:1px solid var(--line);border-radius:6px;background:#fff;box-shadow:0 1px 0 var(--line)}
+.sheet-wrap .page{transform-origin:0 0}
+#stage{position:fixed;left:-20000px;top:0}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* ---- invoice document (always light, prints as paper) ---- */
+.page{background:#fff;color:#111;font-family:"Questrial","Century Gothic",Arial,sans-serif;position:relative;overflow:hidden}
+.page.p{width:794px;height:1123px;padding:48px 56px 70px;display:flex;flex-direction:column}
+.page.l{width:1123px;height:794px;padding:40px 44px}
+.page .co{text-align:center}
+.page .co .cn{font:italic 700 30px/1.2 Arial,sans-serif;letter-spacing:.01em}
+.page .co div{font-size:13px;line-height:1.55}
+.page .title{text-align:right;font:700 34px Arial,sans-serif;margin:18px 0 10px}
+.page .hdr{display:flex;justify-content:space-between;font-size:13.5px;line-height:1.6}
+.page .hdr .to{max-width:58%}
+.page .hdr table td{padding:0 4px;border:0;font-size:13.5px}
+.page .items{width:100%;margin-top:14px;border-collapse:collapse}
+.page .items th{background:none;color:#111;font:700 13.5px Arial,sans-serif;border-top:1.5px solid #111;border-bottom:1.5px solid #111;padding:6px 6px;position:static}
+.page .items td{border:0;padding:12px 6px 2px;font-size:13.5px;vertical-align:top;white-space:normal}
+.page .items .desc u{font-weight:700}
+.page .tot{margin-left:auto;margin-top:36px;border-collapse:collapse;width:auto}
+.page .hdr table{width:auto}
+.page .tot td{border:0;padding:3px 8px;font-size:13.5px}
+.page .tot .amt{border-top:1px solid #111;min-width:120px;text-align:right}
+.page .tot .grand{font-weight:700;border-bottom:3px double #111}
+.page .foot{margin-top:auto;padding-top:24px;font-size:10.5px;line-height:1.7}
+.page .foot .fr{display:flex;justify-content:space-between;align-items:flex-end;gap:20px}
+.page .sig{width:260px;border-top:1px solid #111;text-align:center;font:700 13.5px Arial,sans-serif;padding-top:4px;margin-bottom:4px}
+.page .sum-h{font-size:14px;line-height:1.6}
+.page .sum-h b{text-decoration:underline}
+.page .sum{width:100%;border-collapse:collapse;margin-top:10px}
+.page .sum th{background:#d9d9d9;color:#111;font:700 12px Arial,sans-serif;border:1px solid #444;padding:6px 4px;text-align:center;position:static;white-space:normal}
+.page .sum td{border:1px solid #444;padding:6px 5px;font-size:12px;text-align:center}
+.page .sum td.r{text-align:right}
+.page .sum tr.t td{border:0;font-weight:700}
+.page.soa{font-family:Calibri,Carlito,Arial,sans-serif;font-size:14px}
+.page .soa-co{text-align:center;font-style:italic;font-weight:700;font-size:14px;line-height:1.4}
+.page .soa-co .n{font-size:30px;line-height:1.2}
+.page .soa-t{text-align:center;font-weight:700;font-size:18px;margin:10px 0 18px}
+.page .soa-h{display:flex;justify-content:space-between;line-height:1.55;margin-bottom:22px}
+.page .soa-h>div:last-child{width:34%}
+.page .soa-tb{width:100%;border-collapse:collapse;border-left:1px solid #111;border-right:1px solid #111;border-bottom:1px solid #111;table-layout:fixed}
+.page .soa-tb th{border-top:1px solid #111;border-bottom:1px solid #111;padding:5px 4px;font-weight:700;background:none;color:#111;position:static;text-align:center}
+.page .soa-tb td{padding:3px 4px;text-align:center;border:0;white-space:nowrap}
+.page .soa-tb td.ty{font-size:11px;font-style:italic}
+.page .soa-tb td.r{text-align:right}
+.page .soa-tb td .c{float:left}
+.page .soa-tb tr.w td{border-top:1px solid #111;border-bottom:2px solid #111;font-size:12.5px;text-align:left;white-space:normal;padding:6px 4px}
+.page .soa-tb tr.w td.r{text-align:right;font-weight:700}
+.page .soa-note{text-align:center;padding:6px 0 10px;border-bottom:1px solid #111;line-height:1.5}
+.page .soa-ag{width:100%;border-collapse:collapse;table-layout:fixed}
+.page .soa-ag th{font-weight:400;background:none;color:#111;border-bottom:1px solid #111;padding:6px;text-align:center;position:static}
+.page .soa-ag td{border:0;border-bottom:1px solid #111;padding:10px 6px;text-align:center}
+.page .soa-nb{font-size:9.5px;margin-top:14px;line-height:1.6}
+.page .pno{position:absolute;bottom:18px;right:44px;font-size:11px;color:#555}
+.page .sum th.dk{background:#a6a6a6}
+.page .sum td .c{float:left}
+.page .sum tr.t td.dbl{border-top:1px solid #111;border-bottom:3px double #111}
+.page .chc-top{display:flex;justify-content:space-between;align-items:flex-start;font:700 12.5px/1.45 Arial,sans-serif}
+.page .chc-top .mid{font-weight:400;font-size:11px}
+.page .chc{width:100%;border-collapse:collapse;margin-top:6px}
+.page .chc th{background:#cfcfcf;color:#111;font:700 11.5px Arial,sans-serif;border:1px solid #555;padding:5px 4px;text-align:center;white-space:normal;position:static}
+.page .chc td{border:1px solid #555;padding:5px 4px;font:11.5px Arial,sans-serif;text-align:center;white-space:normal}
+.page .chc tbody tr:nth-child(even) td{background:#ececec}
+.page .chc tbody tr.t td{background:none;border:0;font-weight:700}
+.page .chc tr.t td.bx{border-top:2px solid #111;border-bottom:3px double #111}
+
+
+.coswitch{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;margin-left:4px}
+.coswitch button{border:0;background:var(--card);padding:6px 14px;min-height:34px;font:700 16px var(--cond);cursor:pointer;color:var(--muted)}
+.coswitch button[aria-pressed="true"]{background:var(--pen);color:#fff}
+.cosub{font-size:12px;color:var(--muted)}
+.page .co.l3h .cn{font-size:32px}
+.page .co.l3h div{font-size:13.5px}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-row"><div class="brand"><b>开单</b></div><div class="coswitch" id="coSw" role="group" aria-label="公司"></div><span class="cosub" id="coName"></span><button id="themeBtn" class="btn small" style="margin-left:auto" aria-label="切换深色/浅色">☀️ 浅色</button><span id="sync" class="sync" style="margin-left:10px">本机保存</span></div>
+  <nav class="tabs" id="tabs" role="tablist"></nav>
+</header>
+<main>
+  <section id="t-entry"></section><section id="t-exc" hidden></section><section id="t-check" hidden></section>
+  <section id="t-bill" hidden></section><section id="t-ar" hidden></section><section id="t-master" hidden></section>
+</main>
+<div id="toast" role="status" aria-live="polite"></div>
+<div id="modal" class="modal" hidden><div class="box" id="modalBox"></div></div>
+<div id="dlg" class="modal" hidden style="z-index:70"><div class="box" id="dlgBox" style="max-width:460px"></div></div>
+<div id="stage" aria-hidden="true"></div>
+<script>
+/* ================= helpers ================= */
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const clone=o=>JSON.parse(JSON.stringify(o));
+const uid=p=>(p||'x')+Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const r2=x=>Math.round((Number(x)+Number.EPSILON)*100)/100;
+const num=v=>(v===''||v==null||isNaN(+v))?null:+v;
+const money=v=>(v==null||isNaN(v))?'—':Number(v).toLocaleString('en-SG',{minimumFractionDigits:2,maximumFractionDigits:2});
+const pad=(n,l=2)=>String(n).padStart(l,'0');
+const todayISO=()=>{const d=new Date();return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())};
+const dmy=iso=>iso?iso.slice(8,10)+'/'+iso.slice(5,7)+'/'+iso.slice(0,4):'';
+const dmyShort=iso=>iso?(+iso.slice(8,10))+'/'+(+iso.slice(5,7))+'/'+iso.slice(0,4):'';
+const dmyY2=iso=>iso?iso.slice(8,10)+'/'+iso.slice(5,7)+'/'+iso.slice(2,4):'';
+const MONTHS=['January','February','March','April','May','June','July','August','September','October','November','December'];
+const MON3=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const longDate=iso=>iso?iso.slice(8,10)+' '+MONTHS[+iso.slice(5,7)-1]+' '+iso.slice(0,4):'';
+const dMon=iso=>iso?(+iso.slice(8,10))+'-'+MON3[+iso.slice(5,7)-1]+'-'+iso.slice(2,4):'';
+const monthName=iso=>MONTHS[+iso.slice(5,7)-1]+' '+iso.slice(0,4);
+const monthSpan=(a,b)=>a.slice(0,7)===b.slice(0,7)?monthName(a):MONTHS[+a.slice(5,7)-1]+(a.slice(0,4)!==b.slice(0,4)?' '+a.slice(0,4):'')+' & '+monthName(b);
+const monthRange=(a,b)=>a.slice(0,7)===b.slice(0,7)?monthName(a):monthName(a)+' to '+monthName(b);
+const dayMs=iso=>Date.UTC(+iso.slice(0,4),+iso.slice(5,7)-1,+iso.slice(8,10));
+const addDays=(iso,n)=>{const d=new Date(dayMs(iso)+n*864e5);return d.getUTCFullYear()+'-'+pad(d.getUTCMonth()+1)+'-'+pad(d.getUTCDate())};
+const daysBetween=(a,b)=>Math.round((dayMs(b)-dayMs(a))/864e5);
+const lastDay=iso=>{const y=+iso.slice(0,4),m=+iso.slice(5,7);return new Date(Date.UTC(y,m,0)).getUTCDate()};
+const hrs=h=>String(r2(h||0));
+function gstOf(sub,rate){const c=Math.round(sub*100);return Math.round(c*rate/100)/100}
+function parseTime(s){
+  s=String(s||'').trim().toLowerCase().replace(/\s/g,'').replace('.',':');
+  if(!s)return null;
+  let pm=/pm$/.test(s),am=/am$/.test(s);s=s.replace(/(am|pm)$/,'');
+  let h,m;
+  if(/^\d{3,4}$/.test(s)){s=s.padStart(4,'0');h=+s.slice(0,2);m=+s.slice(2)}
+  else if(/^\d{1,2}:\d{2}$/.test(s)){[h,m]=s.split(':').map(Number)}
+  else if(/^\d{1,2}$/.test(s)){h=+s;m=0}
+  else return null;
+  if(pm&&h<12)h+=12; if(am&&h===12)h=0; if(h===24&&m===0)h=0;
+  if(h>23||m>59)return null;
+  return pad(h)+':'+pad(m);
+}
+const toMin=t=>{const[a,b]=t.split(':').map(Number);return a*60+b};
+function parseDate(s){
+  s=String(s||'').trim();
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s;
+  const m=s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);if(!m)return null;
+  let y=+m[3];if(y<100)y+=2000;const d=+m[1],mo=+m[2];if(mo<1||mo>12||d<1||d>31)return null;
+  return y+'-'+pad(mo)+'-'+pad(d);
+}
+function toast(t){const el=$('#toast');el.textContent=t;el.classList.add('on');clearTimeout(toast._t);toast._t=setTimeout(()=>el.classList.remove('on'),2800)}
+const t0=t=>String(t||'').replace(/^0(\d):/,'$1:');
+function askConfirm(msg,okText='确定',cancelText='取消'){return new Promise(res=>{$('#dlgBox').innerHTML=`<p style="white-space:pre-line;margin:4px 0 14px">${msg}</p><div class="row"><button class="btn primary" id="dlg-ok">${okText}</button><button class="btn" id="dlg-no">${cancelText}</button></div>`;$('#dlg').hidden=false;
+  const done=v=>{$('#dlg').hidden=true;res(v)};$('#dlg-ok').onclick=()=>done(true);$('#dlg-no').onclick=()=>done(false);$('#dlg-ok').focus()})}
+function askPrompt(msg,def=''){return new Promise(res=>{$('#dlgBox').innerHTML=`<p style="margin:4px 0 8px">${msg}</p><input id="dlg-in" value="${esc(def)}"><div class="row" style="margin-top:12px"><button class="btn primary" id="dlg-ok">确定</button><button class="btn" id="dlg-no">取消</button></div>`;$('#dlg').hidden=false;
+  const done=v=>{$('#dlg').hidden=true;res(v)};$('#dlg-ok').onclick=()=>done($('#dlg-in').value);$('#dlg-no').onclick=()=>done(null);$('#dlg-in').focus()})}
+window.addEventListener('error',e=>{try{toast('❌ 出错了：'+(e.message||'未知错误'))}catch(x){}});
+window.addEventListener('unhandledrejection',e=>{try{toast('❌ 出错了：'+((e.reason&&e.reason.message)||e.reason||'未知错误'))}catch(x){}});
+function applyTheme(t){document.documentElement.setAttribute('data-theme',t);const b=document.getElementById('themeBtn');if(b)b.textContent=t==='dark'?'☀️ 浅色':'🌙 深色';try{localStorage.setItem('bill.theme',t)}catch(e){}}
+
+/* ================= companies & services ================= */
+const SVC={
+  ETK:[
+    {id:'TMA',label:'TMA',title:'TMA Truck',desc:'TMA Transport Charges',rec:'TMA TRANSPORTATION RECORD (G.S.G)'},
+    {id:'VMS',label:'VMS',title:'VMS',desc:'VMS Rental Charges',rec:'VMS RENTAL RECORD'}],
+  L3H:[
+    {id:'LC',label:'Lorry Crane（外面客户，按天）',title:'Lorry Crane',desc:'Lorry Crane Transport Charges',rec:'LORRY CRANE TRANSPORTATION RECORD'},
+    {id:'LCS',label:'Lorry Crane + Lifting Supervisor',title:'Lorry Crane',desc:'Provide Lorry Crane with Lifting Supervisor (inclusive of transportation, diesel & driver – G.S.G)',rec:'LORRY CRANE TRANSPORTATION WITH LIFTING SUPERVISOR CHARGES RECORD'},
+    {id:'LCT',label:'Lorry Crane Transport (G.S.G)',title:'Lorry Crane',desc:'Provide Lorry Crane Transportation with diesel / driver (G.S.G)',rec:'LORRY CRANE TRANSPORTATION RECORD (G.S.G)'},
+    {id:'TIP',label:'Tipper',title:'Tipper Truck',desc:'Provide Tipper Truck Transportation with diesel / driver (G.S.G)',rec:'TIPPER TRUCK TRANSPORTATION RECORD (G.S.G)'},
+    {id:'LOAD',label:'按车次 / 按 load（运土、搬运）',title:'Transportation',desc:'Transport Charges',rec:'TRANSPORTATION RECORD'}]
+};
+const svcOf=(co,id)=>(SVC[co]||[]).find(s=>s.id===id)||{id,label:id,title:id,desc:id,rec:id};
+const MODES={daily:'按天（最少几小时 + OT）',hourly:'按小时',unit:'按车次 / load / 天'};
+function defaultCompanies(){return{
+  ETK:{name:'ETK RESOURCES PTE LTD',address:'437, Choa Chu Kang Ave 4, #15-493, Singapore 680437',reg:'202033232C',gstReg:'202033232C',mobile:'92981811',tel:'',fax:'',email:'etkresources@gmail.com',bank:'DBS 0720292421',payee:'ETK Resources Pte Ltd',prefix:'ETK/INV/',style:'etk'},
+  L3H:{name:'L3H RESOURCES PTE LTD',address:'35 Woodgrove Avenue   Singapore 738231',reg:'201628060H',gstReg:'201628060H',mobile:'',tel:'+65 67520272',fax:'+65 67526308',email:'l3hresourcespl@gmail.com',bank:'OCBC 7125 6768 4001',payee:'L3H RESOURCES PTE LTD',prefix:'L3H/',style:'l3h'}
+}}
+function normRate(r){return{id:r.id||uid('r'),service:r.service||'TMA',vehicle:r.vehicle||'',mode:r.mode||'daily',dayRate:r.dayRate??'',nightRate:r.nightRate??'',otDay:r.otDay??'',otNight:r.otNight??'',diesel:r.diesel??0,minHr:r.minHr??8,baseHr:r.baseHr??8,deductBreak:!!r.deductBreak,unitRate:r.unitRate??'',uom:r.uom||'load',label:r.label||''}}
+function normMaster(m){
+  m=m||{};const dc=defaultCompanies();
+  const companies={ETK:{...dc.ETK,...(m.company||{}),...((m.companies||{}).ETK||{})},L3H:{...dc.L3H,...((m.companies||{}).L3H||{})}};
+  const customers=(m.customers||[]).map(c=>{
+    const rates=Array.isArray(c.rates)?c.rates.map(normRate):[normRate({service:'TMA',mode:c.mode,dayRate:c.dayRate,nightRate:c.nightRate,otDay:c.otDay,otNight:c.otNight,diesel:c.diesel,minHr:c.minHr,baseHr:c.baseHr,deductBreak:c.deductBreak})];
+    return{id:c.id,company:c.company||'ETK',name:c.name||'',address:c.address||'',tel:c.tel||'',fax:c.fax||'',pic:c.pic||'',email:c.email||'',terms:+c.terms||0,projects:c.projects||'',showDiesel:c.showDiesel!==false,refLabel:c.refLabel||'',notes:c.notes||'',quote:c.quote||null,rates};
+  });
+  let vehicles=(m.vehicles||[]).map(v=>({no:v.no,company:v.company||'ETK'}));
+  if(!vehicles.length)vehicles=['XF1313A','XF113S','XF2888B','XF2288H','XF6886E','XF8688Y'].map(no=>({no,company:'ETK'}));
+  if(!vehicles.some(v=>v.company==='L3H'))vehicles=vehicles.concat(['XF868Y','XF1199M','XF82Y'].map(no=>({no,company:'L3H'})));
+  return{companies,customers,vehicles,machines:Array.isArray(m.machines)?m.machines:[],voidDOs:(m.voidDOs||[]).map(v=>({...v,company:v.company||'ETK'})),settings:{nightFrom:'19:00',nightTo:'06:00',gstRate:9,staleDays:7,...(m.settings||{})}};
+}
+const normDoRec=d=>({...d,company:d.company||'ETK',service:d.service||'TMA'});
+const normInv=v=>{v={...v,company:v.company||'ETK',kind:v.kind||'do'};if(!v.groups)v.groups=[{service:'TMA',mode:v.mode||'daily',rows:v.rows||[],subtotal:v.subtotal}];return v};
+
+/* ================= state & storage ================= */
+let prefCo='ETK';try{prefCo=localStorage.getItem('bill.co')||'ETK'}catch(e){}
+const S={billErr:null,lastResult:null,master:normMaster(null),dos:[],invoices:[],rentals:[],payments:[],co:prefCo==='L3H'?'L3H':'ETK',tab:'entry',mode:'local',
+  f:{month:todayISO().slice(0,7),cust:'',status:'all',q:''},
+  entry:{date:todayISO(),customerId:'',service:'',project:'',vehicle:'',doNo:'',start:'',end:'',shift:'A',location:'',to:'',desc:'',qty:'',po:''},
+  editId:null,
+  bill:{kind:'do',cust:'',project:'',service:'',from:'',to:'',excl:{},date:todayISO(),no:'',po:'',sno:''},
+  exc:{editId:null,e:{customerId:'',project:'',machine:'',person:'',from:'',to:'',locFrom:'',locTo:'',remark:''},month:''},
+  ar:{status:'open',cust:''},
+  soa:{cust:'',date:todayISO(),from:''}
+};
+const LS='etkbill.v1';
+function saveLocal(){try{localStorage.setItem(LS,JSON.stringify({master:S.master,dos:S.dos,invoices:S.invoices,rentals:S.rentals,payments:S.payments}))}catch(e){}}
+function loadLocal(){try{const j=JSON.parse(localStorage.getItem(LS)||'null');if(j){S.master=normMaster(j.master);S.dos=(j.dos||[]).map(normDoRec);S.invoices=(j.invoices||[]).map(normInv);S.rentals=j.rentals||[];S.payments=j.payments||[]}}catch(e){}}
+let DB=null,BASE=null,ASSETS=null,DOWN=null;
+const queues={};
+function q(key,fn){const p=(queues[key]||Promise.resolve()).then(fn,fn);queues[key]=p.catch(()=>{});return p}
+function writeErr(e){toast(e&&e.code==='quota_exceeded'?'存储空间已满，先删除一些旧资料':'保存失败，请再试一次')}
+function upsert(arr,x){const i=arr.findIndex(y=>y.id===x.id);i>=0?arr[i]=x:arr.push(x)}
+const col=n=>DB.doc(BASE+'/store').collection(n);
+const store={
+  async saveMaster(){saveLocal();if(S.mode!=='cloud')return;const d=clone(S.master);return q('master',()=>DB.doc(BASE+'/master').set(d)).catch(writeErr)},
+  async save(kind,x){const arr=kind==='dos'?S.dos:kind==='invoices'?S.invoices:kind==='payments'?S.payments:S.rentals;upsert(arr,x);saveLocal();if(S.mode!=='cloud')return;const d=clone(x);delete d.id;return q(kind+x.id,()=>col(kind).doc(x.id).set(d)).catch(writeErr)},
+  async del(kind,id){if(kind==='dos')S.dos=S.dos.filter(x=>x.id!==id);else if(kind==='rentals')S.rentals=S.rentals.filter(x=>x.id!==id);else if(kind==='payments')S.payments=S.payments.filter(x=>x.id!==id);else if(kind==='invoices')S.invoices=S.invoices.filter(x=>x.id!==id);saveLocal();if(S.mode!=='cloud')return;return q(kind+id,()=>col(kind).doc(id).delete()).catch(writeErr)}
+};
+async function connect(){
+  if(!window.claude||!window.claude.use)return;
+  try{
+    const [db,user]=await Promise.all([window.claude.use('db'),window.claude.use('user')]);
+    const id=user?await user.id():null;
+    if(db&&id){
+      DB=db;BASE='data/users/'+id;S.mode='cloud';$('#sync').textContent='已同步';$('#sync').classList.add('cloud');
+      const got={};const need=['m','dos','invoices','rentals','payments'];const done=k=>{got[k]=1;if(need.every(x=>got[x]))renderAll()};
+      DB.doc(BASE+'/master').onSnapshot(s=>{S.master=normMaster(s.exists?clone(s.data()):null);done('m')},()=>{});
+      col('dos').onSnapshot(s=>{S.dos=s.docs.map(d=>normDoRec({...clone(d.data()),id:d.id}));done('dos')},()=>{});
+      col('invoices').onSnapshot(s=>{S.invoices=s.docs.map(d=>normInv({...clone(d.data()),id:d.id}));done('invoices')},()=>{});
+      col('rentals').onSnapshot(s=>{S.rentals=s.docs.map(d=>({...clone(d.data()),id:d.id}));done('rentals')},()=>{});
+      col('payments').onSnapshot(s=>{S.payments=s.docs.map(d=>({...clone(d.data()),id:d.id}));done('payments')},()=>{});
+    }
+  }catch(e){}
+  try{ASSETS=await window.claude.use('assets')}catch(e){}
+  try{DOWN=await window.claude.use('downloads')}catch(e){}
+}
+
+/* ================= pricing ================= */
+const custById=id=>S.master.customers.find(c=>c.id===id);
+const coCustomers=()=>S.master.customers.filter(c=>c.company===S.co).sort((a,b)=>a.name.localeCompare(b.name));
+const coVehicles=()=>S.master.vehicles.filter(v=>v.company===S.co).map(v=>v.no);
+const coDos=()=>S.dos.filter(d=>d.company===S.co);
+const coInv=()=>S.invoices.filter(v=>v.company===S.co);
+function findRate(c,service,vehicle){if(!c)return null;const rs=c.rates.filter(r=>r.service===service);return rs.find(r=>r.vehicle&&r.vehicle===vehicle)||rs.find(r=>!r.vehicle)||null}
+function isNight(t){const m=toMin(t),a=toMin(S.master.settings.nightFrom||'19:00'),b=toMin(S.master.settings.nightTo||'06:00');return a>b?(m>=a||m<b):(m>=a&&m<b)}
+function calc(d){
+  const c=custById(d.customerId);const rt=findRate(c,d.service,d.vehicle);
+  if(!c)return null;
+  if(!rt)return{noRate:true,missing:true,total:0,mode:'?'};
+  const st=parseTime(d.start),en=parseTime(d.end);
+  let span=null;if(st&&en){let s=toMin(st),e=toMin(en);if(e<=s)e+=1440;span=(e-s)/60}
+  const shift=(d.shift==='D'||d.shift==='N')?d.shift:(st&&isNight(st)?'N':'D');
+  const diesel=num(rt.diesel)||0;
+  if(rt.mode==='unit'){
+    const qty=num(d.qty)||1,rate=num(rt.unitRate);
+    const amt=r2(qty*(rate||0));
+    return{mode:'unit',shift,span,qty,uom:rt.uom||'load',rate:rate||0,amt,otAmt:0,ot:0,diesel,total:r2(amt+diesel),missing:rate==null,label:rt.label};
+  }
+  if(span==null)return null;
+  const N=shift==='N';
+  const rate=num(N?rt.nightRate:rt.dayRate),otRate=num(N?rt.otNight:rt.otDay);
+  const base=num(rt.baseHr)||8,minHr=num(rt.minHr)||0;
+  const r={mode:rt.mode,shift,span,base,diesel,rate:rate||0,otRate:otRate||0,missing:rate==null,missingOT:false};
+  let work=span;if(rt.deductBreak&&work>base)work-=1;
+  if(rt.mode==='hourly'){r.billHr=Math.max(minHr,work);r.ot=0;r.amt=r2(r.billHr*(rate||0));r.otAmt=0}
+  else{r.billHr=Math.max(minHr,Math.min(work,base));r.ot=r2(Math.max(0,work-base));r.amt=r2(rate||0);r.otAmt=r2(r.ot*(otRate||0));r.missingOT=r.ot>0&&otRate==null}
+  r.total=r2(r.amt+r.otAmt+diesel);
+  return r;
+}
+function modeFor(d){const rt=findRate(custById(d.customerId),d.service,d.vehicle);return rt?rt.mode:null}
+function interval(d){const st=parseTime(d.start),en=parseTime(d.end);if(!st||!en||!d.date)return null;let s=toMin(st),e=toMin(en);if(e<=s)e+=1440;const b=dayMs(d.date)/6e4;return[b+s,b+e]}
+const normDO=s=>String(s||'').trim().toUpperCase().replace(/^0+(?=\d)/,'');
+
+/* ---- excavator ---- */
+const machineBy=code=>S.master.machines.find(m=>m.code===code);
+function excCalc(r){
+  const m=machineBy(r.machine);if(!r.from||!r.to||r.to<r.from)return null;
+  const days=daysBetween(r.from,r.to)+1;
+  const full=r.from.slice(8)==='01'&&+r.to.slice(8)===lastDay(r.to);
+  let type,rate,total,missing=false,months=0;
+  if(full){months=(+r.to.slice(0,4)-+r.from.slice(0,4))*12+(+r.to.slice(5,7)-+r.from.slice(5,7))+1;type='Monthly';rate=num(m?.monthly);total=r2((rate||0)*months)}
+  else if(days<7){type='Daily';rate=num(m?.daily);total=r2((rate||0)*days)}
+  else{type='Weekly';rate=num(m?.weekly);total=r2((rate||0)/7*days)}
+  if(rate==null)missing=true;
+  return{days,type,rate:rate||0,total,missing,months,daily:num(m?.daily),weekly:num(m?.weekly),monthly:num(m?.monthly),noMachine:!m};
+}
+
+/* ================= checks ================= */
+function liveChecks(d,editId){
+  const out=[];const others=coDos().filter(x=>x.id!==editId);
+  const n=normDO(d.doNo);
+  if(n){
+    const dup=others.find(x=>normDO(x.doNo)===n);
+    if(dup)out.push(['bad',`DO ${esc(d.doNo)} 已经录过（${dmy(dup.date)} ${esc(dup.vehicle)}${dup.invoiceNo?'，已开在 '+esc(dup.invoiceNo):''}）`]);
+    if(S.master.voidDOs.some(v=>v.company===S.co&&normDO(v.no)===n))out.push(['bad',`DO ${esc(d.doNo)} 已标记为作废`]);
+  }
+  const iv=interval(d);
+  if(iv&&d.vehicle)others.filter(x=>x.vehicle===d.vehicle).forEach(x=>{const j=interval(x);if(j&&iv[0]<j[1]&&j[0]<iv[1])out.push(['bad',`${esc(d.vehicle)} 时间跟 DO ${esc(x.doNo)} 重叠（${dmy(x.date)} ${esc(x.start)}–${esc(x.end)}，${esc(custById(x.customerId)?.name||'')}）`])});
+  const c=calc(d);
+  if(c){
+    if(c.noRate)out.push(['bad','这个客户没有设定这项服务的价钱（去「客户 / 价目」加）']);
+    else if(c.missing)out.push(['bad',c.mode==='unit'?'这项服务还没设定单价':`还没设定${c.shift==='N'?'晚班':'白天'}价`]);
+    if(c.missingOT)out.push(['warn','有 OT 但没设定 OT 单价']);
+    if(c.span>14)out.push(['warn',`工作 ${hrs(c.span)} 小时，时间有没有打错？`]);
+  }
+  if(d.date&&d.date>todayISO())out.push(['warn','日期在今天之后']);
+  return out;
+}
+function allIssues(){
+  const I={dup:[],overlap:[],gaps:[],stale:[],missing:[],invDate:[],invOrder:[],overdue:[],excOverlap:[],excMissing:[],excStale:[]};
+  const dos=coDos();
+  const by={};dos.forEach(d=>{const n=normDO(d.doNo);if(n)(by[n]=by[n]||[]).push(d)});
+  Object.values(by).forEach(a=>{if(a.length>1)I.dup.push(a)});
+  const byV={};dos.forEach(d=>{const iv=interval(d);if(iv&&d.vehicle)(byV[d.vehicle]=byV[d.vehicle]||[]).push([iv,d])});
+  Object.values(byV).forEach(a=>{a.sort((x,y)=>x[0][0]-y[0][0]);for(let i=0;i<a.length;i++)for(let j=i+1;j<a.length&&a[j][0][0]<a[i][0][1];j++)I.overlap.push([a[i][1],a[j][1]])});
+  const voids=new Set(S.master.voidDOs.filter(v=>v.company===S.co).map(v=>normDO(v.no)));
+  const nums=[...new Set(dos.map(d=>normDO(d.doNo)).filter(n=>/^\d+$/.test(n)).map(Number))].sort((a,b)=>a-b);
+  for(let i=1;i<nums.length;i++){const g=nums[i]-nums[i-1];if(g>1&&g<=30)for(let k=nums[i-1]+1;k<nums[i];k++)if(!voids.has(String(k)))I.gaps.push(k)}
+  const lim=addDays(todayISO(),-(S.master.settings.staleDays||7));
+  dos.forEach(d=>{if(!d.invoiceNo&&d.date&&d.date<lim)I.stale.push(d);const c=calc(d);if(!c||c.missing)I.missing.push(d)});
+  const live=coInv().filter(v=>v.status!=='void');
+  live.forEach(v=>{const last=v.kind==='exc'?(v.groups[0].rows.reduce((m,r)=>r.to>m?r.to:m,'')):v.to;if(last&&v.date<last)I.invDate.push([v,last])});
+  const grp={};live.forEach(v=>{const m=v.no.match(/^(.*\/)(\d+)$/);if(m)(grp[m[1]]=grp[m[1]]||[]).push([+m[2],v])});
+  Object.values(grp).forEach(a=>{a.sort((x,y)=>x[0]-y[0]);for(let i=1;i<a.length;i++)if(a[i][1].date<a[i-1][1].date)I.invOrder.push([a[i-1][1],a[i][1]])});
+  live.forEach(v=>{const due=addDays(v.date,+v.terms||0);if(invBal(v)>0.004&&todayISO()>due)I.overdue.push(v)});
+  if(S.co==='L3H'){
+    const R=S.rentals.filter(r=>r.from&&r.to);
+    const bm={};R.forEach(r=>(bm[r.machine]=bm[r.machine]||[]).push(r));
+    Object.values(bm).forEach(a=>{a.sort((x,y)=>x.from.localeCompare(y.from));for(let i=0;i<a.length;i++)for(let j=i+1;j<a.length&&a[j].from<=a[i].to;j++)I.excOverlap.push([a[i],a[j]])});
+    R.forEach(r=>{const k=excCalc(r);if(!k||k.missing||k.noMachine)I.excMissing.push(r);if(!r.invoiceNo&&r.to<lim&&r.to.slice(0,7)<todayISO().slice(0,7))I.excStale.push(r)});
+  }
+  return I;
+}
+function updateBadge(){const I=allIssues();const n=I.dup.length+I.overlap.length+I.invDate.length+I.missing.length+I.excOverlap.length+I.excMissing.length;$('#nCheck').innerHTML=n?`<span class="n">${n}</span>`:''}
+
+/* ================= shell ================= */
+function renderShell(){
+  $('#coSw').innerHTML=['ETK','L3H'].map(c=>`<button data-co="${c}" aria-pressed="${S.co===c}">${c}</button>`).join('');
+  $('#tabs').innerHTML=[['entry','录入 DO'],...(S.co==='L3H'?[['exc','挖机租金']]:[]),['check','检查<span id="nCheck"></span>'],['bill','开单'],['ar','应收款'],['master','客户 / 价目']].map(([k,l])=>`<button class="tab" data-tab="${k}" role="tab" aria-selected="${S.tab===k}">${l}</button>`).join('');
+  $('#coName').textContent=S.co==='ETK'?'TMA · VMS':'Lorry Crane · Tipper · 挖机';
+}
+document.addEventListener('click',e=>{
+  const b=e.target.closest('#tabs .tab');if(b){S.tab=b.dataset.tab;renderAll();return}
+  const c=e.target.closest('#coSw button');if(c&&c.dataset.co!==S.co){S.co=c.dataset.co;try{localStorage.setItem('bill.co',S.co)}catch(x){}
+    S.editId=null;S.entry={...S.entry,customerId:'',service:'',vehicle:'',project:'',doNo:''};S.bill={...S.bill,kind:'do',cust:'',project:'',service:'',excl:{},no:'',po:'',sno:''};S.f.cust='';S.ar.cust='';S.soa.cust='';
+    if(S.tab==='exc'&&S.co!=='L3H')S.tab='entry';renderAll()}
+});
+function renderAll(){
+  renderShell();
+  ['entry','exc','check','bill','ar','master'].forEach(t=>$('#t-'+t).hidden=t!==S.tab);
+  ({entry:renderEntry,exc:renderExc,check:renderCheck,bill:renderBill,ar:renderAR,master:renderMaster})[S.tab]();
+  updateBadge();
+}
+
+/* ================= ENTRY ================= */
+function custOptions(sel,blank='选客户'){return `<option value="">${blank}</option>`+coCustomers().map(c=>`<option value="${c.id}" ${c.id===sel?'selected':''}>${esc(c.name)}</option>`).join('')}
+function vehOptions(sel){const list=coVehicles();if(sel&&!list.includes(sel))list.push(sel);return `<option value="">选车</option>`+list.map(v=>`<option ${v===sel?'selected':''}>${esc(v)}</option>`).join('')}
+function svcList(c){const all=SVC[S.co];if(!c)return all;const has=new Set(c.rates.map(r=>r.service));const l=all.filter(s=>has.has(s.id));return l.length?l:all}
+function renderEntry(){
+  const e=S.entry,editing=!!S.editId;
+  const c=custById(e.customerId);if(c&&c.company!==S.co){e.customerId='';}
+  const svcs=svcList(c);if(!svcs.some(s=>s.id===e.service))e.service=svcs[0].id;
+  const rt=findRate(c,e.service,e.vehicle);const unit=rt&&rt.mode==='unit';
+  const projects=(c?.projects||'').split(',').map(s=>s.trim()).filter(Boolean);
+  $('#t-entry').innerHTML=`
+  <h2>${editing?'修改 DO':'录入 DO'} · ${S.co}</h2>
+  ${!coCustomers().length?`<div class="msg warn">${S.co} 还没有客户资料。先去「客户 / 价目」加客户和价钱。</div>`:''}
+  <div class="panel">
+    <div class="grid">
+      <label class="f">日期<input type="date" id="e-date" value="${esc(e.date)}"></label>
+      <label class="f">客户<select id="e-cust">${custOptions(e.customerId)}</select></label>
+      <label class="f">服务<select id="e-svc">${svcs.map(s=>`<option value="${s.id}" ${s.id===e.service?'selected':''}>${esc(s.label)}</option>`).join('')}</select></label>
+      ${projects.length?`<label class="f">项目<select id="e-project"><option value="">（没有项目）</option>${projects.map(p=>`<option ${p===e.project?'selected':''}>${esc(p)}</option>`).join('')}</select></label>`:''}
+      <label class="f">车牌<select id="e-veh">${vehOptions(e.vehicle)}</select></label>
+      <label class="f">DO 号<input id="e-do" class="do-in" inputmode="numeric" value="${esc(e.doNo)}" placeholder="05228"></label>
+      ${unit?`<label class="f">数量（${esc(rt.uom)}）<input id="e-qty" inputmode="decimal" value="${esc(e.qty)}" placeholder="1"></label>`:''}
+      <label class="f">开始${unit?'（可空）':''}<input id="e-start" inputmode="numeric" value="${esc(e.start)}" placeholder="2000"></label>
+      <label class="f">结束${unit?'（可空）':''}<input id="e-end" inputmode="numeric" value="${esc(e.end)}" placeholder="0400"></label>
+      <label class="f">地点 / 从<input id="e-loc" value="${esc(e.location)}"></label>
+      <label class="f">到（可空）<input id="e-to" value="${esc(e.to)}" placeholder="同一个地点就不用填"></label>
+      <label class="f wide">工作内容（可空，会印在 summary）<input id="e-desc" value="${esc(e.desc)}" placeholder="例 Transfer 3 Nos Hardcore With Jumbobag"></label>
+      <label class="f">客户 PO / 参考号<input id="e-po" value="${esc(e.po)}"></label>
+    </div>
+    ${unit?'':`<div class="row" style="margin-top:10px"><span class="hint" style="margin:0">班次</span><div class="seg" id="e-shift">${[['A','自动'],['D','白天'],['N','晚上']].map(([k,l])=>`<button type="button" data-v="${k}" aria-pressed="${e.shift===k}">${l}</button>`).join('')}</div></div>`}
+    <div id="e-calc"></div><div class="msgs" id="e-msgs"></div>
+    <div class="row" style="margin-top:12px"><button class="btn primary" id="e-save">${editing?'保存修改':'保存 DO'}</button>
+      ${editing?`<button class="btn" id="e-cancel">取消</button><button class="btn danger" id="e-del">删除这张 DO</button>`:''}</div>
+  </div>
+  <details class="paste"><summary>一次贴很多张（从 Excel 复制）</summary>
+    <p class="hint">每行一张，栏位顺序：日期 · 客户 · 车牌 · DO 号 · 开始 · 结束 · 地点 · 项目 · 目的地 · 服务代号（${SVC[S.co].map(s=>s.id).join('/')}）· 工作内容。后面的可空；客户名打一部分就可以。</p>
+    <textarea id="p-text"></textarea><div class="row" style="margin-top:8px"><button class="btn" id="p-check">先检查</button></div><div id="p-out"></div>
+  </details>
+  <h3>DO 记录</h3>
+  <div class="row" style="margin-bottom:10px">
+    <input type="month" id="f-month" value="${esc(S.f.month)}" style="width:auto">
+    <select id="f-cust" style="width:auto">${custOptions(S.f.cust,'全部客户')}</select>
+    <select id="f-status" style="width:auto">${[['all','全部'],['unbilled','未开单'],['billed','已开单']].map(([k,l])=>`<option value="${k}" ${S.f.status===k?'selected':''}>${l}</option>`).join('')}</select>
+    <input id="f-q" placeholder="搜 DO / 车牌" value="${esc(S.f.q)}" style="width:150px">
+  </div>
+  <div id="doList"></div>`;
+  bindEntry();refreshCalc();renderDoList();
+}
+function readEntry(){
+  const e=S.entry;const g=id=>{const el=$(id);return el?el.value:null};const set=(k,id)=>{const v=g(id);if(v!==null)e[k]=v};
+  set('date','#e-date');set('customerId','#e-cust');set('service','#e-svc');set('project','#e-project');set('vehicle','#e-veh');set('doNo','#e-do');e.doNo=(e.doNo||'').trim();
+  set('start','#e-start');set('end','#e-end');set('location','#e-loc');set('to','#e-to');set('desc','#e-desc');set('po','#e-po');set('qty','#e-qty');
+}
+function autoDesc(e,c){if(S.co!=='ETK'||e.service!=='TMA'||!c||c.span==null)return null;return c.shift==='N'?'TMA NIGHT WORK':'TMA DAY WORK'}
+function refreshCalc(){
+  readEntry();const e=S.entry;const c=calc(e);
+  {const ad=autoDesc(e,c);const el=$('#e-desc');if(ad&&el&&(!e.desc||e.desc==='TMA DAY WORK'||e.desc==='TMA NIGHT WORK')&&e.desc!==ad){el.value=ad;e.desc=ad}}
+  const st=parseTime(e.start),en=parseTime(e.end);let h='';
+  if(c&&!c.noRate){
+    let line;
+    if(c.mode==='unit')line=`${hrs(c.qty)} ${esc(c.uom)} × $${money(c.rate)}${c.diesel?` + 柴油 $${money(c.diesel)}`:''}`;
+    else if(c.mode==='hourly')line=`${hrs(c.billHr)} 小时 × $${money(c.rate)}${c.diesel?` + 柴油 $${money(c.diesel)}`:''}`;
+    else line=`${c.shift==='N'?'晚班':'白天'} $${money(c.rate)} + OT ${hrs(c.ot)} 小时 × $${money(c.otRate)} = $${money(c.otAmt)}${c.diesel?` + 柴油 $${money(c.diesel)}`:''}`;
+    h=`<div class="calc"><div class="line">${c.span!=null?`${st}–${en} · 共 ${hrs(c.span)} 小时 · <span class="chip ${c.shift}">${c.shift==='N'?'晚班':'白天'}</span>`:''}</div><div class="big">$${money(c.total)}</div><div class="line">${line}</div></div>`;
+  }else if((e.start&&!st)||(e.end&&!en))h=`<div class="msg bad" style="margin-top:10px">时间看不懂，打 2000 或 20:00 或 8pm</div>`;
+  $('#e-calc').innerHTML=h;
+  $('#e-msgs').innerHTML=liveChecks(e,S.editId).map(([k,t])=>`<div class="msg ${k}">${t}</div>`).join('');
+}
+function suggestNext(no){const m=String(no).match(/^(.*?)(\d+)$/);if(!m)return'';return m[1]+String(+m[2]+1).padStart(m[2].length,'0')}
+function bindEntry(){
+  $('#t-entry').querySelectorAll('.panel input').forEach(el=>el.addEventListener('input',refreshCalc));
+  ['#e-cust','#e-svc','#e-veh'].forEach(id=>$(id).addEventListener('change',()=>{readEntry();renderEntry()}));
+  if($('#e-project'))$('#e-project').addEventListener('change',refreshCalc);
+  ['#e-start','#e-end'].forEach(id=>$(id).addEventListener('blur',ev=>{const t=parseTime(ev.target.value);if(t){ev.target.value=t;refreshCalc()}}));
+  if($('#e-shift'))$('#e-shift').addEventListener('click',ev=>{const b=ev.target.closest('button');if(!b)return;S.entry.shift=b.dataset.v;$('#e-shift').querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed',x===b));refreshCalc()});
+  $('#e-save').addEventListener('click',saveEntry);
+  $('#t-entry').querySelectorAll('#e-do,#e-start,#e-end,#e-qty').forEach(el=>el.addEventListener('keydown',ev=>{if(ev.key==='Enter'){ev.preventDefault();saveEntry()}}));
+  if($('#e-cancel'))$('#e-cancel').addEventListener('click',()=>{S.editId=null;Object.assign(S.entry,{doNo:'',start:'',end:'',location:'',to:'',desc:'',qty:'',po:'',shift:'A'});renderEntry()});
+  if($('#e-del'))$('#e-del').addEventListener('click',async()=>{const d=S.dos.find(x=>x.id===S.editId);if(!d)return;if(!await askConfirm(`删除 DO ${d.doNo}？`))return;await store.del('dos',d.id);S.editId=null;Object.assign(S.entry,{doNo:'',start:'',end:''});toast('已删除');renderAll()});
+  $('#f-month').addEventListener('change',e=>{S.f.month=e.target.value;renderDoList()});
+  $('#f-cust').addEventListener('change',e=>{S.f.cust=e.target.value;renderDoList()});
+  $('#f-status').addEventListener('change',e=>{S.f.status=e.target.value;renderDoList()});
+  $('#f-q').addEventListener('input',e=>{S.f.q=e.target.value;renderDoList()});
+  $('#p-check').addEventListener('click',pasteCheck);
+}
+async function saveEntry(){
+  readEntry();const e=S.entry;const st=parseTime(e.start),en=parseTime(e.end);
+  const rt=findRate(custById(e.customerId),e.service,e.vehicle);const unit=rt&&rt.mode==='unit';
+  if(!e.date||!e.customerId||!e.vehicle||!e.doNo||(!unit&&(!st||!en))){toast(unit?'日期、客户、车牌、DO 号要填':'日期、客户、车牌、DO 号、开始、结束都要填');return}
+  const bad=liveChecks(e,S.editId).filter(m=>m[0]==='bad'&&!/没有设定|还没设定/.test(m[1]));
+  if(bad.length&&!await askConfirm('有问题：\n'+bad.map(b=>b[1].replace(/<[^>]+>/g,'')).join('\n')+'\n\n还是要保存吗？'))return;
+  const old=S.editId?S.dos.find(x=>x.id===S.editId):null;
+  if(old&&old.invoiceNo){toast('这张 DO 已经开单，先作废发票才能改');return}
+  if(!e.desc){const ad=autoDesc(e,calc({...e,start:st,end:en}));if(ad)e.desc=ad}
+  const d={id:S.editId||uid('d'),company:S.co,date:e.date,customerId:e.customerId,service:e.service,project:e.project||'',vehicle:e.vehicle,doNo:e.doNo,start:st||'',end:en||'',shift:e.shift,location:e.location||'',to:e.to||'',desc:e.desc||'',qty:unit?(num(e.qty)||1):'',po:e.po||'',invoiceNo:old?.invoiceNo||null,createdAt:old?.createdAt||Date.now()};
+  await store.save('dos',d);
+  toast(S.editId?'已保存修改':`DO ${d.doNo} 已保存`);
+  const next=S.editId?'':suggestNext(d.doNo);
+  S.editId=null;Object.assign(S.entry,{doNo:next,start:'',end:'',location:'',to:'',desc:'',qty:'',shift:'A'});
+  S.f.month=d.date.slice(0,7);renderEntry();updateBadge();const el=$('#e-start');if(el)el.focus();
+}
+function renderDoList(){
+  const q=S.f.q.trim().toUpperCase();
+  const list=coDos().filter(d=>(!S.f.month||d.date.startsWith(S.f.month))&&(!S.f.cust||d.customerId===S.f.cust)&&(S.f.status==='all'||(S.f.status==='billed')===!!d.invoiceNo)&&(!q||String(d.doNo).toUpperCase().includes(q)||String(d.vehicle).toUpperCase().includes(q))).sort((a,b)=>(b.date+b.start).localeCompare(a.date+a.start));
+  let tot=0;
+  const rows=list.map(d=>{const c=calc(d);tot+=c?c.total:0;return `<tr data-id="${d.id}" style="cursor:pointer">
+    <td>${dmy(d.date)}</td><td class="dono">${esc(d.doNo)}</td><td>${esc(d.vehicle)}</td><td>${esc(custById(d.customerId)?.name||'?')}${d.project?' · '+esc(d.project):''}</td><td>${esc(d.service)}</td>
+    <td>${d.start?esc(d.start)+'–'+esc(d.end):(d.qty?hrs(d.qty)+' '+esc(c?.uom||''):'')}</td>
+    <td class="num">${c&&!c.missing?money(c.total):'<span style="color:var(--bad)">缺价钱</span>'}</td>
+    <td>${d.invoiceNo?`<span class="chip billed">${esc(d.invoiceNo)}</span>`:'<span class="chip unbilled">未开单</span>'}</td></tr>`}).join('');
+  $('#doList').innerHTML=list.length?`<p class="hint">${list.length} 张 · 合计 $${money(tot)}（未加 GST）· 点一行可以修改</p><div class="tablewrap"><table><thead><tr><th>日期</th><th>DO</th><th>车牌</th><th>客户</th><th>服务</th><th>时间 / 数量</th><th class="num">金额</th><th>状态</th></tr></thead><tbody>${rows}</tbody></table></div>`:`<p class="hint">这个月还没有 ${S.co} 的 DO。</p>`;
+  $('#doList').querySelectorAll('tr[data-id]').forEach(tr=>tr.addEventListener('click',()=>{const d=S.dos.find(x=>x.id===tr.dataset.id);if(!d)return;if(d.invoiceNo){toast(`已开在 ${d.invoiceNo}，要改先去开单页作废发票`);return}
+    S.editId=d.id;S.entry={date:d.date,customerId:d.customerId,service:d.service,project:d.project||'',vehicle:d.vehicle,doNo:d.doNo,start:d.start,end:d.end,shift:d.shift||'A',location:d.location||'',to:d.to||'',desc:d.desc||'',qty:d.qty||'',po:d.po||''};renderEntry();window.scrollTo({top:0})}));
+}
+let pasteRows=[];
+function matchCust(s){s=String(s||'').trim().toLowerCase();if(!s)return null;const cs=coCustomers();return cs.find(c=>c.name.toLowerCase()===s)||cs.find(c=>c.name.toLowerCase().includes(s))||cs.find(c=>s.includes(c.name.toLowerCase().split(' ')[0]))}
+function pasteCheck(){
+  const lines=$('#p-text').value.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);const tmp=[];pasteRows=[];
+  lines.forEach(l=>{
+    const p=l.includes('\t')?l.split('\t'):l.split(/\s{2,}|,/);
+    const [dt,cs,vh,dn,s,e,loc,pj,to,sv,desc]=p.map(x=>(x||'').trim());
+    const c=matchCust(cs);
+    let service=(sv||'').toUpperCase();if(!SVC[S.co].some(x=>x.id===service))service=svcList(c)[0].id;
+    const d={id:uid('d'),company:S.co,date:parseDate(dt),customerId:c?.id||'',service,project:pj||'',vehicle:(vh||'').toUpperCase().replace(/\s/g,''),doNo:dn,start:parseTime(s)||'',end:parseTime(e)||'',shift:'A',location:loc||'',to:to||'',desc:desc||'',qty:'',po:'',invoiceNo:null,createdAt:Date.now()};
+    const unit=modeFor(d)==='unit';if(unit)d.qty=1;if(!d.desc){const ad=autoDesc(d,calc(d));if(ad)d.desc=ad}
+    const errs=[];if(!d.date)errs.push('日期');if(!c)errs.push('客户');if(!d.vehicle)errs.push('车牌');if(!d.doNo)errs.push('DO');if(!unit&&(!d.start||!d.end))errs.push('时间');
+    let msgs=errs.length?[['bad','看不懂：'+errs.join('、')]]:[];
+    if(!errs.length){const saved=S.dos;S.dos=saved.concat(tmp);msgs=msgs.concat(liveChecks(d,null));S.dos=saved;if(tmp.some(x=>normDO(x.doNo)===normDO(d.doNo)))msgs.push(['bad','这次贴的里面 DO 重复'])}
+    const ok=!msgs.some(m=>m[0]==='bad');if(ok)tmp.push(d);pasteRows.push({d,ok,msgs,c});
+  });
+  const good=pasteRows.filter(r=>r.ok).length;
+  $('#p-out').innerHTML=`<p class="hint">${pasteRows.length} 行，${good} 行可以导入${pasteRows.length-good?`，${pasteRows.length-good} 行有问题（不会导入）`:''}</p>
+  <div class="tablewrap"><table><thead><tr><th>DO</th><th>日期</th><th>客户</th><th>服务</th><th>车牌</th><th>时间</th><th class="num">金额</th><th>检查</th></tr></thead><tbody>${pasteRows.map(r=>{const c=r.ok?calc(r.d):null;return`<tr><td class="dono">${esc(r.d.doNo)}</td><td>${dmy(r.d.date)}</td><td>${esc(r.c?.name||'?')}</td><td>${esc(r.d.service)}</td><td>${esc(r.d.vehicle)}</td><td>${esc(r.d.start||'')}–${esc(r.d.end||'')}</td><td class="num">${c?money(c.total):''}</td><td style="white-space:normal">${r.msgs.length?r.msgs.map(m=>`<div style="color:var(--${m[0]==='bad'?'bad':'warn'})">${m[1]}</div>`).join(''):'<span style="color:var(--ok)">OK</span>'}</td></tr>`}).join('')}</tbody></table></div>
+  ${good?`<div class="row" style="margin-top:8px"><button class="btn primary" id="p-go">导入 ${good} 张</button></div>`:''}`;
+  if($('#p-go'))$('#p-go').addEventListener('click',async()=>{const list=pasteRows.filter(r=>r.ok).map(r=>r.d);for(const d of list)await store.save('dos',d);toast(`已导入 ${list.length} 张 DO`);$('#p-text').value='';pasteRows=[];renderAll()});
+}
+
+/* ================= EXCAVATOR ================= */
+function renderExc(){
+  const X=S.exc,e=X.e,editing=!!X.editId;
+  const cs=coCustomers();if(!e.customerId){const chc=cs.find(c=>/^CHC/i.test(c.name));if(chc)e.customerId=chc.id}
+  const c=custById(e.customerId);const projects=(c?.projects||'').split(',').map(s=>s.trim()).filter(Boolean);
+  const k=excCalc(e);
+  const msgs=[];
+  if(k){if(k.noMachine)msgs.push(['bad','价目表没有这台机器，先去「客户 / 价目」加']);else if(k.missing)msgs.push(['bad',`这台机器没有 ${k.type} 价`]);
+    if(k.days>31&&!k.months)msgs.push(['warn','超过一个月又不是整月，建议按月分开几行（跟你现在的表一样）']);
+    S.rentals.filter(r=>r.id!==X.editId&&r.machine===e.machine&&r.from&&r.to&&r.from<=e.to&&e.from<=r.to).forEach(r=>msgs.push(['bad',`${esc(e.machine)} 跟另一行重叠：${esc(r.project)} ${dmy(r.from)}–${dmy(r.to)}${r.invoiceNo?'（'+esc(r.invoiceNo)+'）':''}`]));
+    if(k.type==='Daily'||k.type==='Weekly'){S.rentals.filter(r=>r.id!==X.editId&&r.project===e.project&&r.machine===e.machine&&excCalc(r)?.type==='Monthly'&&r.from.slice(0,7)===e.from.slice(0,7)).forEach(r=>msgs.push(['warn',`同项目这台机器这个月已经按月收（${dmy(r.from)}–${dmy(r.to)}），不应该再收 daily`]))}
+  }
+  const month=X.month||'';
+  const list=S.rentals.filter(r=>!month||(r.from||'').startsWith(month)||(r.to||'').startsWith(month)).sort((a,b)=>(b.from||'').localeCompare(a.from||''));
+  $('#t-exc').innerHTML=`<h2>${editing?'修改':'录入'}挖机租金 · L3H</h2>
+  <p class="hint">少过 7 天按 daily；7 天到不满整月按 weekly ÷ 7 × 天数；1 号到月底按 monthly。跨月请分开几行。</p>
+  <div class="panel"><div class="grid">
+    <label class="f">客户<select id="x-cust">${custOptions(e.customerId)}</select></label>
+    <label class="f">项目<input id="x-proj" list="xproj" value="${esc(e.project)}"><datalist id="xproj">${projects.map(p=>`<option value="${esc(p)}">`).join('')}</datalist></label>
+    <label class="f">机器<select id="x-mach"><option value="">选机器</option>${S.master.machines.map(m=>`<option ${m.code===e.machine?'selected':''}>${esc(m.code)}</option>`).join('')}</select></label>
+    <label class="f">申请人<input id="x-person" value="${esc(e.person)}"></label>
+    <label class="f">开始<input type="date" id="x-from" value="${esc(e.from)}"></label>
+    <label class="f">结束<input type="date" id="x-to" value="${esc(e.to)}"></label>
+    <label class="f">地点（从）<input id="x-lf" value="${esc(e.locFrom)}"></label>
+    <label class="f">地点（到）<input id="x-lt" value="${esc(e.locTo)}"></label>
+    <label class="f wide">备注<input id="x-rm" value="${esc(e.remark)}"></label>
+  </div>
+  ${k&&!k.noMachine?`<div class="calc"><div class="line">${k.days} 天 · ${k.type}${k.months>1?' × '+k.months+' 个月':''} · $${money(k.rate)}${k.type==='Weekly'?' ÷ 7 × '+k.days:k.type==='Daily'?' × '+k.days:''}</div><div class="big">$${money(k.total)}</div></div>`:''}
+  <div class="msgs">${msgs.map(([a,b])=>`<div class="msg ${a}">${b}</div>`).join('')}</div>
+  <div class="row" style="margin-top:12px"><button class="btn primary" id="x-save">${editing?'保存修改':'保存'}</button>${editing?'<button class="btn" id="x-cancel">取消</button><button class="btn danger" id="x-del">删除</button>':''}</div></div>
+  <h3>租金记录</h3>
+  <div class="row" style="margin-bottom:10px"><input type="month" id="x-month" value="${esc(month)}" style="width:auto"><span class="hint" style="margin:0">空白 = 全部</span></div>
+  ${list.length?`<div class="tablewrap"><table><thead><tr><th>项目</th><th>机器</th><th>开始</th><th>结束</th><th class="num">天</th><th>类型</th><th class="num">金额</th><th>状态</th></tr></thead><tbody>${list.map(r=>{const q=excCalc(r);return`<tr data-x="${r.id}" style="cursor:pointer"><td>${esc(r.project)}</td><td>${esc(r.machine)}</td><td>${dmy(r.from)}</td><td>${dmy(r.to)}</td><td class="num">${q?q.days:''}</td><td>${q?q.type:''}</td><td class="num">${q&&!q.missing?money(q.total):'<span style="color:var(--bad)">缺价钱</span>'}</td><td>${r.invoiceNo?`<span class="chip billed">${esc(r.invoiceNo)}</span>`:'<span class="chip unbilled">未开单</span>'}</td></tr>`}).join('')}</tbody></table></div>`:'<p class="hint">还没有记录。</p>'}`;
+  const read=()=>{Object.assign(e,{customerId:$('#x-cust').value,project:$('#x-proj').value.trim(),machine:$('#x-mach').value,person:$('#x-person').value.trim(),from:$('#x-from').value,to:$('#x-to').value,locFrom:$('#x-lf').value.trim(),locTo:$('#x-lt').value.trim(),remark:$('#x-rm').value.trim()})};
+  ['#x-cust','#x-mach','#x-from','#x-to'].forEach(id=>$(id).addEventListener('change',()=>{read();renderExc()}));
+  ['#x-proj','#x-person','#x-lf','#x-lt','#x-rm'].forEach(id=>$(id).addEventListener('input',read));
+  $('#x-proj').addEventListener('change',()=>{read();renderExc()});
+  $('#x-month').addEventListener('change',ev=>{X.month=ev.target.value;renderExc()});
+  $('#x-save').addEventListener('click',async()=>{read();if(!e.customerId||!e.project||!e.machine||!e.from||!e.to){toast('客户、项目、机器、开始、结束都要填');return}if(e.to<e.from){toast('结束日期比开始早');return}
+    const old=X.editId?S.rentals.find(r=>r.id===X.editId):null;if(old&&old.invoiceNo){toast('已开单，先作废发票才能改');return}
+    const bad=msgs.filter(m=>m[0]==='bad'&&/重叠/.test(m[1]));if(bad.length&&!await askConfirm('这台机器时间重叠，还是要保存吗？'))return;
+    await store.save('rentals',{id:X.editId||uid('x'),company:'L3H',...clone(e),invoiceNo:old?.invoiceNo||null,createdAt:old?.createdAt||Date.now()});
+    toast('已保存');X.editId=null;Object.assign(e,{machine:'',person:'',from:'',to:'',remark:''});renderExc();updateBadge()});
+  if($('#x-cancel'))$('#x-cancel').addEventListener('click',()=>{X.editId=null;Object.assign(e,{machine:'',person:'',from:'',to:'',remark:''});renderExc()});
+  if($('#x-del'))$('#x-del').addEventListener('click',async()=>{if(!await askConfirm('删除这行？'))return;await store.del('rentals',X.editId);X.editId=null;renderExc();updateBadge()});
+  $('#t-exc').querySelectorAll('tr[data-x]').forEach(tr=>tr.addEventListener('click',()=>{const r=S.rentals.find(x=>x.id===tr.dataset.x);if(!r)return;if(r.invoiceNo){toast(`已开在 ${r.invoiceNo}`);return}X.editId=r.id;X.e={customerId:r.customerId,project:r.project,machine:r.machine,person:r.person||'',from:r.from,to:r.to,locFrom:r.locFrom||'',locTo:r.locTo||'',remark:r.remark||''};renderExc();window.scrollTo({top:0})}));
+}
+
+/* ================= CHECK ================= */
+function doLine(d){const c=custById(d.customerId);return `<span class="dono">${esc(d.doNo)}</span> ${dmy(d.date)} ${esc(d.vehicle)} ${esc(d.start)}–${esc(d.end)} · ${esc(c?.name||'?')}${d.invoiceNo?' · '+esc(d.invoiceNo):''}`}
+function rLine(r){return `${esc(r.machine)} · ${esc(r.project)} · ${dmy(r.from)}–${dmy(r.to)}${r.invoiceNo?' · '+esc(r.invoiceNo):''}`}
+function renderCheck(){
+  const I=allIssues();
+  const box=(kind,title,body,empty)=>`<div class="issue ${body?kind:'ok'}"><h4>${title}</h4>${body||`<div style="color:var(--muted);font-size:14px">${empty}</div>`}</div>`;
+  const gr=(()=>{if(!I.gaps.length)return[];const r=[];let a=I.gaps[0],b=a;for(let i=1;i<=I.gaps.length;i++){const x=I.gaps[i];if(x===b+1)b=x;else{r.push([a,b]);a=b=x}}return r})();
+  const L3=S.co==='L3H';
+  $('#t-check').innerHTML=`<h2>检查有没有 double bill · ${S.co}</h2><p class="hint">红色要马上处理；黄色大概正常，但值得看一眼。</p>
+  <h3>需要马上处理</h3>
+  ${box('bad','重复的 DO 号',I.dup.length?`<ul>${I.dup.map(a=>`<li>${a.map(doLine).join('<br>')}</li>`).join('')}</ul>`:'','没有重复。')}
+  ${box('bad','同一台车时间重叠',I.overlap.length?`<ul>${I.overlap.map(([a,b])=>`<li>${doLine(a)}<br>${doLine(b)}</li>`).join('')}</ul>`:'','没有重叠。')}
+  ${L3?box('bad','挖机：同一台机器时间重叠',I.excOverlap.length?`<ul>${I.excOverlap.map(([a,b])=>`<li>${rLine(a)}<br>${rLine(b)}</li>`).join('')}</ul>`:'','没有重叠。'):''}
+  ${box('bad','没有价钱的记录',(I.missing.length||I.excMissing.length)?`<ul>${I.missing.map(d=>`<li>${doLine(d)} · ${esc(d.service)}</li>`).join('')}${I.excMissing.map(r=>`<li>${rLine(r)}</li>`).join('')}</ul>`:'','全部都有价钱。')}
+  ${box('bad','发票日期比工作日期早',I.invDate.length?`<ul>${I.invDate.map(([v,l])=>`<li>${esc(v.no)} 日期 ${dmy(v.date)}，但工作做到 ${dmy(l)}</li>`).join('')}</ul>`:'','没有问题。')}
+  <h3>大概正常，看一眼</h3>
+  ${box('warn','DO 号跳号（可能漏开单，或者是作废 / 别的客户）',gr.length?`<p class="hint" style="margin:0 0 6px">确认是作废的，点「作废」就不会再出现。</p><ul>${gr.map(([a,b])=>`<li><span class="dono">${a===b?a:a+'–'+b}</span> <button class="btn small" data-void="${a}-${b}">作废</button></li>`).join('')}</ul>`:'','没有跳号。')}
+  ${box('warn',`超过 ${S.master.settings.staleDays} 天还没开单`,(I.stale.length||I.excStale.length)?`<ul>${I.stale.sort((a,b)=>a.date.localeCompare(b.date)).map(d=>`<li>${doLine(d)}</li>`).join('')}${I.excStale.map(r=>`<li>挖机 ${rLine(r)}</li>`).join('')}</ul>`:'','没有拖太久的。')}
+  ${box('warn','发票号码跟日期顺序对不上',I.invOrder.length?`<ul>${I.invOrder.map(([a,b])=>`<li>${esc(a.no)}（${dmy(a.date)}）在 ${esc(b.no)}（${dmy(b.date)}）前面</li>`).join('')}</ul>`:'','顺序正常。')}
+  ${box('warn','逾期未收',I.overdue.length?`<ul>${I.overdue.map(v=>`<li>${esc(v.no)} · ${esc(v.custName)} · $${money(v.total)} · 到期 ${dmy(addDays(v.date,+v.terms||0))}</li>`).join('')}</ul>`:'','没有逾期。')}`;
+  $('#t-check').querySelectorAll('[data-void]').forEach(b=>b.addEventListener('click',async()=>{const[a,z]=b.dataset.void.split('-').map(Number);const why=await askPrompt(`DO ${a===z?a:a+'–'+z} 标记为作废。原因（可空）：`,'作废');if(why===null)return;for(let k=a;k<=z;k++)S.master.voidDOs.push({no:String(k),reason:why,company:S.co});await store.saveMaster();toast('已标记作废');renderAll()}));
+}
+
+/* ================= BILL ================= */
+function nextInvNo(date){
+  const p=(S.master.companies[S.co].prefix||(S.co+'/'))+date.slice(2,4)+date.slice(5,7)+'/';
+  let max=+((S.master.companies[S.co].lastNo||{})[date.slice(2,4)+date.slice(5,7)])||0;S.invoices.forEach(v=>{if(v.company===S.co&&v.no&&v.no.startsWith(p)){const n=+v.no.slice(p.length);if(n>max)max=n}});
+  return p+pad(max+1);
+}
+function billCands(){
+  const b=S.bill;if(!b.cust)return[];
+  if(b.kind==='exc')return S.rentals.filter(r=>r.customerId===b.cust&&!r.invoiceNo&&(!b.project||r.project===b.project)&&(!b.from||r.to>=b.from)&&(!b.to||r.from<=b.to)).sort((a,c)=>(a.machine+a.from).localeCompare(c.machine+c.from));
+  return coDos().filter(d=>d.customerId===b.cust&&!d.invoiceNo&&(!b.project||(d.project||'')===b.project)&&(!b.service||d.service===b.service)&&(!b.from||d.date>=b.from)&&(!b.to||d.date<=b.to)).sort((a,c)=>(a.date+a.start).localeCompare(c.date+c.start));
+}
+function buildInvoice(){
+  const b=S.bill,c=custById(b.cust);if(!c)return null;
+  const list=billCands().filter(d=>!b.excl[d.id]);if(!list.length)return null;
+  const rate=+S.master.settings.gstRate||9;
+  let groups,from,to,project=b.project||'';
+  if(b.kind==='exc'){
+    const rows=list.map(r=>{const k=excCalc(r)||{};return{rid:r.id,machine:r.machine,person:r.person||'',project:r.project,from:r.from,to:r.to,locFrom:r.locFrom||'',locTo:r.locTo||'',remark:r.remark||'',days:k.days,type:k.type,daily:k.daily,weekly:k.weekly,monthly:k.monthly,rate:k.rate,total:k.total||0,missing:!!k.missing||!!k.noMachine}});
+    groups=[{service:'EXC',mode:'exc',rows,subtotal:r2(rows.reduce((s,r)=>s+r.total,0))}];
+    from=rows.reduce((m,r)=>r.from<m?r.from:m,rows[0].from);to=rows.reduce((m,r)=>r.to>m?r.to:m,rows[0].to);
+    if(!project){const ps=[...new Set(rows.map(r=>r.project))];if(ps.length===1)project=ps[0]}
+  }else{
+    const order=SVC[S.co].map(s=>s.id);const gm={};
+    list.forEach(d=>{const k=calc(d)||{};const key=d.service+'|'+(k.mode||'?');(gm[key]=gm[key]||{service:d.service,mode:k.mode||'daily',rows:[]}).rows.push({doId:d.id,date:d.date,vehicle:d.vehicle,doNo:d.doNo,start:d.start,end:d.end,shift:k.shift,span:k.span,billHr:k.billHr,base:k.base,ot:k.ot,rate:k.rate,otRate:k.otRate,amt:k.amt,otAmt:k.otAmt,diesel:k.diesel,total:k.total||0,qty:k.qty,uom:k.uom,label:k.label||'',location:d.location||'',to:d.to||'',desc:d.desc||'',po:d.po||'',missing:!!k.missing})});
+    groups=Object.values(gm).sort((a,c)=>order.indexOf(a.service)-order.indexOf(c.service));
+    groups.forEach(g=>{g.subtotal=r2(g.rows.reduce((s,r)=>s+r.total,0));g.hours=r2(g.rows.reduce((s,r)=>s+(r.billHr||0),0))});
+    from=list[0].date;to=list[list.length-1].date;
+    if(!project){const ps=[...new Set(list.map(d=>d.project||'').filter(Boolean))];if(ps.length===1)project=ps[0]}
+  }
+  const subtotal=r2(groups.reduce((s,g)=>s+g.subtotal,0));const gst=gstOf(subtotal,rate);
+  const pos=[...new Set(list.map(d=>d.po).filter(Boolean))];
+  return{id:null,kind:b.kind,company:S.co,no:nextInvNo(b.date||todayISO()),date:b.date,customerId:c.id,custName:c.name,cust:{name:c.name,address:c.address,tel:c.tel,fax:c.fax,email:c.email,pic:c.pic},project,from,to,po:b.po||pos.join(', '),ourRef:b.ourRef||'',itemDesc:clone(b.desc||{}),summaryNo:b.sno||'',showDiesel:c.showDiesel!==false,refLabel:c.refLabel||'',terms:+c.terms||0,groups,subtotal,gstRate:rate,gst,total:r2(subtotal+gst),status:'unpaid',createdAt:Date.now()};
+}
+function renderBill(){
+  const b=S.bill,c=custById(b.cust);if(c&&c.company!==S.co){b.cust=''}
+  if(S.co!=='L3H')b.kind='do';
+  const pool=b.cust?(b.kind==='exc'?S.rentals.filter(r=>r.customerId===b.cust&&!r.invoiceNo).map(r=>r.project):coDos().filter(d=>d.customerId===b.cust&&!d.invoiceNo).map(d=>d.project||'')):[];
+  const projects=[...new Set(pool.filter(Boolean))];
+  const svcs=b.cust&&b.kind==='do'?[...new Set(coDos().filter(d=>d.customerId===b.cust&&!d.invoiceNo).map(d=>d.service))]:[];
+  const cands=billCands();const inv=buildInvoice();const msgs=[];
+  if(inv){
+    const last=inv.to;
+    if(inv.date<last)msgs.push(['bad',`发票日期 ${dmy(inv.date)} 比工作日期（做到 ${dmy(last)}）早`]);
+    if(S.invoices.some(v=>v.no===inv.no&&v.status!=='void'))msgs.push(['bad',`号码 ${esc(inv.no)} 已经用过`]);
+    {const pre=inv.no.replace(/\d+$/,'');if(/\/0*1$/.test(inv.no)&&!S.invoices.some(v=>v.no.startsWith(pre)&&v.no!==inv.no))msgs.push(['warn',`系统里还没有 ${esc(pre)} 的发票，所以号码从 01 开始。如果这个月已经开过单，去「客户 / 价目」→ 公司资料，填「上一张发票号码」，系统就会接着跳号。`])}
+    const m=inv.no.match(/^(.*\/)(\d+)$/);
+    if(m)coInv().filter(v=>v.status!=='void'&&v.no.startsWith(m[1])).forEach(v=>{const n=+v.no.slice(m[1].length);if(n<+m[2]&&v.date>inv.date)msgs.push(['warn',`${esc(v.no)} 的日期（${dmy(v.date)}）比这张晚，号码顺序会乱`]);if(n>+m[2]&&v.date<inv.date)msgs.push(['warn',`${esc(v.no)} 的日期（${dmy(v.date)}）比这张早，号码顺序会乱`])});
+    const hourly=inv.groups.some(g=>g.mode==='hourly');
+    if((hourly||inv.kind==='exc')&&!b.project&&projects.length>1)msgs.push(['bad','要按项目分开开单，先选一个项目']);
+    if(hourly&&!inv.summaryNo)msgs.push(['warn','还没填 Summary list No.']);
+    if(inv.groups.some(g=>g.rows.some(r=>r.missing)))msgs.push(['bad','有记录没有价钱，先去设定价目']);
+  }
+  const blocked=msgs.some(m=>m[0]==='bad');
+  const past=coInv().slice().sort((a,z)=>z.no.localeCompare(a.no));
+  const isExc=b.kind==='exc';
+  const R=S.lastResult&&S.lastResult.company===S.co?S.lastResult:null;
+  $('#t-bill').innerHTML=`<h2>开单 · ${S.co}</h2>
+  ${S.billErr&&S.billErr.length?`<div class="msgs" id="b-err" style="margin-bottom:12px">${S.billErr.map(t=>`<div class="msg ${/^⚠️/.test(t)?'warn':'bad'}" style="white-space:pre-line;font-size:15px">${t}</div>`).join('')}</div>`:''}
+  ${R?`<div class="msg ok" id="b-ok" style="margin-bottom:12px;font-size:15px;line-height:1.7"><b>✓ Invoice Created Successfully</b><br>Invoice No: <b>${esc(R.no)}</b>　Total: $${money(R.total)}<br>DO No: ${esc(R.dos.join(', ')||'—')}${R.file?`<br>${R.file==='pdf'?'PDF':'Excel'}: ${R.fileStatus==='ok'?'Downloaded successfully ✓':R.fileStatus==='pending'?'生成中…':R.fileStatus==='declined'?'已取消下载':'❌ Unable to generate '+(R.file==='pdf'?'PDF':'Excel')+(R.err?'（'+esc(R.err)+'）':'')}${R.url&&R.fileStatus!=='pending'?` · <a href="${R.url}" download="${esc(R.fname)}">没有自动下载？点这里</a>`:''}`:''}<br><button class="btn small" id="b-okclose" style="margin-top:6px">关闭</button> <button class="btn small" data-open="${esc(R.id)}" style="margin-top:6px">打开这张发票</button></div>`:''}
+  ${S.co==='L3H'?`<div class="seg" id="b-kind" style="margin-bottom:10px">${[['do','DO（吊车 / Tipper / 运输）'],['exc','挖机租金']].map(([k,l])=>`<button data-v="${k}" aria-pressed="${b.kind===k}">${l}</button>`).join('')}</div>`:''}
+  <div class="panel"><div class="grid">
+    <label class="f">客户<select id="b-cust">${custOptions(b.cust)}</select></label>
+    ${projects.length?`<label class="f">项目<select id="b-proj"><option value="">全部项目</option>${projects.map(p=>`<option ${p===b.project?'selected':''}>${esc(p)}</option>`).join('')}</select></label>`:''}
+    ${svcs.length>1?`<label class="f">服务<select id="b-svc"><option value="">全部服务（同一张单）</option>${svcs.map(s=>`<option value="${s}" ${s===b.service?'selected':''}>${esc(svcOf(S.co,s).label)}</option>`).join('')}</select></label>`:''}
+    <label class="f">从<input type="date" id="b-from" value="${esc(b.from)}"></label>
+    <label class="f">到<input type="date" id="b-to" value="${esc(b.to)}"></label>
+    <label class="f">发票日期<input type="date" id="b-date" value="${esc(b.date)}"></label>
+    <label class="f">发票号码（自动）<input id="b-no" value="${esc(nextInvNo(b.date||todayISO()))}" readonly tabindex="-1" style="opacity:.85"></label>
+    ${inv&&inv.groups.some(g=>g.mode==='hourly')?`<label class="f">Summary list No.<input id="b-sno" inputmode="numeric" value="${esc(b.sno)}" placeholder="例 27"></label>`:''}
+    <label class="f">${S.co==='L3H'?'D.O. No':'Our Ref No.'}<input id="b-ref" value="${esc(b.ourRef||'')}"></label>
+    <label class="f">Your PO<input id="b-po" value="${esc(b.po)}" placeholder="${esc(inv?.po||'')}"></label>
+  </div></div>
+  ${b.cust?(cands.length?`<h3>未开单的${isExc?'租金':' DO'}（${cands.length}）</h3><p class="hint">取消勾选的不会放进这张发票。</p>
+  <div class="tablewrap"><table><thead><tr><th></th>${isExc?'<th>项目</th><th>机器</th><th>开始</th><th>结束</th><th>类型</th>':'<th>日期</th><th>DO</th><th>服务</th><th>车牌</th><th>时间</th>'}<th class="num">金额</th>${isExc?'':'<th></th>'}</tr></thead><tbody>
+  ${cands.map(d=>{if(isExc){const k=excCalc(d);return`<tr><td><input type="checkbox" data-x="${d.id}" ${b.excl[d.id]?'':'checked'} style="min-height:auto;width:18px;height:18px"></td><td>${esc(d.project)}</td><td>${esc(d.machine)}</td><td>${dmy(d.from)}</td><td>${dmy(d.to)}</td><td>${k?k.type:''}</td><td class="num">${k&&!k.missing?money(k.total):'缺价钱'}</td></tr>`}
+    const k=calc(d);return`<tr><td><input type="checkbox" data-x="${d.id}" ${b.excl[d.id]?'':'checked'} style="min-height:auto;width:18px;height:18px"></td><td>${dmy(d.date)}</td><td class="dono">${esc(d.doNo)}</td><td>${esc(d.service)}</td><td>${esc(d.vehicle)}</td><td>${d.start?esc(d.start)+'–'+esc(d.end):''}</td><td class="num">${k&&!k.missing?money(k.total):'缺价钱'}</td><td><button class="btn small" data-editdo="${d.id}">改</button></td></tr>`}).join('')}
+  </tbody></table></div>`:`<p class="hint">这个客户没有未开单的记录。</p>`):`<p class="hint">选客户，系统会把还没开单的记录全部拉出来。</p>`}
+  ${inv?`<div class="stats" style="margin-top:14px"><div class="stat"><div class="k">小计</div><div class="v">$${money(inv.subtotal)}</div></div><div class="stat"><div class="k">GST ${inv.gstRate}%</div><div class="v">$${money(inv.gst)}</div></div><div class="stat"><div class="k">总额</div><div class="v">$${money(inv.total)}</div></div></div>
+  <div class="msgs">${msgs.map(([k,t])=>`<div class="msg ${k}">${t}</div>`).join('')||'<div class="msg ok">检查通过：日期、号码、价钱都没问题</div>'}</div>
+  <h3>发票内容（可以直接改）</h3><p class="hint">改了预览会马上更新。金额要改的话，先改 DO（上面每行的「改」）或客户价钱。</p>
+  ${lineItems({...inv,itemDesc:null},true).items.map((it,i)=>`<label class="f wide" style="margin-bottom:8px">第 ${i+1} 行描述<textarea data-desc="${i}" style="min-height:${24*Math.max(2,it.desc.length)+20}px">${esc((b.desc&&b.desc[i]!=null&&b.desc[i]!=='')?b.desc[i]:it.desc.map(x=>x.t).join('\n'))}</textarea></label>${b.desc&&b.desc[i]?`<button class="btn small" data-descreset="${i}" style="margin-bottom:10px">还原</button>`:''}`).join('')}
+  <div class="row" style="margin-top:12px"><button class="btn primary bill-act" id="b-cpdf">开单 ${esc(inv.no)} + 下载 PDF</button><button class="btn primary bill-act" id="b-cxlsx">开单 + 下载 Excel</button><button class="btn bill-act" id="b-confirm">只开单</button></div>
+  <p class="hint">要先开单（记录下来、锁住 DO）才能下载，这样同一张 DO 不会被开两次。</p>
+  <h3>预览</h3><div class="sheets" id="b-prev"></div>`:''}
+  <h3>BILLING HISTORY · ${S.co}</h3>
+  ${past.length?`<div class="tablewrap"><table><thead><tr><th>Invoice No.</th><th>Date</th><th>DO No.</th><th>Customer</th><th class="num">Amount</th><th>Status</th><th>Payment</th><th></th></tr></thead><tbody>${past.map(v=>{const dn=(v.groups||[]).flatMap(g=>(g.rows||[]).map(r=>r.doNo||r.machine)).filter(Boolean);const ps=payStatus(v);return`<tr><td>${esc(v.no)}</td><td>${dmy(v.date)}</td><td style="white-space:normal;max-width:220px">${esc(dn.slice(0,4).join(', '))}${dn.length>4?` … (${dn.length})`:''}</td><td>${esc(v.custName)}${v.project?' · '+esc(v.project):''}</td><td class="num">${money(v.total)}</td><td><span class="chip ${v.status==='void'?'void':'billed'}">${v.status==='void'?'Void':v.kind==='legacy'?'旧资料':'Invoiced'}</span></td><td>${v.status==='void'?'':`<span class="chip ${ps.k}">${esc(ps.t)}</span>`}</td><td style="display:flex;gap:6px">${v.kind==='legacy'?'<span class="chip void">旧资料</span>':`<button class="btn small" data-pdf="${v.id}">PDF</button><button class="btn small" data-xl="${v.id}">Excel</button>`}<button class="btn small" data-open="${v.id}">打开</button></td></tr>`}).join('')}</tbody></table></div>`:`<p class="hint">还没开过发票。</p>`}`;
+  const on=(id,ev,fn)=>{const el=$(id);if(el)el.addEventListener(ev,fn)};
+  if($('#b-kind'))$('#b-kind').addEventListener('click',e=>{const x=e.target.closest('button');if(!x)return;b.kind=x.dataset.v;b.project='';b.service='';b.excl={};renderBill()});
+  on('#b-cust','change',e=>{S.billErr=null;b.cust=e.target.value;b.project='';b.service='';b.excl={};b.no='';b.po='';b.sno='';b.ourRef='';b.desc={};renderBill()});
+  on('#b-proj','change',e=>{b.project=e.target.value;renderBill()});
+  on('#b-svc','change',e=>{b.service=e.target.value;renderBill()});
+  on('#b-from','change',e=>{b.from=e.target.value;renderBill()});
+  on('#b-to','change',e=>{b.to=e.target.value;renderBill()});
+  on('#b-date','change',e=>{b.date=e.target.value;renderBill()});
+  on('#b-no','change',e=>{b.no=e.target.value.trim();renderBill()});
+  on('#b-po','change',e=>{b.po=e.target.value.trim();renderBill()});
+  on('#b-sno','change',e=>{b.sno=e.target.value.trim();renderBill()});
+  on('#b-ref','change',e=>{b.ourRef=e.target.value.trim();renderBill()});
+  $('#t-bill').querySelectorAll('[data-desc]').forEach(x=>x.addEventListener('change',()=>{b.desc=b.desc||{};b.desc[x.dataset.desc]=x.value;renderBill()}));
+  $('#t-bill').querySelectorAll('[data-descreset]').forEach(x=>x.addEventListener('click',()=>{if(b.desc)delete b.desc[x.dataset.descreset];renderBill()}));
+  $('#t-bill').querySelectorAll('[data-editdo]').forEach(x=>x.addEventListener('click',()=>{const d=S.dos.find(y=>y.id===x.dataset.editdo);if(!d)return;S.editId=d.id;S.entry={date:d.date,customerId:d.customerId,service:d.service,project:d.project||'',vehicle:d.vehicle,doNo:d.doNo,start:d.start,end:d.end,shift:d.shift||'A',location:d.location||'',to:d.to||'',desc:d.desc||'',qty:d.qty||'',po:d.po||''};S.tab='entry';renderAll();window.scrollTo({top:0});toast('改好保存后，回「开单」就会更新')}));
+  $('#t-bill').querySelectorAll('[data-x]').forEach(x=>x.addEventListener('change',()=>{b.excl[x.dataset.x]=!x.checked;renderBill()}));
+  $('#t-bill').querySelectorAll('[data-open]').forEach(x=>x.addEventListener('click',()=>openInvoice(x.dataset.open)));
+  $('#t-bill').querySelectorAll('[data-pdf]').forEach(x=>x.addEventListener('click',()=>downloadPDF(S.invoices.find(v=>v.id===x.dataset.pdf),x)));
+  $('#t-bill').querySelectorAll('[data-xl]').forEach(x=>x.addEventListener('click',()=>downloadXLSX(S.invoices.find(v=>v.id===x.dataset.xl),x)));
+  if(inv)renderSheets($('#b-prev'),inv);
+  on('#b-confirm','click',()=>confirmInvoice(null));on('#b-cpdf','click',()=>confirmInvoice('pdf'));on('#b-cxlsx','click',()=>confirmInvoice('xlsx'));
+  on('#b-okclose','click',()=>{S.lastResult=null;renderBill()});
+  if(BUSY)setBillBtns(true);
+}
+let BUSY=false;
+function setBillBtns(busy){document.querySelectorAll('#t-bill .bill-act').forEach(x=>{if(busy){x.dataset.t=x.dataset.t||x.textContent;x.disabled=true;x.textContent='Creating Invoice…'}else{x.disabled=false;if(x.dataset.t)x.textContent=x.dataset.t}})}
+function findInvoiceWithDO(doNo,company){const n=normDO(doNo);if(!n)return null;return S.invoices.find(v=>v.company===company&&v.status!=='void'&&(v.groups||[]).some(g=>(g.rows||[]).some(r=>r.doNo&&normDO(r.doNo)===n)))||null}
+const dupMsg=(doNo,v)=>`⚠️ This DO has already been invoiced.（DO ${doNo} 已经开过单，不能再开）\nInvoice No: ${v.no}${v.date?'\nDate: '+dmy(v.date):''}`;
+function billBlockers(inv){
+  const b=S.bill,errs=[];
+  if(!b.cust)errs.push('❌ Please select Customer.（请选客户）');
+  if(!b.date)errs.push('❌ Please enter Invoice Date.（请填发票日期）');
+  if(b.cust&&!inv){errs.push('❌ 没有勾选任何 DO / 记录，不能开单。');return errs}
+  if(!inv)return errs;
+  const seen={};
+  for(const g of inv.groups)for(const r of g.rows){
+    if(r.doId){const d=S.dos.find(x=>x.id===r.doId);
+      if(!d||!String(d.doNo||'').trim()){errs.push('❌ Please enter DO Number.（有记录没有 DO 号码）');continue}
+      const n=normDO(d.doNo);if(seen[n])errs.push(`❌ DO ${d.doNo} 在这张发票里重复了两次`);seen[n]=1;
+      const ov=d.invoiceNo?(S.invoices.find(v=>v.no===d.invoiceNo&&v.status!=='void')||{no:d.invoiceNo}):findInvoiceWithDO(d.doNo,inv.company);
+      if(ov)errs.push(dupMsg(d.doNo,ov));}
+    if(r.rid){const x=S.rentals.find(y=>y.id===r.rid);if(x&&x.invoiceNo)errs.push(`⚠️ 这行挖机租金已经开过：${x.invoiceNo}`)}
+    if(r.missing)errs.push('❌ 有记录没有价钱，先去「客户 / 价目」设定');
+  }
+  if(inv.date&&inv.to&&inv.date<inv.to)errs.push(`❌ 发票日期 ${dmy(inv.date)} 比工作日期（做到 ${dmy(inv.to)}）早`);
+  const projects=[...new Set(billCands().map(d=>d.project||'').filter(Boolean))];
+  if((inv.groups.some(g=>g.mode==='hourly')||inv.kind==='exc')&&!b.project&&projects.length>1)errs.push('❌ 要按项目分开开单，先选一个项目');
+  return [...new Set(errs)];
+}
+async function confirmInvoice(then){
+  if(BUSY)return;BUSY=true;setBillBtns(true);S.billErr=null;
+  try{
+    const inv=buildInvoice();const errs=billBlockers(inv);
+    if(errs.length){S.billErr=errs;renderBill();toast(errs[0].split('\n')[0]);window.scrollTo({top:0,behavior:'smooth'});return}
+    let no=nextInvNo(inv.date);while(S.invoices.some(v=>v.no===no&&v.status!=='void')){const m=no.match(/^(.*\/)(\d+)$/);no=m[1]+pad(+m[2]+1)}
+    inv.no=no;
+    {const base=inv.no.replace(/[^A-Za-z0-9\-_.]/g,'-');let id=base,n=2;while(S.invoices.some(v=>v.id===id))id=base+'-R'+n++;inv.id=id}
+    await store.save('invoices',inv);
+    const dos=[];
+    for(const g of inv.groups)for(const r of g.rows){
+      if(r.doId){const d=S.dos.find(x=>x.id===r.doId);if(d){dos.push(d.doNo);await store.save('dos',{...d,invoiceNo:inv.no})}}
+      if(r.rid){const x=S.rentals.find(y=>y.id===r.rid);if(x){dos.push(x.machine);await store.save('rentals',{...x,invoiceNo:inv.no})}}
+    }
+    S.lastResult={company:inv.company,no:inv.no,id:inv.id,dos,total:inv.total,file:then||null,fileStatus:then?'pending':null};
+    S.bill={...S.bill,excl:{},no:'',po:'',sno:'',ourRef:'',desc:{}};
+    renderAll();window.scrollTo({top:0,behavior:'smooth'});
+    if(then){const r=then==='pdf'?await downloadPDF(inv,null):await downloadXLSX(inv,null);
+      Object.assign(S.lastResult,{fileStatus:r&&r.ok?'ok':r&&r.declined?'declined':'fail',url:r&&r.url,fname:r&&r.fname,err:r&&r.err});
+      if(S.tab==='bill')renderBill()}
+    else toast('✓ Invoice Created Successfully：'+inv.no);
+  }catch(e){console.error(e);S.billErr=['❌ 开单失败：'+(e.message||e)];renderBill()}
+  finally{BUSY=false;setBillBtns(false)}
+}
+function openInvoice(id){
+  const v=S.invoices.find(x=>x.id===id);if(!v)return;
+  if(v.kind==='legacy'){$('#modalBox').innerHTML=`<h2>${esc(v.no)}</h2><p class="hint">从旧资料导入 · ${esc(v.custName)} · ${dmy(v.date)} · $${money(v.total)} · 未收 $${money(invBal(v))}</p><p>旧发票只有号码、日期和金额（用来做 SOA 和应收款），没有明细，所以不能重新生成 PDF / Excel。</p><div class="row"><button class="btn danger" id="lg-del">删除这张旧资料</button><button class="btn" id="m-close">关闭</button></div>`;
+    $('#modal').hidden=false;$('#m-close').addEventListener('click',()=>$('#modal').hidden=true);
+    $('#lg-del').addEventListener('click',async()=>{if(hasAlloc(v.id)){toast('有收款付了这张，先删除那笔收款');return}if(!await askConfirm('删除 '+v.no+'？'))return;await store.del('invoices',v.id);$('#modal').hidden=true;renderAll()});return}const c=custById(v.customerId);const co=S.master.companies[v.company];
+  const what=v.kind==='exc'?'excavator rental charges':v.groups.map(g=>svcOf(v.company,g.service).title).join(' / ')+' charges';
+  const mail=`mailto:${encodeURIComponent(c?.email||'')}?subject=${encodeURIComponent('Tax Invoice '+v.no+' - '+co.name)}&body=${encodeURIComponent(`Dear ${c?.pic||'Accounts Department'},\n\nPlease find attached our Tax Invoice ${v.no} dated ${dmy(v.date)} for ${what}${v.project?' (Project: '+v.project+')':''}, ${dmy(v.from)} to ${dmy(v.to)}, total S$${money(v.total)} (inclusive of GST).\n\nKindly arrange payment accordingly. Thank you.\n\nRegards,\n${co.name}`)}`;
+  $('#modalBox').innerHTML=`<div class="row" style="justify-content:space-between"><h2 style="margin:0">${esc(v.no)}</h2><button class="btn small" id="m-close">关闭</button></div>
+  <p class="hint">${esc(v.custName)} · ${dmy(v.date)} · $${money(v.total)} · ${v.status==='void'?'已作废':v.status==='paid'?'已收款':'未收款'}</p>
+  <div class="row"><button class="btn primary" id="m-pdf">下载 PDF</button><button class="btn" id="m-xlsx">下载 Excel</button>
+    <a class="btn" href="${mail}" target="_blank" rel="noopener" style="text-decoration:none;display:inline-flex;align-items:center">写邮件给客户</a>
+    ${v.status!=='void'?`<button class="btn" id="m-edit">修改发票资料</button><button class="btn danger" id="m-void">作废这张发票</button>`:''}</div>
+  <p class="hint">发邮件：先下载 PDF，再按「写邮件」，把 PDF 附上就可以寄。${c?.email?'':'这个客户还没填 email。'}</p>
+  <div class="sheets" id="m-prev"></div>`;
+  $('#modal').hidden=false;renderSheets($('#m-prev'),v);
+  $('#m-close').addEventListener('click',()=>{$('#modal').hidden=true});
+  $('#m-pdf').addEventListener('click',()=>downloadPDF(v));
+  $('#m-xlsx').addEventListener('click',()=>downloadXLSX(v));
+  if($('#m-edit'))$('#m-edit').addEventListener('click',()=>editInvoiceInfo(v));
+  if($('#m-void'))$('#m-void').addEventListener('click',async()=>{if(!await askConfirm(`作废 ${v.no}？里面的记录会变回「未开单」。`))return;await store.save('invoices',{...v,status:'void'});
+    for(const g of v.groups)for(const r of g.rows){if(r.doId){const d=S.dos.find(x=>x.id===r.doId);if(d&&d.invoiceNo===v.no)await store.save('dos',{...d,invoiceNo:null})}if(r.rid){const x=S.rentals.find(y=>y.id===r.rid);if(x&&x.invoiceNo===v.no)await store.save('rentals',{...x,invoiceNo:null})}}
+    $('#modal').hidden=true;toast('已作废');renderAll()});
+}
+function editInvoiceInfo(v){
+  const items=lineItems({...v,itemDesc:null},true).items;const L3=v.company==='L3H';
+  $('#modalBox').innerHTML=`<h2>修改 ${esc(v.no)}</h2><p class="hint">这里可以改日期、参考号、描述。金额不能在这里改——要改金额，先「作废」，改 DO 后重新开单（可以用回同一个号码）。</p>
+  <div class="grid"><label class="f">发票日期<input type="date" id="ei-date" value="${esc(v.date)}"></label><label class="f">${L3?'D.O. No':'Our Ref No.'}<input id="ei-ref" value="${esc(v.ourRef||'')}"></label><label class="f">Your PO<input id="ei-po" value="${esc(v.po||'')}"></label>${v.groups.some(g=>g.mode==='hourly')?`<label class="f">Summary list No.<input id="ei-sno" value="${esc(v.summaryNo||'')}"></label>`:''}</div>
+  ${items.map((it,i)=>`<label class="f wide" style="margin-top:8px">第 ${i+1} 行描述<textarea data-ed="${i}" style="min-height:${24*Math.max(2,it.desc.length)+20}px">${esc(v.itemDesc&&v.itemDesc[i]?v.itemDesc[i]:it.desc.map(x=>x.t).join('\n'))}</textarea></label>`).join('')}
+  <div class="row" style="margin-top:12px"><button class="btn primary" id="ei-ok">保存</button><button class="btn" id="ei-cancel">取消</button></div>`;
+  $('#ei-cancel').addEventListener('click',()=>openInvoice(v.id));
+  $('#ei-ok').addEventListener('click',async()=>{const d=$('#ei-date').value;const last=v.to||v.date;if(d<last&&!await askConfirm(`日期比工作日期（${dmy(last)}）早，还是要保存吗？`))return;
+    const itemDesc={};$('#modalBox').querySelectorAll('[data-ed]').forEach(t=>{const orig=items[+t.dataset.ed].desc.map(x=>x.t).join('\n');if(t.value.trim()&&t.value!==orig)itemDesc[t.dataset.ed]=t.value});
+    const nv={...v,date:d,ourRef:$('#ei-ref').value.trim(),po:$('#ei-po').value.trim(),summaryNo:$('#ei-sno')?$('#ei-sno').value.trim():v.summaryNo,itemDesc};
+    await store.save('invoices',nv);toast('已保存');renderAll();openInvoice(v.id)});
+}
+$('#modal').addEventListener('click',e=>{if(e.target.id==='modal')$('#modal').hidden=true});
+
+/* ================= document model (shared by PDF preview & Excel) ================= */
+function lineItems(v,raw){
+  const co=v.company,L3=co==='L3H';
+  const pre=[],items=[],post=[];
+  const period=`${longDate(v.from)} to ${longDate(v.to)}`;
+  if(v.kind==='exc'){
+    items.push({desc:[{t:'PROJECT: '+v.project,b:1,u:1},{t:'Provide Excavator Charges'},{t:v.from.slice(0,7)===v.to.slice(0,7)&&daysBetween(v.from,v.to)<27?`Date : ${dmy(v.from)} to ${dmy(v.to)}`:`From ${monthRange(v.from,v.to)}`}],qty:'1',uom:'LS',unit:v.subtotal,amount:v.subtotal,g:0});
+    post.push('(Please refer to attach for all detailed breakdown)');
+  }else if(L3&&v.groups.some(g=>g.mode==='hourly')){
+    pre.push({t:'PROJECT: '+(v.project||''),b:1,u:1});pre.push({t:'PROVIDE TRANSPORT SERVICES FOR '+monthSpan(v.from,v.to).toUpperCase(),b:1,u:1});
+    v.groups.forEach((g,i)=>{const s=svcOf(co,g.service);
+      if(g.mode==='hourly')items.push({desc:[{t:s.desc}],qty:(g.hours||0).toFixed(2),uom:'hr',unit:'LS',amount:g.subtotal,g:i,qtyIsHours:true});
+      else items.push({desc:[{t:s.desc}],qty:'1',uom:'LS',unit:'',amount:g.subtotal,g:i})});
+    if(v.summaryNo)post.push('Refer to summary list No: '+v.summaryNo);
+    post.push('(Please refer to attach for all detailed breakdown)');
+  }else{
+    v.groups.forEach((g,i)=>{const s=svcOf(co,g.service);
+      if(g.mode==='unit'){
+        const r0=g.rows[0];const qty=r2(g.rows.reduce((a,r)=>a+(r.qty||0),0));const same=g.rows.every(r=>r.rate===r0.rate);
+        const locs=[...new Set(g.rows.map(r=>(r.location||'')+'→'+(r.to||'')))];
+        const d=[{t:r0.label||s.desc,b:1,u:1}];
+        if(locs.length===1&&r0.location)d.push({t:`From : ${r0.location}${r0.to?' To : '+r0.to:''}`});
+        if(g.rows.length<=3)d.push({t:'DO : '+g.rows.map(r=>r.doNo).join(' , ')});
+        d.push({t:v.from===v.to?'Date : '+dmy(v.from):`Date : ${dmy(g.rows[0].date)} to ${dmy(g.rows[g.rows.length-1].date)}`});
+        items.push({desc:d,qty:hrs(qty),uom:r0.uom||'load',unit:same?r0.rate:'',amount:g.subtotal,g:i});
+      }else{
+        const vehs=[...new Set(g.rows.map(r=>r.vehicle))];
+        const d=[];if(v.project&&!L3)d.push({t:'Project : '+v.project,b:1});
+        d.push({t:s.desc+(L3&&vehs.length===1?' - '+vehs[0]:''),b:1,u:1},{t:period,b:L3?1:1,u:1});
+        items.push({desc:d,qty:'1',uom:'LS',unit:g.subtotal,amount:g.subtotal,g:i});
+      }
+    });
+    post.push(L3?'(Please refer to attach for all detailed breakdown)':'(Please see the attachment)');
+  }
+  if(!raw&&v.itemDesc)items.forEach((it,i)=>{const t=v.itemDesc[i];if(t!=null&&String(t).trim()!==''){const o=it.desc;it.desc=String(t).split('\n').map((x,j)=>({t:x,b:o[j]?.b,u:o[j]?.u}))}});
+  return{pre,items,post};
+}
+function summarySpecs(v){
+  const specs=[];const cust=(v.cust||{}).name||'';
+  v.groups.forEach((g,gi)=>{
+    const s=svcOf(v.company,g.service);
+    if(g.mode==='exc'){
+      specs.push({g:gi,style:'std',per:18,title:[],cols:[
+        {h:'S/N',k:'sn',w:5},{h:'Machine Code',k:'mc',w:14},{h:'Person Request',k:'pr',w:13},{h:'Status',k:'st',w:8},{h:'Project',k:'pj',w:13},{h:'Location From',k:'lf',w:15},{h:'Location To',k:'lt',w:15},
+        {h:'Start Date',k:'sd',w:10,fmt:'dmy2'},{h:'End Date',k:'ed',w:10,fmt:'dmy2'},{h:'Days',k:'dy',w:6},{h:'Rate Type',k:'rt',w:9},{h:'Day Rate',k:'dr',w:10,fmt:'acc'},{h:'Weekly Rate',k:'wr',w:10,fmt:'acc'},{h:'Monthly Rate',k:'mr',w:11,fmt:'acc'},{h:'Total',k:'tot',w:12,fmt:'acc',sum:1},{h:'Current Location',k:'cl',w:15},{h:'Invoice Number',k:'in',w:13}],
+        rows:g.rows.map((r,i)=>({sn:i+1,mc:r.machine,pr:(r.person||'').toUpperCase(),st:'Rental',pj:r.project,lf:r.locFrom,lt:r.locTo||r.locFrom,sd:r.from,ed:r.to,dy:r.days,rt:r.type,dr:r.type==='Daily'?r.rate:null,wr:r.type==='Weekly'?r.rate:null,mr:r.type==='Monthly'?r.rate:null,tot:r.total,cl:r.locTo||r.locFrom,in:v.no})),
+        totalLabelCol:'mr',grand:g.subtotal,titleBlock:null});
+      return;
+    }
+    if(g.mode==='hourly'){
+      const dz=v.company==='L3H'||g.rows.some(r=>r.diesel);
+      const cols=[{h:'S/N',k:'sn',w:5},{h:'D/N',k:'dn',w:8},{h:'Date',k:'dt',w:10,fmt:'dmon'},{h:'From',k:'fr',w:20},{h:'To',k:'to',w:20},{h:'Vehicle No',k:'vh',w:11},{h:'In',k:'in',w:7},{h:'Out',k:'out',w:7},{h:v.company==='ETK'?'Tma Day/Night Work':'Description',k:'ds',w:v.company==='ETK'?16:30,wrap:1},{h:'Rate',k:'rate',w:9,fmt:'money'},{h:'Total Hr 1',k:'h1',w:8,fmt:'hr2'},{h:'UOM',k:'uom',w:6},{h:'Total Hr 2',k:'h2',w:8,fmt:'hr2',sum:1,sumLabel:'HRS'},{h:'Rate2',k:'r2',w:9,fmt:'money'}];
+      if(dz)cols.push({h:'Diesel Surcharge',k:'dz',w:10,fmt:'money',sum:1,sumLabel:'TOTAL'});
+      cols.push({h:'Amount',k:'amt',w:12,fmt:'money',sum:1,f:dz?'ROUND({h2}*{r2},2)+{dz}':'ROUND({h2}*{r2},2)'});
+      specs.push({g:gi,style:'gsg',per:v.company==='ETK'?22:20,head:[v.project||'','FOR MONTH '+monthSpan(v.from,v.to).toUpperCase(),s.rec],right:v.summaryNo?'No.'+v.summaryNo:'',cols,
+        rows:g.rows.map((r,i)=>({sn:i+1,dn:r.doNo,dt:r.date,fr:(r.location||'').toUpperCase(),to:(r.to||r.location||'').toUpperCase(),vh:r.vehicle,in:r.start,out:r.end,ds:r.desc||(r.shift==='N'?'Night Work':'Day Work'),rate:r.rate,h1:r.billHr,uom:'hr',h2:r.billHr,r2:r.rate,dz:r.diesel||0,amt:r.total})),
+        grand:g.subtotal,dieselCol:dz});
+      return;
+    }
+    if(g.mode==='unit'){
+      const r0=g.rows[0];
+      specs.push({g:gi,style:'unit',per:22,head:[cust,'Transportation for '+monthSpan(v.from,v.to),'Transporter : '+S.master.companies[v.company].name,'INV NO : '+v.no],cols:[
+        {h:'No.',k:'sn',w:5},{h:'Date',k:'dt',w:11,fmt:'dmys'},{h:'#DO#',k:'dn',w:9},{h:'#Lorry No#',k:'vh',w:11},{h:'From',k:'fr',w:18},{h:'To',k:'to',w:18},{h:'Product / Description',k:'pd',w:22,wrap:1},{h:'Qty',k:'qty',w:6,sum:1},{h:'Rate',k:'rate',w:10,fmt:'money'},{h:'Amount',k:'amt',w:12,fmt:'acc',sum:1,f:'ROUND({qty}*{rate},2)'+(g.rows.some(r=>r.diesel)?'+{dzv}':'')}],
+        rows:g.rows.map((r,i)=>({sn:i+1,dt:r.date,dn:r.doNo,vh:r.vehicle,fr:r.location,to:r.to,pd:r.desc||r.label||'',qty:r.qty,rate:r.rate,amt:r.total,dzv:r.diesel||0})),
+        totalLabelCol:'pd',totalLabel:'Sub Total',grand:g.subtotal});
+      return;
+    }
+    const dzShow=v.showDiesel!==false,ref=v.refLabel||'';
+    const cols=[{h:'S/N',k:'sn',w:5},{h:'DATE',k:'dt',w:11,fmt:'dmys'},{h:'VEHICLE NO',k:'vh',w:11},{h:'DO NO',k:'dn',w:9}];
+    if(ref)cols.push({h:ref,k:'ref',w:13});
+    cols.push({h:'START TIME',k:'st',w:9},{h:'END TIME',k:'en',w:9},{h:'TOTAL HR',k:'th',w:8},{h:'MAX HR',k:'mh',w:7},{h:'OT HOUR',k:'oh',w:8},{h:'RATE',k:'rate',w:11,fmt:'acc'},{h:'OT RATE',k:'otr',w:10,fmt:'acc'},{h:'AMOUNT',k:'amt',w:12,fmt:'acc',sum:1},{h:'OT AMT',k:'ota',w:11,fmt:'acc',sum:1,dark:1,f:'ROUND({oh}*{otr},2)'});
+    if(dzShow)cols.push({h:'Diesel Surcharge',k:'dz',w:10,fmt:'acc',sum:1,dark:1});
+    cols.push({h:'TOTAL AMOUNT',k:'tot',w:13,fmt:'acc',sum:1,dark:1,f:dzShow?'{amt}+{ota}+{dz}':'{amt}+{ota}'});
+    specs.push({g:gi,style:'std',per:16,titleBlock:[{t:`Hire Of ${s.title} Summary Report For ${monthSpan(v.from,v.to)}`,b:1,u:1},{t:'INV NO : '+v.no},{t:'Customer : '+cust.toUpperCase()}],cols,
+      rows:g.rows.map((r,i)=>({sn:i+1,dt:r.date,vh:r.vehicle,dn:r.doNo,ref:r.po,st:t0(r.start),en:t0(r.end),th:r.billHr,mh:r.base,oh:r.ot,rate:r.rate,otr:r.otRate,amt:r.amt,ota:r.otAmt,dz:r.diesel||0,tot:r.total})),
+      totalLabelCol:'otr',grand:g.subtotal});
+  });
+  return specs;
+}
+function fmtCell(val,fmt){
+  if(fmt==='acc')return val==null||val===''?'':`<span class="c">$</span>${val?money(val):'-'}`;
+  if(fmt==='money')return val==null||val===''?'':'$'+money(val);
+  if(fmt==='hr2')return (+val||0).toFixed(2);
+  if(fmt==='dmon')return dMon(val);
+  if(fmt==='dmys')return dmyShort(val);
+  if(fmt==='dmy2')return dmyY2(val);
+  return esc(val??'');
+}
+function coHeader(co){
+  const C=S.master.companies[co];
+  if(C.style==='l3h')return `<div class="co l3h"><div class="cn">${esc(C.name)}</div><div><b><i>${esc(C.address)}</i></b></div><div><b><i>Tel: ${esc(C.tel)}&nbsp;&nbsp; Fax: ${esc(C.fax)}</i></b></div><div><b><i>Co. Reg No. ${esc(C.reg)}&nbsp;&nbsp; GST Reg No. ${esc(C.gstReg)}</i></b></div><div><b><i>Email : ${esc(C.email)}</i></b></div></div>`;
+  return `<div class="co"><div class="cn">${esc(C.name)}</div><div>${esc(C.address)}</div><div>Co. Reg No: ${esc(C.reg)}&nbsp;&nbsp; GST Reg No: ${esc(C.gstReg)}</div><div>Mobile: ${esc(C.mobile)}&nbsp;&nbsp; Email: ${esc(C.email)}</div></div>`;
+}
+function metaRows(v){
+  const C=S.master.companies[v.company];
+  if(C.style==='l3h')return[['No',v.no],['D.O. No',v.ourRef||''],['Your PO No',v.po||''],['Terms',+v.terms?v.terms+' Days':'COD'],['Date',dmy(v.date)]];
+  return[['Invoice No.',v.no],['Our Ref No.',v.ourRef||''],['Terms',+v.terms?v.terms+' days':'C.O.D'],['Date',dmy(v.date)],['Your PO',v.po||'']];
+}
+function pagesHTML(v){
+  const C=S.master.companies[v.company];const cu=v.cust||{};const L=lineItems(v);const l3=C.style==='l3h';
+  const d=x=>x.map(p=>{let s=esc(p.t);if(p.u)s=`<u>${s}</u>`;if(p.b)s=`<b>${s}</b>`;return s}).join('<br>');
+  const p1=`<div class="page p">${coHeader(v.company)}
+    <div class="title">Tax Invoice</div>
+    <div class="hdr"><div class="to"><table>
+      <tr><td>To</td><td>: <b>${esc(cu.name)}</b></td></tr><tr><td></td><td style="white-space:pre-line"><b>${esc(cu.address)}</b></td></tr>
+      <tr><td>Tel</td><td>: ${esc(cu.tel)}</td></tr><tr><td>Fax</td><td>: ${esc(cu.fax)}</td></tr><tr><td>Attn</td><td>: Accounts Department</td></tr></table></div>
+      <div><table>${metaRows(v).map(([k,x])=>`<tr><td style="${l3?'text-align:right':''}">${esc(k)}${l3?':':''}</td><td>${l3?'':': '}${esc(x)}</td></tr>`).join('')}</table></div></div>
+    <table class="items"><thead><tr><th style="width:40px">No.</th><th>Description</th><th style="width:60px">Qty</th><th style="width:48px">UOM</th><th style="width:108px;text-align:right">Unit Price $</th><th style="width:120px;text-align:right">Total Amount $</th></tr></thead>
+    <tbody>${L.pre.length?`<tr><td></td><td class="desc">${d(L.pre)}</td><td></td><td></td><td></td><td></td></tr>`:''}
+    ${L.items.map((it,i)=>`<tr><td>${i+1})</td><td class="desc">${d(it.desc)}</td><td>${esc(it.qty)}</td><td>${esc(it.uom)}</td><td style="text-align:right">${typeof it.unit==='number'?'$ '+money(it.unit):esc(it.unit)}</td><td style="text-align:right">$ ${money(it.amount)}</td></tr>`).join('')}
+    ${L.post.map(t=>`<tr><td></td><td class="desc" style="padding-top:22px">${esc(t)}</td><td></td><td></td><td></td><td></td></tr>`).join('')}</tbody></table>
+    <table class="tot"><tr><td style="text-align:right">Sub Total ${l3?'$':':'}</td><td class="amt">$ ${money(v.subtotal)}</td></tr><tr><td style="text-align:right">Add GST ${v.gstRate}% ${l3?'$':':'}</td><td class="amt" style="border-top:0">$ ${money(v.gst)}</td></tr><tr><td style="text-align:right"><b>Total ${l3?'$':':'}</b></td><td class="amt grand">$ ${money(v.total)}</td></tr></table>
+    <div class="foot"><div class="fr"><div>Payment should be made by crossed cheque in favour of<br><b>${esc(C.payee||C.name)}</b><br><b>Bank Transfer : ${esc(C.bank)}</b></div><div class="sig">Authorised Signature</div></div><br>E. &amp; O. E.<br><br>N.B:&nbsp;&nbsp;&nbsp; - Invoices considered correct unless disputes notified to us within SEVEN (7) days from date of invoice<br>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; - Interest at the rate of 1.5% per month will be charged on all overdue amounts</div>
+  </div>`;
+  const pages=[p1];
+  summarySpecs(v).forEach(sp=>{
+    const ch=[];for(let i=0;i<sp.rows.length;i+=sp.per)ch.push(sp.rows.slice(i,i+sp.per));
+    ch.forEach((rows,pi)=>{
+      const last=pi===ch.length-1;
+      const cls=sp.style==='gsg'?'chc':'sum';
+      const head=`<tr>${sp.cols.map(c=>`<th class="${c.dark?'dk':''}">${esc(c.h)}</th>`).join('')}</tr>`;
+      const body=rows.map(r=>`<tr>${sp.cols.map(c=>`<td class="${c.fmt==='acc'?'r':''}" style="white-space:${c.wrap?'normal':'nowrap'}">${fmtCell(r[c.k],c.fmt)}</td>`).join('')}</tr>`).join('');
+      let foot='';
+      if(last){
+        if(sp.style==='gsg'){
+          foot=`<tr class="t">${sp.cols.map(c=>{if(c.k==='uom')return`<td class="bx">HRS</td>`;if(c.k==='h2')return`<td class="bx">${sp.rows.reduce((s,r)=>s+(r.h2||0),0).toFixed(2)}</td>`;if(c.k==='r2')return`<td class="bx">TOTAL</td>`;if(c.k==='dz')return`<td class="bx">$${money(sp.rows.reduce((s,r)=>s+(r.dz||0),0))}</td>`;if(c.k==='amt')return`<td class="bx">$${money(sp.grand)}</td>`;return'<td></td>'}).join('')}</tr>`;
+        }else{
+          foot=`<tr class="t">${sp.cols.map(c=>{if(c.k===sp.totalLabelCol)return`<td class="r">${esc(sp.totalLabel||'Total')}</td>`;if(c.sum){const s=r2(sp.rows.reduce((a,r)=>a+(+r[c.k]||0),0));return`<td class="${c.fmt==='acc'?'r ':''}dbl">${c.fmt?fmtCell(s,c.fmt):hrs(s)}</td>`}return'<td></td>'}).join('')}</tr>`;
+        }
+      }
+      const top=sp.style==='gsg'?`<div class="chc-top"><div>${sp.head.map(esc).join('<br>')}</div><div class="mid">Page ${pi+1} of ${ch.length}</div><div>${esc(sp.right||'')}</div></div>`
+        :sp.style==='unit'?`<div class="sum-h">${sp.head.map((t,i)=>i===0||i===2?`<b>${esc(t)}</b>`:esc(t)).join('<br>')}</div>`
+        :sp.titleBlock?`<div class="sum-h">${sp.titleBlock.map(x=>x.b?`<b>${esc(x.t)}</b>`:esc(x.t)).join('<br>')}</div>`:'';
+      pages.push(`<div class="page l">${top}<table class="${cls}"><thead>${head}</thead><tbody>${body}${foot}</tbody></table>${sp.style!=='gsg'&&ch.length>1?`<div class="pno">Page ${pi+1} of ${ch.length}</div>`:''}</div>`);
+    });
+  });
+  return pages;
+}
+function fitSheets(host){host.querySelectorAll('.sheet-wrap').forEach(w=>{const pg=w.firstElementChild;const l=pg.classList.contains('l');const W=l?1123:794,H=l?794:1123;const s=w.clientWidth/W;pg.style.transform=`scale(${s})`;w.style.height=(H*s)+'px'})}
+function renderSheets(host,v){host.innerHTML=pagesHTML(v).map(p=>`<div class="sheet-wrap">${p}</div>`).join('');requestAnimationFrame(()=>fitSheets(host))}
+window.addEventListener('resize',()=>document.querySelectorAll('.sheets').forEach(fitSheets));
+function fileBase(v){return v.no.replace(/\//g,'-')}
+async function saveBlob(blob,fname,label){
+  let url='';try{url=URL.createObjectURL(blob)}catch(e){}
+  if(DOWN){try{await DOWN.save({filename:fname,data:blob});toast('✓ '+label+' 已下载：'+fname);return{ok:true,url,fname}}catch(e){if(e&&e.code==='declined'){toast('已取消下载');return{ok:false,declined:true,url,fname}}}}
+  try{const a=document.createElement('a');a.href=url;a.download=fname;a.rel='noopener';document.body.appendChild(a);a.click();setTimeout(()=>a.remove(),1000);toast('✓ '+label+' 已下载：'+fname);return{ok:true,url,fname}}
+  catch(e){toast('❌ 下载不成功：'+(e.message||e));return{ok:false,url,fname,err:String(e.message||e)}}
+}
+async function ensureLib(test,urls){if(test())return true;for(const u of urls){try{await loadScript(u);if(test())return true}catch(e){}}return test()}
+async function downloadPDF(v,btnEl){return pdfFromPages(pagesHTML(v),fileBase(v)+'.pdf',btnEl===undefined?$('#m-pdf'):btnEl)}
+async function pdfFromPages(pages,fname,btn){
+  const okLib=await ensureLib(()=>window.html2canvas&&window.jspdf,['https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js','https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js','https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js','https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js']);
+  if(!okLib){toast('❌ Unable to generate PDF（PDF 工具载入不到，检查网络）');return{ok:false,err:'lib'}}
+  const old=btn?btn.textContent:'';if(btn){btn.disabled=true;btn.textContent='生成中…'}
+  try{
+    const stage=$('#stage');stage.innerHTML=pages.join('');
+    if(document.fonts&&document.fonts.ready)await document.fonts.ready;
+    const {jsPDF}=window.jspdf;let pdf=null;
+    for(const pg of stage.querySelectorAll('.page')){
+      const land=pg.classList.contains('l');
+      const cv=await html2canvas(pg,{scale:2,backgroundColor:'#ffffff',logging:false});
+      const img=cv.toDataURL('image/jpeg',0.92);
+      if(!pdf)pdf=new jsPDF({orientation:land?'l':'p',unit:'mm',format:'a4'});else pdf.addPage('a4',land?'l':'p');
+      pdf.addImage(img,'JPEG',0,0,land?297:210,land?210:297);
+    }
+    stage.innerHTML='';return await saveBlob(pdf.output('blob'),fname,'PDF');
+  }catch(e){console.error(e);toast('❌ Unable to generate PDF：'+(e.message||e));return{ok:false,err:String(e.message||e)}}
+  finally{if(btn){btn.disabled=false;btn.textContent=old}}
+}
+function loadScript(src){return new Promise((ok,no)=>{const e=document.createElement('script');e.src=src;e.onload=ok;e.onerror=no;document.head.appendChild(e)})}
+async function downloadXLSX(v,btnEl){
+  const btn=btnEl===undefined?$('#m-xlsx'):btnEl;const oldTxt=btn?btn.textContent:'';if(btn){btn.disabled=true;btn.textContent='生成中…'}
+  try{
+    if(!await ensureLib(()=>window.ExcelJS,['https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js','https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js']))throw new Error('Excel 工具载入不到，检查网络');
+    const C=S.master.companies[v.company];
+    const wb=new ExcelJS.Workbook();wb.creator=C.name;
+    const ACC='_("$"* #,##0.00_);_("$"* (#,##0.00);_("$"* "-"??_);_(@_)';
+    const FMT={acc:ACC,money:'"$"#,##0.00',hr2:'0.00',dmon:'d-mmm-yy',dmys:'d/m/yyyy',dmy2:'dd/mm/yy'};
+    const thin={style:'thin',color:{argb:'FF444444'}};const box={top:thin,left:thin,bottom:thin,right:thin};
+    const toDate=iso=>new Date(Date.UTC(+iso.slice(0,4),+iso.slice(5,7)-1,+iso.slice(8,10)));
+    const L=n=>{let s='';n++;while(n>0){const m=(n-1)%26;s=String.fromCharCode(65+m)+s;n=Math.floor((n-1)/26)}return s};
+    const F={name:'Arial',size:10};
+    const wi=wb.addWorksheet('Invoice');
+    const specs=summarySpecs(v);
+    const sheets=specs.map((sp,i)=>wb.addWorksheet(specs.length>1?('Summary '+(i+1)+' '+svcOf(v.company,v.groups[sp.g].service).id).slice(0,31):'Summary',{views:[{state:'frozen',ySplit:5}]}));
+    const links=[];
+    specs.forEach((sp,si)=>{
+      const ws=sheets[si];const nm=`'${ws.name}'`;
+      ws.pageSetup={paperSize:9,orientation:'landscape',fitToPage:true,fitToWidth:1,fitToHeight:0,margins:{left:0.4,right:0.4,top:0.5,bottom:0.5,header:0.2,footer:0.2},printTitlesRow:'5:5'};
+      const ix={};sp.cols.forEach((c,i)=>{ix[c.k]=i+1;ws.getColumn(i+1).width=c.w||10});
+      const top=sp.style==='gsg'?sp.head:sp.style==='unit'?sp.head:(sp.titleBlock||[]).map(x=>x.t);
+      top.forEach((t,i)=>{const x=ws.getCell('A'+(i+1));x.value=t;x.font={...F,bold:sp.style==='gsg'||(sp.titleBlock?!!sp.titleBlock[i].b:i===0||i===2),underline:sp.titleBlock?!!sp.titleBlock[i].u:false}});
+      if(sp.right){const x=ws.getCell(L(sp.cols.length-1)+'1');x.value=sp.right;x.font={...F,bold:true};x.alignment={horizontal:'right'}}
+      const h=ws.getRow(5);sp.cols.forEach((c,i)=>{const x=h.getCell(i+1);x.value=c.h;x.font={...F,bold:true};x.fill={type:'pattern',pattern:'solid',fgColor:{argb:c.dark?'FFA6A6A6':(sp.style==='gsg'?'FFCFCFCF':'FFD9D9D9')}};x.border=box;x.alignment={horizontal:'center',vertical:'middle',wrapText:true}});h.height=30;
+      sp.rows.forEach((r,i)=>{const R=6+i,row=ws.getRow(R);
+        sp.cols.forEach((c,ci)=>{const x=row.getCell(ci+1);let val=r[c.k];
+          if(c.f){const f=c.f.replace(/\{(\w+)\}/g,(m,k)=>ix[k]?L(ix[k]-1)+R:String(+r[k]||0));x.value={formula:f,result:val}}
+          else if(['dmon','dmys','dmy2'].includes(c.fmt)&&val)x.value=toDate(val);
+          else x.value=(val===null||val===undefined)?'':val;
+          if(c.fmt&&FMT[c.fmt])x.numFmt=FMT[c.fmt];
+          x.font=F;x.border=box;x.alignment={horizontal:c.fmt==='acc'?undefined:'center',vertical:'middle',wrapText:!!c.wrap};
+          if(sp.style==='gsg'&&i%2)x.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFEDEDED'}};
+        });
+      });
+      const T=6+sp.rows.length,last=T-1,tr=ws.getRow(T);
+      const sumCell=(k)=>{const x=tr.getCell(ix[k]);const c=sp.cols[ix[k]-1];const res=r2(sp.rows.reduce((a,r)=>a+(+r[k]||0),0));x.value={formula:`SUM(${L(ix[k]-1)}6:${L(ix[k]-1)}${last})`,result:res};if(c.fmt&&FMT[c.fmt])x.numFmt=FMT[c.fmt];x.font={...F,bold:true};x.alignment={horizontal:'center'};x.border={top:sp.style==='gsg'?{style:'medium'}:thin,bottom:{style:'double'}};return x};
+      if(sp.style==='gsg'){
+        const lab=(k,t)=>{const x=tr.getCell(ix[k]);x.value=t;x.font={...F,bold:true};x.alignment={horizontal:'center'};x.border={top:{style:'medium'},bottom:{style:'double'}}};
+        lab('uom','HRS');sumCell('h2');lab('r2','TOTAL');if(ix.dz)sumCell('dz');sumCell('amt');
+        links.push({amt:`${nm}!${L(ix.amt-1)}${T}`,hrs:`${nm}!${L(ix.h2-1)}${T}`});
+      }else{
+        const lab=tr.getCell(ix[sp.totalLabelCol]);lab.value=sp.totalLabel||'Total';lab.font={...F,bold:true};lab.alignment={horizontal:'right'};
+        sp.cols.filter(c=>c.sum).forEach(c=>sumCell(c.k));
+        const lastSum=sp.cols.filter(c=>c.sum).pop();
+        links.push({amt:`${nm}!${L(ix[lastSum.k]-1)}${T}`,qty:ix.qty?`${nm}!${L(ix.qty-1)}${T}`:null});
+      }
+    });
+    /* invoice sheet */
+    wi.pageSetup={paperSize:9,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:1,margins:{left:0.5,right:0.5,top:0.5,bottom:0.5,header:0.2,footer:0.2}};
+    [6,50,8,7,15,17].forEach((w,i)=>wi.getColumn(i+1).width=w);
+    const G={name:'Century Gothic',size:10};const cu=v.cust||{};
+    const merged=(r,text,font)=>{wi.mergeCells(`A${r}:F${r}`);const x=wi.getCell(`A${r}`);x.value=text;x.font=font;x.alignment={horizontal:'center'}};
+    const l3=C.style==='l3h';
+    merged(1,C.name,{name:'Calibri',size:22,bold:true,italic:true});wi.getRow(1).height=30;
+    const hl=l3?[C.address,`Tel: ${C.tel}   Fax: ${C.fax}`,`Co. Reg No. ${C.reg}   GST Reg No. ${C.gstReg}`,`Email : ${C.email}`]:[C.address,`Co. Reg No: ${C.reg}   GST Reg No: ${C.gstReg}`,`Mobile: ${C.mobile}   Email: ${C.email}`];
+    hl.forEach((t,i)=>merged(2+i,t,{name:'Calibri',size:11,bold:l3,italic:l3}));
+    const tr0=hl.length+3;
+    wi.mergeCells(`D${tr0}:F${tr0}`);const ti=wi.getCell(`D${tr0}`);ti.value='Tax Invoice';ti.font={name:'Calibri',size:24,bold:true};ti.alignment={horizontal:'right'};wi.getRow(tr0).height=32;
+    const put=(a,val,font=G,al)=>{const x=wi.getCell(a);x.value=val;x.font=font;if(al)x.alignment=al;return x};
+    let r=tr0+2;
+    const addr=String(cu.address||'').split(/\n/).map(s=>s.trim()).filter(Boolean);
+    put(`A${r}`,'To');put(`B${r}`,': '+(cu.name||''),{...G,bold:true});addr.forEach((a,i)=>put(`B${r+1+i}`,'  '+a,{...G,bold:true}));
+    const lr=r+1+addr.length;put(`A${lr}`,'Tel');put(`B${lr}`,': '+(cu.tel||''));put(`A${lr+1}`,'Fax');put(`B${lr+1}`,': '+(cu.fax||''));put(`A${lr+2}`,'Attn');put(`B${lr+2}`,': Accounts Department');
+    metaRows(v).forEach(([k,val],i)=>{put(`D${r+i}`,k+(l3?':':''),G,l3?{horizontal:'right'}:undefined);wi.mergeCells(`E${r+i}:F${r+i}`);put(`E${r+i}`,(l3?' ':': ')+val,G)});
+    r=Math.max(lr+2,r+4)+2;
+    ['No.','Description','Qty','UOM','Unit Price $','Total Amount $'].forEach((t,i)=>{const x=wi.getRow(r).getCell(i+1);x.value=t;x.font={...G,bold:true};x.border={top:{style:'medium'},bottom:{style:'medium'}};x.alignment={horizontal:i>=4?'right':'center'}});
+    r+=2;
+    const LI=lineItems(v);
+    LI.pre.forEach(p=>{put(`B${r}`,p.t,{...G,bold:!!p.b,underline:!!p.u});r++});
+    const amtCells=[];
+    LI.items.forEach((it,i)=>{
+      const first=r;put(`A${r}`,(i+1)+')',G,{horizontal:'center'});
+      it.desc.forEach((p,j)=>{put(`B${r+j}`,p.t,{...G,bold:!!p.b,underline:!!p.u},{wrapText:true})});
+      const lk=links[it.g]||{};
+      const qc=put(`C${first}`,it.qtyIsHours&&lk.hrs?{formula:lk.hrs,result:+it.qty}:(it.uom!=='LS'&&lk.qty?{formula:lk.qty,result:+it.qty}:(isNaN(+it.qty)?it.qty:+it.qty)),G,{horizontal:'center'});if(it.qtyIsHours)qc.numFmt='0.00';
+      put(`D${first}`,it.uom,G,{horizontal:'center'});
+      if(typeof it.unit==='number'){const u=put(`E${first}`,it.uom==='LS'&&lk.amt?{formula:lk.amt,result:it.unit}:it.unit,G);u.numFmt=ACC}else put(`E${first}`,it.unit,G,{horizontal:'right'});
+      const a=put(`F${first}`,lk.amt?{formula:lk.amt,result:it.amount}:it.amount,G);a.numFmt=ACC;amtCells.push(`F${first}`);
+      r+=Math.max(1,it.desc.length)+1;
+    });
+    LI.post.forEach(t=>{r++;put(`B${r}`,t,G)});
+    r+=3;const sub=r,gst=r+1,tot=r+2;
+    const lbl=(row,text,bold)=>put(`E${row}`,text,{...G,bold:!!bold},{horizontal:'right'});
+    lbl(sub,'Sub Total '+(l3?'$':':'));lbl(gst,`Add GST ${v.gstRate}% `+(l3?'$':':'));lbl(tot,'Total '+(l3?'$':':'),true);
+    wi.getCell(`F${sub}`).value={formula:amtCells.length>1?`SUM(${amtCells.join(',')})`:amtCells[0],result:v.subtotal};
+    wi.getCell(`F${gst}`).value={formula:`ROUND(F${sub}*${v.gstRate}%,2)`,result:v.gst};
+    wi.getCell(`F${tot}`).value={formula:`F${sub}+F${gst}`,result:v.total};
+    [sub,gst,tot].forEach(x=>{const c=wi.getCell(`F${x}`);c.numFmt=ACC;c.font={...G,bold:x===tot}});
+    wi.getCell(`F${sub}`).border={top:thin};wi.getCell(`F${tot}`).border={top:thin,bottom:{style:'double'}};
+    r=tot+4;const S8={name:'Calibri',size:8};
+    put(`A${r}`,'Payment should be made by crossed cheque in favour of',S8);put(`A${r+1}`,C.payee||C.name,{...S8,bold:true});put(`A${r+2}`,'Bank Transfer : '+C.bank,{...S8,bold:true});
+    wi.mergeCells(`E${r+2}:F${r+2}`);const sg=wi.getCell(`E${r+2}`);sg.value='Authorised Signature';sg.font={name:'Calibri',size:11,bold:true};sg.alignment={horizontal:'center'};sg.border={top:thin};
+    put(`A${r+4}`,'E. & O. E.',{name:'Calibri',size:10});
+    put(`A${r+6}`,'N.B:',S8);put(`B${r+6}`,'- Invoices considered correct unless disputes notified to us within SEVEN (7) days from date of invoice',S8);put(`B${r+7}`,'- Interest at the rate of 1.5% per month will be charged on all overdue amounts',S8);
+    wi.pageSetup.printArea=`A1:F${r+8}`;
+    const buf=await wb.xlsx.writeBuffer();
+    return await saveBlob(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),fileBase(v)+'.xlsx','Excel');
+  }catch(e){console.error(e);toast('❌ Unable to generate Excel：'+(e.message||e));return{ok:false,err:String(e.message||e)}}
+  finally{if(btn){btn.disabled=false;btn.textContent=oldTxt}}
+}
+
+
+/* ================= payments ================= */
+const PAY_METHODS=['FUND TRANSFER','PAYNOW','EDP','CHEQUE','CASH','CONTRA','CREDIT NOTE'];
+const coPays=()=>S.payments.filter(p=>p.company===S.co);
+const payMethod=p=>p.method||(/^CONTRA/i.test(p.ref||'')?'CONTRA':/^PAYNOW/i.test(p.ref||'')?'PAYNOW':/^EDP/i.test(p.ref||'')?'EDP':/^CHEQUE|^CHQ/i.test(p.ref||'')?'CHEQUE':'FUND TRANSFER');
+const payDesc=p=>{const m=payMethod(p);return m==='CONTRA'?'CONTRA':m==='CREDIT NOTE'?'CREDIT NOTE':'RECEIVED'};
+const payAllocated=p=>r2((p.alloc||[]).reduce((s,x)=>s+(+x.amt||0),0));
+const payUnalloc=p=>r2(p.amount-payAllocated(p));
+function allocSum(invId,asOf){return r2(S.payments.reduce((s,p)=>s+(asOf&&p.date>asOf?0:(p.alloc||[]).reduce((a,x)=>a+(x.inv===invId?(+x.amt||0):0),0)),0))}
+function hasAlloc(invId){return S.payments.some(p=>(p.alloc||[]).some(x=>x.inv===invId))}
+function invBal(v,asOf){
+  if(v.status==='void')return 0;
+  if(!hasAlloc(v.id)&&v.status==='paid'){return asOf&&v.paidDate&&v.paidDate>asOf?v.total:0}
+  return r2(v.total-allocSum(v.id,asOf));
+}
+function invPays(v){return S.payments.filter(p=>(p.alloc||[]).some(x=>x.inv===v.id)).sort((a,b)=>a.date.localeCompare(b.date)).map(p=>({p,amt:r2((p.alloc||[]).filter(x=>x.inv===v.id).reduce((s,x)=>s+x.amt,0))}))}
+function payStatus(v){
+  if(v.status==='void')return{k:'void',t:'Void'};
+  const bal=invBal(v);if(bal<=0.004)return{k:'paid',t:'Paid'};
+  const due=addDays(v.date,+v.terms||0);const od=daysBetween(due,todayISO());
+  if(bal<v.total-0.004)return{k:od>0?'overdue':'unbilled',t:'Partially Paid'+(od>0?` · 逾期 ${od} 天`:'')};
+  return od>0?{k:'overdue',t:`Overdue ${od} 天`}:{k:'unbilled',t:'Unpaid'};
+}
+function custCredit(custId){return r2(S.payments.filter(p=>p.customerId===custId).reduce((s,p)=>s+Math.max(0,payUnalloc(p)),0))}
+async function syncInvoices(ids){
+  for(const id of new Set(ids)){const v=S.invoices.find(x=>x.id===id);if(!v||v.status==='void')continue;
+    const paid=allocSum(id);const pays=invPays(v).map(x=>x.p);
+    const st=paid>=v.total-0.005?'paid':'unpaid';
+    const nv={...v,status:st,paidAmt:paid,paidDate:st==='paid'&&pays.length?pays[pays.length-1].date:null,paidRef:pays.map(p=>p.ref).filter(Boolean).join(', ')};
+    if(nv.status!==v.status||nv.paidAmt!==v.paidAmt||nv.paidDate!==v.paidDate||nv.paidRef!==v.paidRef)await store.save('invoices',nv);
+  }
+}
+/* record or edit a payment (incl. contra / overpayment) */
+function openPayment(custId,preIds,existing){
+  const c=custById(custId);if(!c)return;
+  const P=existing?clone(existing):null;
+  const mine=id=>P?r2((P.alloc||[]).filter(x=>x.inv===id).reduce((s,x)=>s+x.amt,0)):0;
+  const balEx=v=>r2(invBal(v)+mine(v.id));
+  const open=S.invoices.filter(v=>v.customerId===custId&&v.company===S.co&&v.status!=='void'&&balEx(v)>0.004).sort((a,b)=>a.date.localeCompare(b.date));
+  const sel={};
+  if(P)(P.alloc||[]).forEach(x=>{sel[x.inv]=r2((sel[x.inv]||0)+x.amt)});
+  (preIds||[]).forEach(id=>{const v=open.find(x=>x.id===id);if(v&&!(id in sel))sel[id]=balEx(v)});
+  const st={date:P?P.date:todayISO(),method:P?payMethod(P):'FUND TRANSFER',ref:P?P.ref:'',amt:P?P.amount:r2(Object.values(sel).reduce((a,b)=>a+b,0)),touched:!!P};
+  const draw=()=>{
+    $('#modalBox').innerHTML=`<h2>${P?'修改收款':'记录收款'} · ${esc(c.name)}</h2>
+    <div class="grid"><label class="f">日期<input type="date" id="py-date" value="${esc(st.date)}"></label>
+      <label class="f">方式<select id="py-method">${PAY_METHODS.map(m=>`<option ${m===st.method?'selected':''}>${m}</option>`).join('')}</select></label>
+      <label class="f">Ref（印在 SOA，例 PAYNOW - SIN JOO HENG）<input id="py-ref" value="${esc(st.ref)}" placeholder="${esc(st.method)}"></label>
+      <label class="f">金额 $<input id="py-amt" inputmode="decimal" value="${esc(st.amt)}"></label></div>
+    ${st.method==='CONTRA'?'<div class="msg warn" style="margin-top:8px">Contra：跟客户互相抵消（例如我们欠他们的钱 / backcharge），不是真的收到钱。SOA 会显示 CONTRA。</div>':''}
+    <h3>这笔钱付哪几张发票</h3>
+    ${open.length?`<div class="tablewrap"><table><thead><tr><th></th><th>号码</th><th>日期</th><th class="num">总额</th><th class="num">未收</th><th class="num">这次付</th></tr></thead><tbody>${open.map(v=>`<tr><td><input type="checkbox" data-pk="${v.id}" ${v.id in sel?'checked':''} style="width:18px;min-height:18px"></td><td>${esc(v.no)}</td><td>${dmy(v.date)}</td><td class="num">${money(v.total)}</td><td class="num">${money(balEx(v))}</td><td class="num"><input data-pa="${v.id}" inputmode="decimal" value="${v.id in sel?esc(sel[v.id]):''}" ${v.id in sel?'':'disabled'} style="width:100px;min-height:32px;padding:4px;text-align:right"></td></tr>`).join('')}</tbody></table></div>`:'<p class="hint">这个客户没有未收的发票。这笔钱会全部变成余款（overpayment / credit）。</p>'}
+    <div class="msgs" id="py-msg"></div>
+    <div class="row" style="margin-top:12px"><button class="btn primary" id="py-ok">保存</button><button class="btn" id="py-cancel">取消</button><button class="btn small" id="py-auto">按金额自动分配（最旧的先）</button>${P?'<button class="btn small danger" id="py-del">删除这笔收款</button>':''}</div>`;
+    const readTop=()=>{st.date=$('#py-date').value;st.method=$('#py-method').value;st.ref=$('#py-ref').value;st.amt=$('#py-amt').value};
+    const msg=()=>{const amt=num($('#py-amt').value)||0;const al=r2(Object.values(sel).reduce((a,b)=>a+(+b||0),0));const d=r2(amt-al);
+      const over=open.filter(v=>v.id in sel&&(+sel[v.id]||0)>balEx(v)+0.004);
+      $('#py-msg').innerHTML=(over.length?`<div class="msg bad">${over.map(v=>esc(v.no)).join(', ')} 付的比未收多</div>`:'')+(Math.abs(d)<0.005?`<div class="msg ok">分配 $${money(al)}，刚好</div>`:d>0?`<div class="msg warn">多出 $${money(d)} 没分配 → 记成客户余款（overpayment）。之后可以在「收款记录」按「分配」用来付别的发票。</div>`:`<div class="msg bad">分配 $${money(al)} 比金额多 $${money(-d)}</div>`)};
+    $('#py-method').addEventListener('change',()=>{readTop();draw()});
+    $('#modalBox').querySelectorAll('[data-pk]').forEach(x=>x.addEventListener('change',()=>{readTop();const v=open.find(o=>o.id===x.dataset.pk);if(x.checked)sel[v.id]=balEx(v);else delete sel[v.id];if(!st.touched)st.amt=r2(Object.values(sel).reduce((a,b)=>a+(+b||0),0));draw()}));
+    $('#modalBox').querySelectorAll('[data-pa]').forEach(x=>x.addEventListener('input',()=>{sel[x.dataset.pa]=num(x.value)||0;msg()}));
+    $('#py-amt').addEventListener('input',()=>{st.touched=true;msg()});
+    $('#py-auto').addEventListener('click',()=>{readTop();let left=num($('#py-amt').value)||0;Object.keys(sel).forEach(k=>delete sel[k]);for(const v of open){if(left<=0.004)break;const a=r2(Math.min(balEx(v),left));sel[v.id]=a;left=r2(left-a)}st.touched=true;draw()});
+    $('#py-cancel').addEventListener('click',()=>{$('#modal').hidden=true});
+    if($('#py-del'))$('#py-del').addEventListener('click',async()=>{if(!await askConfirm(`删除 ${dmy(P.date)} ${esc(P.ref||payMethod(P))} $${money(P.amount)}？付过的发票会变回未收。`))return;await store.del('payments',P.id);await syncInvoices((P.alloc||[]).map(x=>x.inv));$('#modal').hidden=true;toast('已删除');renderAll()});
+    $('#py-ok').addEventListener('click',async()=>{readTop();const amt=num(st.amt);if(!amt||amt<=0){toast('❌ 要填金额');return}if(!st.date){toast('❌ 要填日期');return}
+      const alloc=Object.entries(sel).filter(([k,a])=>+a>0).map(([inv,a])=>({inv,amt:r2(+a)}));const al=r2(alloc.reduce((s,x)=>s+x.amt,0));
+      if(al>amt+0.005){toast('❌ 分配比金额多');return}
+      if(alloc.some(x=>{const v=open.find(o=>o.id===x.inv);return v&&x.amt>balEx(v)+0.004})){toast('❌ 有发票付的比未收多');return}
+      const p={id:P?P.id:uid('p'),company:S.co,customerId:custId,date:st.date,amount:r2(amt),method:st.method,ref:(st.ref||'').trim()||st.method,alloc,createdAt:P?P.createdAt:Date.now()};
+      const touched=alloc.map(a=>a.inv).concat(P?(P.alloc||[]).map(a=>a.inv):[]);
+      await store.save('payments',p);await syncInvoices(touched);
+      $('#modal').hidden=true;toast(r2(amt-al)>0?`✓ 已记录，余款 $${money(r2(amt-al))}`:'✓ 收款已记录');renderAll()});
+    msg();
+  };
+  $('#modal').hidden=false;draw();
+}
+
+/* ================= SOA (your template) ================= */
+const ONES=['','ONE','TWO','THREE','FOUR','FIVE','SIX','SEVEN','EIGHT','NINE','TEN','ELEVEN','TWELVE','THIRTEEN','FOURTEEN','FIFTEEN','SIXTEEN','SEVENTEEN','EIGHTEEN','NINETEEN'];
+const TENS=['','','TWENTY','THIRTY','FORTY','FIFTY','SIXTY','SEVENTY','EIGHTY','NINETY'];
+function words999(n){let s=[];if(n>=100){s.push(ONES[Math.floor(n/100)]+' HUNDRED');n%=100}if(n>=20){s.push(TENS[Math.floor(n/10)]+(n%10?' '+ONES[n%10]:''))}else if(n>0)s.push(ONES[n]);return s.join(' ')}
+function numWords(n){n=Math.floor(n);if(n===0)return 'ZERO';const parts=[];[[1e9,'BILLION'],[1e6,'MILLION'],[1e3,'THOUSAND'],[1,'']].forEach(([d,w])=>{const q=Math.floor(n/d);if(q){parts.push(words999(q)+(w?' '+w:''));n%=d}});return parts.join(' ').replace(/\s+/g,' ').trim()}
+function amountWords(x){const neg=x<0;x=Math.abs(r2(x));const d=Math.floor(x+1e-9),c=Math.round((x-d)*100);let s='SINGAPORE DOLLAR '+numWords(d);if(c)s+=' AND '+words999(c)+' CENTS';return (neg?'(CREDIT) ':'')+s+' ONLY.'}
+function agingBucket(dpd){return dpd<=0?'cur':dpd<=30?'a30':dpd<=60?'a60':dpd<=90?'a90':'o90'}
+function soaData(custId,asOf,fromOpt){
+  const c=custById(custId);asOf=asOf||todayISO();
+  const invs=S.invoices.filter(v=>v.customerId===custId&&v.company===S.co&&v.status!=='void'&&v.date<=asOf);
+  const entries=[];
+  invs.forEach(v=>entries.push({date:v.date,type:'IN',ref:v.no,desc:'Invoice',dr:v.total,cr:0,inv:v}));
+  S.payments.filter(p=>p.customerId===custId&&p.company===S.co&&p.date<=asOf).forEach(p=>entries.push({date:p.date,type:'OR',ref:p.ref||payMethod(p),desc:payDesc(p),dr:0,cr:p.amount}));
+  invs.filter(v=>v.status==='paid'&&!hasAlloc(v.id)&&v.paidDate&&v.paidDate<=asOf).forEach(v=>entries.push({date:v.paidDate,type:'OR',ref:v.paidRef||'FUND TRANSFER',desc:'RECEIVED',dr:0,cr:v.total}));
+  entries.sort((a,b)=>a.date===b.date?(a.type===b.type?String(a.ref).localeCompare(String(b.ref)):a.type==='IN'?-1:1):a.date.localeCompare(b.date));
+  const outs=invs.map(v=>{const bal=invBal(v,asOf);const due=addDays(v.date,+v.terms||0);const dpd=daysBetween(due,asOf);return{v,bal,due,dpd,bucket:agingBucket(dpd)}}).filter(o=>o.bal>0.004);
+  let from=fromOpt;if(!from)from=outs.length?outs.reduce((m,o)=>o.v.date<m?o.v.date:m,outs[0].v.date):asOf.slice(0,8)+'01';
+  let bf=0;const rows=[];entries.forEach(e=>{if(e.date<from)bf=r2(bf+e.dr-e.cr);else rows.push(e)});
+  let bal=bf;rows.forEach(e=>{bal=r2(bal+e.dr-e.cr);e.bal=bal});
+  const aging={cur:0,a30:0,a60:0,a90:0,o90:0};outs.forEach(o=>aging[o.bucket]=r2(aging[o.bucket]+o.bal));
+  return{co:S.co,cust:c,asOf,from,bf,rows,total:bal,aging,outs};
+}
+function soaName(d){return `${d.co}-SOA-${(d.cust?.name||'').replace(/[^A-Za-z0-9]+/g,'_').replace(/_(PTE|LTD|Pte|Ltd)_?/g,'_').replace(/_+$/,'').toUpperCase()}-${d.asOf}`}
+function addrLines(a){const l=String(a||'').split(/\n/).map(s=>s.trim().replace(/[.,]\s*$/,'')).filter(Boolean);return l.map((x,i)=>i===0?'Address :  '+x+(l.length>1?' ,':'.'):x+(i===l.length-1?'.':''))}
+function soaHeadLines(C){return C.style==='l3h'?[C.address,`Tel: ${C.tel}   Fax: ${C.fax}`,`Co. Reg No. ${C.reg}     GST Reg No. ${C.gstReg}`,`Email : ${C.email}`]:[C.address,`Co. Reg No: ${C.reg}     GST Reg No: ${C.gstReg}`,`Mobile: ${C.mobile}    Email: ${C.email}`]}
+function soaTermsTxt(cu){return +cu.terms?cu.terms+' DAYS':'COD'}
+function soaPages(d){
+  const C=S.master.companies[d.co];const cu=d.cust||{};
+  const acc=v=>v?`<span class="c">$</span>${money(v)}`:'';
+  const lines=[];if(Math.abs(d.bf)>0.004)lines.push({date:d.from,type:'',ref:'',desc:'Balance B/F',dr:0,cr:0,bal:d.bf,bfRow:1});
+  d.rows.forEach(r=>lines.push(r));
+  const per=24;const ch=[];for(let i=0;i<Math.max(1,lines.length);i+=per)ch.push(lines.slice(i,i+per));
+  return ch.map((rows,pi)=>{const last=pi===ch.length-1;const pad=last?Math.max(0,16-rows.length):0;
+    return `<div class="page p soa">
+    <div class="soa-co"><div class="n">${esc(C.payee||C.name)}</div>${soaHeadLines(C).map(l=>`<div>${esc(l)}</div>`).join('')}</div>
+    <div class="soa-t">STATEMENT OF ACCOUNT</div>
+    <div class="soa-h"><div>Debtor : ${esc(cu.name)}<br>${addrLines(cu.address).join('<br>')}</div><div>Statement Date :  ${dmy(d.asOf)}<br>Terms : ${esc(soaTermsTxt(cu))}${ch.length>1?`<br>Page ${pi+1} of ${ch.length}`:''}</div></div>
+    <table class="soa-tb"><colgroup><col style="width:13%"><col style="width:7%"><col style="width:22%"><col style="width:15%"><col style="width:15%"><col style="width:14%"><col style="width:14%"></colgroup>
+    <thead><tr><th>Date</th><th></th><th>Ref</th><th>Description</th><th>DR (Invoice)</th><th>CR (Payment)</th><th>Balance</th></tr></thead><tbody>
+    ${rows.map(r=>`<tr><td>${r.bfRow?'':dmy(r.date)}</td><td class="ty">${r.type}</td><td>${esc(r.ref)}</td><td>${esc(r.desc)}</td><td class="r">${acc(r.dr)}</td><td class="r">${acc(r.cr)}</td><td class="r"><span class="c">$</span>${r.bal<0?'('+money(-r.bal)+')':money(r.bal)}</td></tr>`).join('')}
+    ${'<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td><td></td><td></td></tr>'.repeat(pad)}
+    ${last?`<tr class="w"><td colspan="6">${esc(amountWords(d.total))}</td><td class="r"><span class="c">S$</span>${d.total<0?'('+money(-d.total)+')':money(d.total)}</td></tr>`:''}</tbody></table>
+    ${last?`<div class="soa-note">Note : Payment should be made by crossed cheque in favour of ${esc(C.payee||C.name)}<br>Bank transfer: ${esc(C.bank)}</div>
+    <table class="soa-ag"><colgroup><col style="width:20%"><col style="width:17%"><col style="width:16%"><col style="width:15%"><col style="width:14%"><col style="width:18%"></colgroup><tr><th>Current</th><th>30 days</th><th>60 days</th><th>90 days</th><th>90+</th><th></th></tr><tr>${['cur','a30','a60','a90','o90'].map(k=>`<td>${d.aging[k]?'$'+money(d.aging[k]):''}</td>`).join('')}<td></td></tr></table>
+    <div class="soa-nb">- Invoices considered correct unless disputes notified to us within SEVEN (7) days from date of invoice<br>- Interest at the rate of 1.5% per month will be charged on all overdue amounts</div>`:''}
+    </div>`});
+}
+function soaSheet(wb,d,name){
+  const C=S.master.companies[d.co];const cu=d.cust||{};
+  const ws=wb.addWorksheet(name.slice(0,31).replace(/[\\\/\?\*\[\]:]/g,' '));
+  ws.pageSetup={paperSize:9,orientation:'portrait',fitToPage:true,fitToWidth:1,fitToHeight:0,margins:{left:0.2,right:0.2,top:0.54,bottom:0.54,header:0.3,footer:0.3},printArea:'A:G'};
+  [12.9,10.6,17,16.1,15.4,13.9,14,3,12,12,12,10,12].forEach((w,i)=>ws.getColumn(i+1).width=w);
+  const F={name:'Calibri',size:11};const thin={style:'thin'};const med={style:'medium'};
+  const ACC='_-"$"* #,##0.00_-;\\-"$"* #,##0.00_-;_-"$"* "-"??_-;_-@_-';const DF='dd/mm/yyyy';
+  const toDate=iso=>new Date(Date.UTC(+iso.slice(0,4),+iso.slice(5,7)-1,+iso.slice(8,10)));
+  ws.mergeCells('A1:G1');const h=ws.getCell('A1');
+  h.value={richText:[{text:(C.payee||C.name)+'\n',font:{name:'Calibri',size:24,bold:true,italic:true}},{text:soaHeadLines(C).join('\n'),font:{name:'Calibri',size:11,bold:true,italic:true}}]};
+  h.alignment={horizontal:'center',vertical:'middle',wrapText:true};ws.getRow(1).height=C.style==='l3h'?100:81;
+  ws.mergeCells('A2:G2');const t=ws.getCell('A2');t.value='STATEMENT OF ACCOUNT';t.font={...F,size:14,bold:true};t.alignment={horizontal:'center',vertical:'middle'};ws.getRow(2).height=18.75;
+  ws.getCell('A4').value='Debtor : '+(cu.name||'');ws.getCell('A4').font=F;
+  ws.getCell('E4').value='Statement Date :  '+dmy(d.asOf);ws.getCell('E4').font=F;
+  const al=addrLines(cu.address);
+  al.forEach((l,i)=>{const r=5+i;if(i===0)ws.mergeCells(`A${r}:D${r}`);else ws.mergeCells(`A${r}:C${r}`);const x=ws.getCell(`A${r}`);x.value=l;x.font=F;x.alignment={horizontal:'left'};ws.getRow(r).height=17.25});
+  ws.mergeCells('E5:F5');ws.getCell('E5').value='Terms : '+soaTermsTxt(cu);ws.getCell('E5').font=F;
+  const H=Math.max(11,5+al.length+3);
+  ['Date','','Ref','Description','DR (Invoice)','CR (Payment)','Balance'].forEach((v,i)=>{const x=ws.getRow(H).getCell(i+1);x.value=v||null;x.font={...F,bold:true};x.alignment={horizontal:'center',vertical:'middle'};x.border={top:thin,bottom:thin,left:i===0?thin:undefined,right:i===6?thin:undefined}});
+  let r=H+1;const first=r;
+  const setRow=(vals,isBF)=>{const row=ws.getRow(r);
+    vals.forEach((v,i)=>{const x=row.getCell(i+1);if(v!==undefined&&v!==null&&v!=='')x.value=v;x.font=i===1?{...F,size:9,italic:true}:F;x.alignment={horizontal:'center',vertical:'middle'};if(i===0){x.numFmt=DF;x.border={left:thin}}if(i>=4)x.numFmt=ACC;if(i===6)x.border={right:thin}});r++};
+  if(Math.abs(d.bf)>0.004){setRow([null,null,null,'Balance B/F',null,null,d.bf])}
+  d.rows.forEach(e=>{const R=r;const prev=R>first?`G${R-1}`:null;
+    setRow([toDate(e.date),e.type,e.ref,e.desc,e.dr||null,e.cr||null,{formula:prev?`${prev}+E${R}-F${R}`:`E${R}-F${R}`,result:e.bal}])});
+  const lastRow=r-1;
+  const boxEnd=Math.max(r+1,H+22);
+  for(;r<=boxEnd;r++){ws.getRow(r).getCell(1).border={left:thin};ws.getRow(r).getCell(7).border={right:thin}}
+  for(let c=1;c<=7;c++){const x=ws.getRow(boxEnd).getCell(c);x.border={...(x.border||{}),bottom:thin}}
+  const W=boxEnd+1;ws.mergeCells(`A${W}:E${W}`);const wc=ws.getCell(`A${W}`);wc.value=amountWords(d.total);wc.font={...F,size:10};wc.alignment={horizontal:'left',vertical:'middle'};
+  ws.getCell(`F${W}`).value='S$';ws.getCell(`F${W}`).alignment={horizontal:'right'};ws.getCell(`F${W}`).font=F;
+  const gt=ws.getCell(`G${W}`);gt.value=lastRow>=first?{formula:`G${lastRow}`,result:d.total}:d.total;gt.numFmt=ACC;gt.font={...F,bold:true};
+  for(let c=1;c<=7;c++)ws.getRow(W).getCell(c).border={top:thin,bottom:med};ws.getRow(W).height=15.75;
+  const N=W+1;ws.mergeCells(`A${N}:G${N}`);const nc=ws.getCell(`A${N}`);nc.value=`Note : Payment should be made by crossed cheque in favour of ${C.payee||C.name}\nBank transfer: ${C.bank}`;nc.font=F;nc.alignment={horizontal:'center',vertical:'top',wrapText:true};ws.getRow(N).height=31.5;
+  const A=N+1;ws.mergeCells(`A${A}:B${A}`);ws.mergeCells(`A${A+1}:B${A+1}`);
+  [['A','Current','cur'],['C','30 days','a30'],['D','60 days','a60'],['E','90 days','a90'],['F','90+','o90']].forEach(([col,lab,k])=>{
+    const x=ws.getCell(col+A);x.value=lab;x.font=F;x.alignment={horizontal:'center',vertical:'middle'};x.border={top:thin,bottom:thin};
+    const y=ws.getCell(col+(A+1));y.value=d.aging[k]||null;y.numFmt='"$"#,##0.00';y.font={...F,color:{argb:k==='cur'?'FF000000':'FFB42318'}};y.alignment={horizontal:'center',vertical:'middle'};y.border={bottom:thin}});
+  ws.getRow(A+1).height=27.75;
+  const nb=A+3;ws.mergeCells(`A${nb}:D${nb}`);ws.mergeCells(`A${nb+1}:C${nb+1}`);
+  ws.getCell(`A${nb}`).value='- Invoices considered correct unless disputes notified to us within SEVEN (7) days from date of invoice';ws.getCell(`A${nb+1}`).value='- Interest at the rate of 1.5% per month will be charged on all overdue amounts';
+  [nb,nb+1].forEach(x=>{ws.getCell(`A${x}`).font={...F,size:7};ws.getCell(`A${x}`).alignment={horizontal:'left',vertical:'middle'}});
+  /* working columns (outside print area), like your sheet */
+  const [y,m,dd]=d.asOf.split('-').map(Number);
+  ['Invoice No','Invoice Date','Due Date','Days Past Due','Aging','Outstanding'].forEach((v,i)=>{const x=ws.getRow(H).getCell(9+i);x.value=v;x.font={...F,bold:true};x.alignment={horizontal:'center'};x.fill={type:'pattern',pattern:'solid',fgColor:{argb:'FFD9D9D9'}}});
+  d.outs.forEach((o,i)=>{const R=H+1+i,row=ws.getRow(R);
+    row.getCell(9).value=o.v.no;row.getCell(10).value=toDate(o.v.date);row.getCell(10).numFmt=DF;row.getCell(11).value=toDate(o.due);row.getCell(11).numFmt=DF;
+    row.getCell(12).value={formula:`DATE(${y},${m},${dd})-K${R}`,result:o.dpd};
+    row.getCell(13).value={formula:`IF(L${R}<=0,"Current",IF(L${R}<=30,"30 days",IF(L${R}<=60,"60 days",IF(L${R}<=90,"90 days","90+"))))`,result:{cur:'Current',a30:'30 days',a60:'60 days',a90:'90 days',o90:'90+'}[o.bucket]};
+    row.getCell(14).value=o.bal;row.getCell(14).numFmt='#,##0.00';
+    if(o.dpd>0)for(let c=9;c<=14;c++)row.getCell(c).font={...F,color:{argb:'FFB42318'}}});
+  if(d.outs.length){const R=H+1+d.outs.length;const x=ws.getRow(R).getCell(14);x.value={formula:`SUM(N${H+1}:N${R-1})`,result:r2(d.outs.reduce((s,o)=>s+o.bal,0))};x.numFmt='#,##0.00';x.font={...F,bold:true}}
+  return ws;
+}
+async function soaXLSX(list,btn,fname){
+  const old=btn?btn.textContent:'';if(btn){btn.disabled=true;btn.textContent='生成中…'}
+  try{
+    if(!await ensureLib(()=>window.ExcelJS,['https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js','https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js']))throw new Error('Excel 工具载入不到');
+    const wb=new ExcelJS.Workbook();const used=new Set();
+    list.forEach(d=>{let n=(d.cust?.name||'SOA').replace(/\s*(PTE\.?\s*LTD\.?|Pte\.?\s*Ltd\.?|P\/L)\s*$/i,'').trim().toUpperCase().slice(0,28)||'SOA';let k=n,i=2;while(used.has(k))k=n.slice(0,26)+' '+i++;used.add(k);soaSheet(wb,d,k)});
+    const buf=await wb.xlsx.writeBuffer();
+    await saveBlob(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),fname+'.xlsx','Excel');
+  }catch(e){console.error(e);toast('Excel 生成失败，再试一次')}
+  finally{if(btn){btn.disabled=false;btn.textContent=old}}
+}
+
+
+/* ================= import old invoices / payments ================= */
+const normName=n=>String(n||'').toLowerCase().replace(/\b(pte|ltd|private|limited|p\/l|co)\b/g,'').replace(/[^a-z0-9]/g,'');
+function findCustByName(name){const k=normName(name);if(!k)return null;const cs=coCustomers();return cs.find(c=>normName(c.name)===k)||cs.find(c=>normName(c.name).startsWith(k)||k.startsWith(normName(c.name)))||null}
+function cellText(v){if(v==null)return'';if(v instanceof Date)return v;if(typeof v==='object'){if(v.richText)return v.richText.map(x=>x.text).join('');if('result' in v)return v.result;if(v.text)return v.text}return v}
+function toISO(v){if(v instanceof Date)return v.getUTCFullYear()+'-'+pad(v.getUTCMonth()+1)+'-'+pad(v.getUTCDate());if(typeof v==='number'){const d=new Date(Math.round((v-25569)*864e5));return toISO(d)}return parseDate(String(v||'').trim())}
+function parseSOASheet(ws){
+  const g=(r,c)=>cellText(ws.getRow(r).getCell(c).value);
+  let debtor='',terms=0,addr=[],H=0;
+  for(let r=1;r<=15;r++){const a=String(g(r,1)||'');if(/^Debtor/i.test(a))debtor=a.replace(/^Debtor\s*:\s*/i,'').trim();
+    const e=String(g(r,5)||'');if(/^Terms/i.test(e)){const m=e.match(/(\d+)/);terms=m?+m[1]:0}
+    if(/^Address/i.test(a))addr.push(a.replace(/^Address\s*:\s*/i,''));else if(addr.length&&a&&!H&&!/^Debtor/i.test(a))addr.push(a);
+    if(String(g(r,3)).trim()==='Ref'&&/DR/i.test(String(g(r,5)))){H=r;break}}
+  const rows=[];
+  if(H)for(let r=H+1;r<=ws.rowCount;r++){const a=g(r,1);if(typeof a==='string'&&/^(SINGAPORE|Note)/i.test(a))break;
+    const t=String(g(r,2)||'').trim().toUpperCase();if(t!=='IN'&&t!=='OR')continue;
+    const date=toISO(a);const ref=String(g(r,3)||'').trim();const desc=String(g(r,4)||'').trim();const dr=+g(r,5)||0,cr=+g(r,6)||0;
+    rows.push({date,type:t,ref,desc,dr:r2(dr),cr:r2(cr)})}
+  return{sheet:ws.name,debtor,terms,address:addr.map(x=>x.trim().replace(/[.,]\s*$/,'')).filter(Boolean).join('\n'),rows};
+}
+let IMP=null;
+function bindImport(){
+  const f=$('#im-file');if(f)f.addEventListener('change',async()=>{const file=f.files[0];if(!file)return;$('#im-out').innerHTML='<p class="hint">读取中…</p>';
+    try{if(!await ensureLib(()=>window.ExcelJS,['https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js','https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js']))throw new Error('Excel 工具载入不到');
+      const wb=new ExcelJS.Workbook();await wb.xlsx.load(await file.arrayBuffer());
+      IMP=wb.worksheets.map(parseSOASheet).filter(x=>x.debtor&&x.rows.length).map(x=>{const c=findCustByName(x.debtor);const inv=x.rows.filter(r=>r.type==='IN');const dup=inv.filter(r=>S.invoices.some(v=>v.no===r.ref&&v.status!=='void')).length;
+        const bad=x.rows.filter(r=>!r.date).length;return{...x,cust:c,dupN:dup,badN:bad,on:true,bal:r2(x.rows.reduce((s,r)=>s+r.dr-r.cr,0))}});
+      drawImp()}catch(e){console.error(e);$('#im-out').innerHTML='<div class="msg bad">读不到这个 Excel</div>'}});
+  const c=$('#im-check');if(c)c.addEventListener('click',checkPaste);
+}
+function drawImp(){
+  if(!IMP||!IMP.length){$('#im-out').innerHTML='<div class="msg warn">找不到 SOA 格式的 sheet（要有 Debtor 和 Ref / DR 表头）</div>';return}
+  $('#im-out').innerHTML=`<div class="tablewrap" style="margin-top:10px"><table><thead><tr><th></th><th>Sheet</th><th>客户</th><th class="num">发票</th><th class="num">收款</th><th class="num">余额</th><th>注意</th></tr></thead><tbody>${IMP.map((x,i)=>`<tr><td><input type="checkbox" data-imp="${i}" ${x.on?'checked':''} style="width:18px;min-height:18px"></td><td>${esc(x.sheet)}</td><td>${esc(x.debtor)}<br><span style="font-size:12px;color:${x.cust?'var(--ok)':'var(--warn)'}">${x.cust?'对上：'+esc(x.cust.name):'新客户（会自动加，价钱之后再填）'}</span></td><td class="num">${x.rows.filter(r=>r.type==='IN').length}</td><td class="num">${x.rows.filter(r=>r.type==='OR').length}</td><td class="num">${money(x.bal)}</td><td style="white-space:normal;font-size:13px">${x.dupN?`<span style="color:var(--warn)">${x.dupN} 张已经在系统，会跳过</span><br>`:''}${x.badN?`<span style="color:var(--bad)">${x.badN} 行没有日期，会跳过</span>`:''}</td></tr>`).join('')}</tbody></table></div>
+  <p class="hint">收款会按日期「最旧的发票先付」自动分配。导入后可以在「收款记录」看到、也可以删除。</p>
+  <div class="row"><button class="btn primary" id="im-go">导入勾选的 ${IMP.filter(x=>x.on).length} 个客户</button></div>`;
+  $('#im-out').querySelectorAll('[data-imp]').forEach(x=>x.addEventListener('change',()=>{IMP[+x.dataset.imp].on=x.checked;drawImp()}));
+  $('#im-go').addEventListener('click',async e=>{const b=e.currentTarget;b.disabled=true;b.textContent='导入中…';let ni=0,np=0;
+    for(const x of IMP.filter(y=>y.on)){const r=await importCustomer(x.debtor,x.address,x.terms,x.cust,x.rows);ni+=r.ni;np+=r.np}
+    IMP=null;toast(`已导入 ${ni} 张发票、${np} 笔收款`);renderAll()});
+}
+async function ensureCustomer(name,address,terms,cust){
+  if(cust)return cust;
+  const c={id:uid('c'),company:S.co,name,address:address||'',tel:'',fax:'',pic:'',email:'',terms:+terms||0,projects:'',showDiesel:true,refLabel:'',notes:'从 SOA 导入，价钱还没填',quote:null,rates:[]};
+  S.master.customers.push(c);await store.saveMaster();return c;
+}
+async function importCustomer(name,address,terms,cust,rows){
+  const c=await ensureCustomer(name,address,terms,cust);let ni=0,np=0;const newPays=[];
+  for(const r of rows){if(!r.date)continue;
+    if(r.dr&&!S.invoices.some(v=>v.no===r.ref&&v.status!=='void')){
+      const base=(r.ref||'OLD').replace(/[^A-Za-z0-9\-_.]/g,'-');let id=base,n=2;while(S.invoices.some(v=>v.id===id))id=base+'-R'+n++;
+      await store.save('invoices',{id,kind:'legacy',company:S.co,no:r.ref||'(no ref)',date:r.date,from:r.date,to:r.date,customerId:c.id,custName:c.name,cust:{name:c.name,address:c.address},terms:+c.terms||0,total:r.dr,subtotal:r.dr,gst:0,gstRate:9,groups:[],note:r.desc,status:'unpaid',createdAt:Date.now()});ni++}
+    if(r.cr){if(S.payments.some(p=>p.customerId===c.id&&p.date===r.date&&Math.abs(p.amount-r.cr)<0.005&&(p.ref===(r.type==='OR'?r.ref:'FUND TRANSFER'))))continue;
+      const p={id:uid('p'),company:S.co,customerId:c.id,date:r.date,amount:r.cr,ref:(r.type==='OR'?r.ref:'')||'FUND TRANSFER',alloc:[],createdAt:Date.now()};await store.save('payments',p);newPays.push(p);np++}
+  }
+  await fifoAllocate(c.id,newPays);return{ni,np};
+}
+async function fifoAllocate(custId,pays){
+  const invs=S.invoices.filter(v=>v.customerId===custId&&v.status!=='void').sort((a,b)=>(a.date+a.no).localeCompare(b.date+b.no));
+  const touched=[];
+  for(const p of pays.sort((a,b)=>a.date.localeCompare(b.date))){let left=r2(p.amount-(p.alloc||[]).reduce((s,x)=>s+x.amt,0));const alloc=[...(p.alloc||[])];
+    for(const v of invs){if(left<=0.004)break;const b=invBal(v);if(b<=0.004)continue;const a=r2(Math.min(b,left));alloc.push({inv:v.id,amt:a});left=r2(left-a);touched.push(v.id);
+      p.alloc=alloc;upsert(S.payments,p)}
+    await store.save('payments',{...p,alloc})}
+  await syncInvoices(touched);
+}
+let PASTE=null;
+function checkPaste(){
+  const lines=$('#im-text').value.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  PASTE=lines.map(l=>{const p=l.includes('\t')?l.split('\t'):l.split(/\s{2,}|,/);const [no,dt,cs,tot,paid,pdate,ref]=p.map(x=>(x||'').trim());
+    const date=parseDate(dt),total=num(String(tot).replace(/[$,\s]/g,'')),pd=num(String(paid||'').replace(/[$,\s]/g,''));const c=findCustByName(cs);
+    const errs=[];if(!no)errs.push('号码');if(!date)errs.push('日期');if(!cs)errs.push('客户');if(!total)errs.push('总额');
+    const dup=S.invoices.some(v=>v.no===no&&v.status!=='void');
+    return{no,date,cs,c,total,paid:pd||0,pdate:parseDate(pdate)||date,ref:ref||'FUND TRANSFER',errs,dup,ok:!errs.length&&!dup}});
+  const good=PASTE.filter(x=>x.ok).length;
+  $('#im-out2').innerHTML=`<div class="tablewrap" style="margin-top:8px"><table><thead><tr><th>号码</th><th>日期</th><th>客户</th><th class="num">总额</th><th class="num">已收</th><th>检查</th></tr></thead><tbody>${PASTE.map(x=>`<tr><td>${esc(x.no)}</td><td>${dmy(x.date)}</td><td>${esc(x.c?x.c.name:x.cs)}${x.c?'':' <span style="color:var(--warn);font-size:12px">新客户</span>'}</td><td class="num">${x.total?money(x.total):''}</td><td class="num">${x.paid?money(x.paid):''}</td><td>${x.errs.length?`<span style="color:var(--bad)">看不懂：${x.errs.join('、')}</span>`:x.dup?'<span style="color:var(--warn)">已经有，跳过</span>':'<span style="color:var(--ok)">OK</span>'}</td></tr>`).join('')}</tbody></table></div>
+  ${good?`<div class="row" style="margin-top:8px"><button class="btn primary" id="im-go2">导入 ${good} 张</button></div>`:''}`;
+  if($('#im-go2'))$('#im-go2').addEventListener('click',async e=>{e.currentTarget.disabled=true;const byC={};
+    for(const x of PASTE.filter(y=>y.ok)){const k=x.c?x.c.id:'new:'+x.cs.toLowerCase();(byC[k]=byC[k]||{name:x.c?x.c.name:x.cs,cust:x.c,rows:[]}).rows.push({type:'IN',date:x.date,ref:x.no,desc:'Invoice',dr:x.total,cr:0});if(x.paid)byC[k].rows.push({type:'OR',date:x.pdate,ref:x.ref,desc:'RECEIVED',dr:0,cr:x.paid})}
+    let ni=0,np=0;for(const g of Object.values(byC)){const r=await importCustomer(g.name,'',0,g.cust,g.rows);ni+=r.ni;np+=r.np}
+    PASTE=null;$('#im-text').value='';toast(`已导入 ${ni} 张发票、${np} 笔收款`);renderAll()});
+}
+
+/* ================= AR ================= */
+function renderAR(){
+  const a=S.ar;const t=todayISO();const live=coInv().filter(v=>v.status!=='void');
+  const info=v=>{const due=addDays(v.date,+v.terms||0);const bal=invBal(v);const od=bal>0.004?Math.max(0,daysBetween(due,t)):0;return{due,od,bal}};
+  const open=live.filter(v=>invBal(v)>0.004);const sum=l=>r2(l.reduce((s,v)=>s+invBal(v),0));const overdue=open.filter(v=>info(v).od>0);
+  const custIds=[...new Set(open.map(v=>v.customerId).concat(coPays().filter(p=>payUnalloc(p)>0.004).map(p=>p.customerId)))];
+  const byC=custIds.map(k=>{const o=open.filter(v=>v.customerId===k);return{k,n:o.length,amt:sum(o),od:sum(o.filter(v=>info(v).od>0)),cr:custCredit(k)}}).sort((x,y)=>y.amt-x.amt);
+  const totalCredit=r2(byC.reduce((s,x)=>s+x.cr,0));
+  const list=live.filter(v=>(a.status==='all'||(a.status==='open'?invBal(v)>0.004:invBal(v)<=0.004))&&(!a.cust||v.customerId===a.cust)).sort((x,y)=>x.date.localeCompare(y.date));
+  const pays=coPays().filter(p=>!a.cust||p.customerId===a.cust).sort((x,y)=>y.date.localeCompare(x.date));
+  const soaCusts=coCustomers().filter(c=>S.invoices.some(v=>v.customerId===c.id&&v.status!=='void'));
+  $('#t-ar').innerHTML=`<h2>应收款 Outstanding · ${S.co}</h2>
+  <div class="stats"><div class="stat"><div class="k">未收总额</div><div class="v">$${money(sum(open))}</div><div class="k">${open.length} 张</div></div>
+    <div class="stat"><div class="k">已逾期</div><div class="v" style="color:${overdue.length?'var(--bad)':'inherit'}">$${money(sum(overdue))}</div><div class="k">${overdue.length} 张</div></div>
+    <div class="stat"><div class="k">客户余款（Overpayment）</div><div class="v" style="color:${totalCredit?'var(--warn)':'inherit'}">$${money(totalCredit)}</div><div class="k">还没分配到发票的钱</div></div></div>
+  ${byC.length?`<div class="tablewrap" style="margin-bottom:14px"><table><thead><tr><th>客户</th><th class="num">张数</th><th class="num">未收</th><th class="num">逾期</th><th class="num">余款</th><th></th></tr></thead><tbody>${byC.map(o=>`<tr><td>${esc(custById(o.k)?.name||'?')}</td><td class="num">${o.n}</td><td class="num">${money(o.amt)}</td><td class="num" style="color:${o.od?'var(--bad)':'inherit'}">${o.od?money(o.od):'—'}</td><td class="num" style="color:${o.cr?'var(--warn)':'inherit'}">${o.cr?money(o.cr):'—'}</td><td style="display:flex;gap:6px"><button class="btn small" data-rcv="${o.k}">记录收款 / Contra</button><button class="btn small" data-soa="${o.k}">SOA</button></td></tr>`).join('')}</tbody></table></div>`:''}
+  <h3>SOA（Statement of Account）</h3>
+  <div class="panel"><div class="row"><select id="s-cust" style="width:auto">${custOptions(S.soa.cust,'选客户')}</select>
+    <label class="f" style="flex-direction:row;align-items:center;gap:6px">Statement Date<input type="date" id="s-date" value="${esc(S.soa.date)}" style="width:auto"></label>
+    <label class="f" style="flex-direction:row;align-items:center;gap:6px">从<input type="date" id="s-from" value="${esc(S.soa.from||'')}" style="width:auto"></label>
+    <button class="btn primary" id="s-pdf" ${S.soa.cust?'':'disabled'}>SOA PDF</button><button class="btn" id="s-xlsx" ${S.soa.cust?'':'disabled'}>SOA Excel</button>
+    <button class="btn" id="s-all" ${soaCusts.length?'':'disabled'}>全部客户 SOA（一个 Excel，每个客户一张 sheet）</button></div>
+    <p class="hint" style="margin-top:8px">「从」空白 = 从最旧一张还没收齐的发票开始，之前的余额会变成 Balance B/F。</p>
+    ${S.soa.cust?`<div class="sheets" id="s-prev"></div>`:''}</div>
+  <details class="paste"><summary>导入以前的发票 / 收款（放进 SOA 和应收款）</summary>
+    <div class="panel"><p class="hint" style="margin-top:0"><b>方法 1：</b>上传你现在的 SOA Excel（例 ETK_SOA_FOR_31-07-26.xlsx），每张 sheet 一个客户，系统会读 IN / OR 每一行。导入到现在选的公司（${S.co}）。</p>
+    <input type="file" id="im-file" accept=".xlsx"><div id="im-out"></div>
+    <p class="hint"><b>方法 2：</b>从 Excel 复制贴上，每行一张：发票号码 · 日期 · 客户 · 总额（含 GST）· 已收金额（可空）· 收款日期 · Ref</p>
+    <textarea id="im-text" placeholder="ETK/INV/2608/05	07/08/2026	KKB	1673.15	1673.15	20/08/2026	FUND TRANSFER"></textarea>
+    <div class="row" style="margin-top:8px"><button class="btn" id="im-check">先检查</button></div><div id="im-out2"></div></div>
+  </details>
+  <h3>发票 Payment Status</h3>
+  <div class="row" style="margin-bottom:10px"><select id="a-status" style="width:auto">${[['open','未收 / 部分收'],['paid','已收齐'],['all','全部']].map(([k,l])=>`<option value="${k}" ${a.status===k?'selected':''}>${l}</option>`).join('')}</select><select id="a-cust" style="width:auto">${custOptions(a.cust,'全部客户')}</select><button class="btn" id="a-csv">导出 CSV</button></div>
+  ${list.length?`<div class="tablewrap"><table><thead><tr><th>号码</th><th>客户</th><th>发票日期</th><th>到期</th><th class="num">总额</th><th class="num">已付</th><th class="num">未收</th><th>Payment Status</th><th>哪笔钱付的</th><th></th></tr></thead><tbody>${list.map(v=>{const{due,bal}=info(v);const ps=payStatus(v);const ip=invPays(v);const legacy=v.status==='paid'&&!hasAlloc(v.id);
+    return`<tr><td>${esc(v.no)}</td><td>${esc(v.custName)}</td><td>${dmy(v.date)}</td><td>${dmy(due)}</td><td class="num">${money(v.total)}</td><td class="num">${money(r2(v.total-bal))}</td><td class="num">${bal>0.004?money(bal):'—'}</td><td><span class="chip ${ps.k}">${esc(ps.t)}</span></td>
+    <td style="white-space:normal;font-size:13px">${ip.map(x=>`<a href="#" data-editpay="${x.p.id}">${dmy(x.p.date)} ${esc(x.p.ref||payMethod(x.p))}${payMethod(x.p)==='CONTRA'&&!/CONTRA/i.test(x.p.ref||'')?' (CONTRA)':''} $${money(x.amt)}</a>`).join('<br>')||(legacy?`${dmy(v.paidDate)} ${esc(v.paidRef||'')}`:'')}</td>
+    <td>${bal>0.004?`<button class="btn small" data-payinv="${v.id}">收款</button>`:legacy?`<button class="btn small" data-unpay="${v.id}">改回未收</button>`:''}</td></tr>`}).join('')}</tbody></table></div>`:`<p class="hint">${live.length?'没有符合的发票。':'开了发票之后，会自动出现在这里。'}</p>`}
+  <h3>收款记录（含 Contra / Overpayment）</h3>
+  ${pays.length?`<div class="tablewrap"><table><thead><tr><th>日期</th><th>客户</th><th>方式</th><th>Ref</th><th class="num">金额</th><th>付了哪些发票</th><th class="num">余款</th><th></th></tr></thead><tbody>${pays.map(p=>{const un=payUnalloc(p);return`<tr><td>${dmy(p.date)}</td><td>${esc(custById(p.customerId)?.name||'?')}</td><td>${esc(payMethod(p))}</td><td>${esc(p.ref)}</td><td class="num">${money(p.amount)}</td><td style="white-space:normal">${(p.alloc||[]).map(x=>`${esc(S.invoices.find(v=>v.id===x.inv)?.no||x.inv)} ($${money(x.amt)})`).join(', ')||'—'}</td><td class="num" style="color:${un>0.004?'var(--warn)':'inherit'}">${un>0.004?money(un):'—'}</td><td style="display:flex;gap:6px">${un>0.004?`<button class="btn small" data-editpay="${p.id}">分配余款</button>`:`<button class="btn small" data-editpay="${p.id}">修改</button>`}</td></tr>`}).join('')}</tbody></table></div>`:'<p class="hint">还没有收款记录。按「记录收款 / Contra」或发票旁边的「收款」。</p>'}`;
+  $('#a-status').addEventListener('change',e=>{a.status=e.target.value;renderAR()});
+  $('#a-cust').addEventListener('change',e=>{a.cust=e.target.value;renderAR()});
+  $('#s-cust').addEventListener('change',e=>{S.soa.cust=e.target.value;renderAR()});
+  $('#s-date').addEventListener('change',e=>{S.soa.date=e.target.value;renderAR()});
+  $('#s-from').addEventListener('change',e=>{S.soa.from=e.target.value;renderAR()});
+  $('#t-ar').querySelectorAll('[data-soa]').forEach(b=>b.addEventListener('click',()=>{S.soa.cust=b.dataset.soa;renderAR();$('#s-cust').scrollIntoView({behavior:'smooth',block:'center'})}));
+  $('#t-ar').querySelectorAll('[data-rcv]').forEach(b=>b.addEventListener('click',()=>openPayment(b.dataset.rcv,[])));
+  $('#t-ar').querySelectorAll('[data-payinv]').forEach(b=>b.addEventListener('click',()=>{const v=S.invoices.find(x=>x.id===b.dataset.payinv);openPayment(v.customerId,[v.id])}));
+  $('#t-ar').querySelectorAll('[data-editpay]').forEach(b=>b.addEventListener('click',e=>{e.preventDefault();const p=S.payments.find(x=>x.id===b.dataset.editpay);if(p)openPayment(p.customerId,[],p)}));
+  $('#t-ar').querySelectorAll('[data-unpay]').forEach(b=>b.addEventListener('click',async()=>{const v=S.invoices.find(x=>x.id===b.dataset.unpay);await store.save('invoices',{...v,status:'unpaid',paidDate:null,paidRef:''});renderAR()}));
+  if(S.soa.cust){const d=soaData(S.soa.cust,S.soa.date,S.soa.from);const h=$('#s-prev');h.innerHTML=soaPages(d).map(p=>`<div class="sheet-wrap">${p}</div>`).join('');requestAnimationFrame(()=>fitSheets(h));
+    $('#s-pdf').addEventListener('click',e=>pdfFromPages(soaPages(d),soaName(d)+'.pdf',e.currentTarget));
+    $('#s-xlsx').addEventListener('click',e=>soaXLSX([d],e.currentTarget,soaName(d)))}
+  $('#s-all').addEventListener('click',e=>{const ds=soaCusts.map(c=>soaData(c.id,S.soa.date,'')).filter(d=>d.rows.length||Math.abs(d.bf)>0.004);if(!ds.length){toast('没有资料');return}soaXLSX(ds,e.currentTarget,`${S.co}_SOA_FOR_${dmy(S.soa.date).replace(/\//g,'-')}`)});
+  bindImport();
+  $('#a-csv').addEventListener('click',()=>{
+    const rows=[['Invoice No','Customer','Invoice Date','Due Date','Subtotal','GST','Total','Paid','Outstanding','Payment Status','Payments']].concat(live.map(v=>{const{due,bal}=info(v);return[v.no,v.custName,dmy(v.date),dmy(due),v.subtotal,v.gst,v.total,r2(v.total-bal),bal,payStatus(v).t,invPays(v).map(x=>`${dmy(x.p.date)} ${x.p.ref} ${x.amt}`).join(' | ')]}));
+    const csv=rows.map(r=>r.map(x=>{x=String(x??'');return /[",\n]/.test(x)?'"'+x.replace(/"/g,'""')+'"':x}).join(',')).join('\n');
+    saveBlob(new Blob(['\ufeff'+csv],{type:'text/csv'}),S.co+'-Outstanding-'+t+'.csv','CSV');
+  });
+}
+
+
+/* ================= MASTER ================= */
+function rateText(r){
+  const m=v=>v==null||v===''?'未设':'$'+money(v);const s=svcOf(S.co,r.service);const veh=r.vehicle?` [${r.vehicle}]`:'';
+  if(r.mode==='unit')return `${esc(s.label)}${veh}：${m(r.unitRate)} / ${esc(r.uom)}${r.label?' · '+esc(r.label):''}`;
+  if(r.mode==='hourly')return `${esc(s.label)}${veh}：按小时 白天 ${m(r.dayRate)} · 晚上 ${m(r.nightRate)}${+r.minHr?' · 最少 '+r.minHr+' 小时':''}${r.deductBreak?' · 扣休息':''}${+r.diesel?' · 柴油 $'+money(r.diesel):''}`;
+  return `${esc(s.label)}${veh}：白天 ${m(r.dayRate)}（OT ${m(r.otDay)}）· 晚上 ${m(r.nightRate)}（OT ${m(r.otNight)}）${+r.diesel?' · 柴油 $'+money(r.diesel):''}`;
+}
+function renderMaster(){
+  const M=S.master;const C=M.companies[S.co];
+  $('#t-master').innerHTML=`<h2>客户 / 价目 · ${S.co}</h2>
+  <div class="row" style="margin-bottom:10px"><button class="btn primary" id="m-add">加客户</button></div>
+  ${coCustomers().length?coCustomers().map(c=>`<div class="cust"><div class="row" style="justify-content:space-between"><div class="name">${esc(c.name)}</div><button class="btn small" data-edit="${c.id}">修改</button></div>
+    ${c.rates.map(r=>`<div class="rates">${rateText(r)}</div>`).join('')||'<div class="rates" style="color:var(--bad)">还没有价钱</div>'}
+    <div class="rates">${+c.terms?c.terms+' days':'C.O.D'}${c.pic?' · '+esc(c.pic):''}${c.tel?' · '+esc(c.tel):''}${c.email?' · '+esc(c.email):''}${c.projects?' · 项目 '+esc(c.projects):''}</div>
+    ${c.quote?`<div class="rates">报价单：<a href="/_blob/${esc(c.quote.id)}" target="_blank" rel="noopener">${esc(c.quote.name)}</a></div>`:''}</div>`).join(''):`<p class="hint">${S.co} 还没有客户。</p>`}
+  <h3>${S.co} 的车</h3>
+  <div class="vchips">${M.vehicles.map((v,i)=>v.company===S.co?`<span class="vchip">${esc(v.no)}<button aria-label="删除 ${esc(v.no)}" data-vdel="${i}">×</button></span>`:'').join('')}</div>
+  <div class="row" style="margin-top:8px"><input id="v-new" placeholder="车牌" style="width:160px"><button class="btn" id="v-add">加车</button></div>
+  ${S.co==='L3H'?`<h3>挖机价目表</h3><div class="tablewrap"><table><thead><tr><th>Machine Code</th><th class="num">Daily</th><th class="num">Weekly</th><th class="num">Monthly</th><th></th></tr></thead><tbody>${M.machines.map((m,i)=>`<tr><td>${esc(m.code)}${m.model?' <span style="color:var(--muted)">'+esc(m.model)+'</span>':''}</td><td class="num">${m.daily!=null&&m.daily!==''?money(m.daily):'—'}</td><td class="num">${m.weekly!=null&&m.weekly!==''?money(m.weekly):'—'}</td><td class="num">${money(m.monthly)}</td><td><button class="btn small" data-mdel="${i}">删除</button></td></tr>`).join('')}</tbody></table></div>
+    <div class="row" style="margin-top:8px"><input id="mc-code" placeholder="例 E058 w breaker" style="width:170px"><input id="mc-d" placeholder="Daily" inputmode="decimal" style="width:90px"><input id="mc-w" placeholder="Weekly" inputmode="decimal" style="width:90px"><input id="mc-m" placeholder="Monthly" inputmode="decimal" style="width:100px"><button class="btn" id="mc-add">加机器</button></div>`:''}
+  <h3>${S.co} 公司资料（印在发票上）</h3>
+  <div class="panel"><div class="grid">
+    ${[['name','公司名'],['payee','支票抬头'],['address','地址'],['reg','Co. Reg No'],['gstReg','GST Reg No'],['tel','Tel'],['fax','Fax'],['mobile','Mobile'],['email','Email'],['bank','银行转账'],['prefix','发票号码开头']].map(([k,l])=>`<label class="f ${k==='address'?'wide':''}">${l}<input data-co="${k}" value="${esc(C[k]||'')}"></label>`).join('')}
+    <label class="f wide">上一张发票号码（系统会接着跳号，例 ${esc(C.prefix||'')}${todayISO().slice(2,4)}${todayISO().slice(5,7)}/24）<input id="co-last" placeholder="${esc(nextInvNo(todayISO()).replace(/\d+$/,''))}24"></label>
+  </div><div class="row" style="margin-top:10px"><button class="btn primary" id="co-save">保存公司资料</button></div>
+  <p class="hint">下一张会是：<b>${esc(nextInvNo(todayISO()))}</b></p></div>
+  <h3>备份 / 还原</h3>
+  <div class="panel"><p class="hint" style="margin-top:0">所有资料（客户、DO、发票、收款、挖机）会自动存起来，刷新不会不见。换电脑、换浏览器、或搬去你自己的网页之前，先下载备份，再在新的地方按「还原」。</p>
+  <div class="row"><button class="btn" id="bk-down">下载备份（.json）</button><label class="btn" style="display:inline-flex;align-items:center;gap:6px">还原备份<input type="file" id="bk-up" accept=".json,application/json" style="display:none"></label></div></div>
+  <h3>设定（两间公司共用）</h3>
+  <div class="panel"><div class="grid">
+    <label class="f">晚班从<input data-set="nightFrom" value="${esc(M.settings.nightFrom)}"></label><label class="f">晚班到<input data-set="nightTo" value="${esc(M.settings.nightTo)}"></label>
+    <label class="f">GST %<input data-set="gstRate" inputmode="decimal" value="${esc(M.settings.gstRate)}"></label><label class="f">几天没开单要提醒<input data-set="staleDays" inputmode="numeric" value="${esc(M.settings.staleDays)}"></label>
+  </div><div class="row" style="margin-top:10px"><button class="btn" id="set-save">保存设定</button></div></div>
+  ${M.voidDOs.some(v=>v.company===S.co)?`<h3>作废的 DO 号</h3><div class="vchips">${M.voidDOs.map((v,i)=>v.company===S.co?`<span class="vchip" title="${esc(v.reason)}">${esc(v.no)}<button aria-label="取消作废" data-vvoid="${i}">×</button></span>`:'').join('')}</div>`:''}`;
+  $('#m-add').addEventListener('click',()=>editCustomer(null));
+  $('#t-master').querySelectorAll('[data-edit]').forEach(b=>b.addEventListener('click',()=>editCustomer(b.dataset.edit)));
+  $('#t-master').querySelectorAll('[data-vdel]').forEach(b=>b.addEventListener('click',async()=>{M.vehicles.splice(+b.dataset.vdel,1);await store.saveMaster();renderMaster()}));
+  $('#t-master').querySelectorAll('[data-vvoid]').forEach(b=>b.addEventListener('click',async()=>{M.voidDOs.splice(+b.dataset.vvoid,1);await store.saveMaster();renderMaster();updateBadge()}));
+  $('#t-master').querySelectorAll('[data-mdel]').forEach(b=>b.addEventListener('click',async()=>{const m=M.machines[+b.dataset.mdel];if(!await askConfirm('删除 '+m.code+'？'))return;M.machines.splice(+b.dataset.mdel,1);await store.saveMaster();renderMaster()}));
+  if($('#mc-add'))$('#mc-add').addEventListener('click',async()=>{const code=$('#mc-code').value.trim();if(!code)return;if(M.machines.some(m=>m.code===code)){toast('已经有这台机器');return}M.machines.push({code,daily:num($('#mc-d').value),weekly:num($('#mc-w').value),monthly:num($('#mc-m').value)});await store.saveMaster();renderMaster()});
+  $('#v-add').addEventListener('click',async()=>{const no=$('#v-new').value.trim().toUpperCase().replace(/\s/g,'');if(!no)return;if(M.vehicles.some(v=>v.no===no&&v.company===S.co)){toast('已经有这台车');return}M.vehicles.push({no,company:S.co});await store.saveMaster();renderMaster()});
+  $('#co-save').addEventListener('click',async()=>{$('#t-master').querySelectorAll('[data-co]').forEach(i=>C[i.dataset.co]=i.value.trim());
+    const last=$('#co-last').value.trim();if(last){const m=last.match(/(\d{4})\/(\d+)\s*$/);if(!m){toast('❌ 号码格式看不懂，例 '+(C.prefix||'')+'2609/24');return}C.lastNo={...(C.lastNo||{}),[m[1]]:+m[2]}}
+    await store.saveMaster();toast('✓ 已保存');renderMaster()});
+  $('#bk-down').addEventListener('click',()=>{const data={app:'etk-l3h-billing',version:5,exportedAt:new Date().toISOString(),master:S.master,dos:S.dos,invoices:S.invoices,rentals:S.rentals,payments:S.payments};
+    saveBlob(new Blob([JSON.stringify(data,null,1)],{type:'application/json'}),'billing-backup-'+todayISO()+'.json','备份')});
+  $('#bk-up').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;let d;try{d=JSON.parse(await f.text())}catch(x){toast('❌ 这个不是备份文件');return}
+    if(!d||!d.master||!Array.isArray(d.invoices)){toast('❌ 这个不是备份文件');return}
+    if(!await askConfirm(`还原备份（${(d.exportedAt||'').slice(0,10)}）：${d.invoices.length} 张发票、${(d.dos||[]).length} 张 DO、${(d.payments||[]).length} 笔收款。\n现在系统里的资料会被换掉，确定吗？`,'还原'))return;
+    S.master=normMaster(d.master);await store.saveMaster();
+    for(const k of ['dos','invoices','rentals','payments']){const list=(d[k]||[]);const cur=S[k].slice();for(const x of cur)if(!list.some(y=>y.id===x.id))await store.del(k,x.id);for(const x of list)await store.save(k,k==='dos'?normDoRec(x):k==='invoices'?normInv(x):x)}
+    toast('✓ 已还原');renderAll()});
+  $('#set-save').addEventListener('click',async()=>{$('#t-master').querySelectorAll('[data-set]').forEach(i=>{const k=i.dataset.set;M.settings[k]=(k==='gstRate'||k==='staleDays')?(+i.value||0):(parseTime(i.value)||M.settings[k])});await store.saveMaster();toast('已保存')});
+}
+function rateRowHTML(r,i){
+  const inp=(k,ph,w=80)=>`<input data-r="${i}" data-rk="${k}" value="${esc(r[k]??'')}" placeholder="${ph}" inputmode="decimal" style="width:${w}px;min-height:36px;padding:6px">`;
+  return `<div class="rate-row" style="border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:8px">
+    <div class="row"><select data-r="${i}" data-rk="service" style="width:auto">${SVC[S.co].map(s=>`<option value="${s.id}" ${s.id===r.service?'selected':''}>${esc(s.label)}</option>`).join('')}</select>
+      <select data-r="${i}" data-rk="vehicle" style="width:auto"><option value="">全部车</option>${coVehicles().map(v=>`<option ${v===r.vehicle?'selected':''}>${esc(v)}</option>`).join('')}</select>
+      <select data-r="${i}" data-rk="mode" style="width:auto">${Object.entries(MODES).map(([k,l])=>`<option value="${k}" ${k===r.mode?'selected':''}>${l}</option>`).join('')}</select>
+      <button class="btn small danger" data-rdel="${i}">删除</button></div>
+    <div class="row" style="margin-top:6px">${r.mode==='unit'?`单价 ${inp('unitRate','100')} / <select data-r="${i}" data-rk="uom" style="width:auto">${['load','trip','day','nos','mth'].map(u=>`<option ${u===r.uom?'selected':''}>${u}</option>`).join('')}</select> 发票描述 <input data-r="${i}" data-rk="label" value="${esc(r.label)}" placeholder="Being Disposal of Good Earth" style="width:230px;min-height:36px;padding:6px">`
+      :`白天 ${inp('dayRate','280')} ${r.mode==='daily'?'OT '+inp('otDay','35',64):''} 晚上 ${inp('nightRate','320')} ${r.mode==='daily'?'OT '+inp('otNight','40',64):''}`} 柴油 ${inp('diesel','0',56)}</div>
+    ${r.mode==='unit'?'':`<div class="row" style="margin-top:6px">最少 ${inp('minHr','8',50)} 小时 · 超过 ${inp('baseHr','8',50)} 小时${r.mode==='daily'?'算 OT':''} <label style="display:inline-flex;gap:6px;align-items:center"><input type="checkbox" data-r="${i}" data-rk="deductBreak" ${r.deductBreak?'checked':''} style="width:18px;min-height:18px">超过扣 1 小时休息</label></div>`}
+  </div>`;
+}
+function editCustomer(id){
+  const M=S.master;const c=id?clone(custById(id)):{id:uid('c'),company:S.co,name:'',address:'',tel:'',fax:'',pic:'',email:'',terms:0,projects:'',showDiesel:true,refLabel:'',notes:'',quote:null,rates:[normRate({service:SVC[S.co][0].id})]};
+  const f=(k,l,t='text',x='')=>`<label class="f ${x}">${l}<input data-k="${k}" type="${t}" value="${esc(c[k]??'')}"></label>`;
+  const draw=()=>{
+    $('#modalBox').innerHTML=`<h2>${id?'修改客户':'加客户'} · ${S.co}</h2>
+    <div class="grid">${f('name','公司名','text','wide')}<label class="f wide">地址<textarea data-k="address" style="min-height:60px">${esc(c.address)}</textarea></label>
+      ${f('pic','PIC')}${f('tel','电话')}${f('fax','Fax')}${f('email','Email','email')}
+      <label class="f">付款条件<select data-k="terms">${[[0,'C.O.D'],[7,'7 days'],[14,'14 days'],[30,'30 days'],[60,'60 days']].map(([k,l])=>`<option value="${k}" ${+c.terms===k?'selected':''}>${l}</option>`).join('')}</select></label>
+      ${f('projects','项目（逗号分开）','text','wide')}</div>
+    <h3>价钱（每项服务一行；同服务不同车价钱不同，就多加一行选车）</h3>
+    <div id="rateRows">${c.rates.map(rateRowHTML).join('')}</div>
+    <button class="btn small" id="r-add">+ 加一行价钱</button>
+    <h3>Summary 格式</h3>
+    <div class="grid"><label class="f" style="flex-direction:row;align-items:center;gap:8px;color:var(--ink)"><input type="checkbox" data-k="showDiesel" ${c.showDiesel!==false?'checked':''} style="width:20px;min-height:20px">显示 Diesel Surcharge 栏</label>
+      ${f('refLabel','额外参考栏（例 Denzai Huationg DO）','text','wide')}
+      <label class="f wide">备注<textarea data-k="notes" style="min-height:50px">${esc(c.notes)}</textarea></label>
+      ${ASSETS?`<label class="f wide">报价单 Quotation<input type="file" id="q-file" accept="application/pdf,image/*">${c.quote?`<span>现在：<a href="/_blob/${esc(c.quote.id)}" target="_blank" rel="noopener">${esc(c.quote.name)}</a></span>`:''}</label>`:''}</div>
+    <div class="row" style="margin-top:14px"><button class="btn primary" id="c-save">保存</button><button class="btn" id="c-cancel">取消</button>${id?'<button class="btn danger" id="c-del">删除客户</button>':''}</div>`;
+    const readAll=()=>{
+      $('#modalBox').querySelectorAll('[data-k]').forEach(i=>{const k=i.dataset.k;if(i.type==='checkbox')c[k]=i.checked;else if(k==='terms')c[k]=+i.value;else c[k]=i.value.trim()});
+      $('#modalBox').querySelectorAll('[data-r]').forEach(i=>{const r=c.rates[+i.dataset.r];const k=i.dataset.rk;if(i.type==='checkbox')r[k]=i.checked;else if(['service','vehicle','mode','uom','label'].includes(k))r[k]=i.value;else r[k]=i.value===''?'':+i.value});
+    };
+    $('#modalBox').querySelectorAll('select[data-rk="mode"],select[data-rk="service"]').forEach(s=>s.addEventListener('change',()=>{readAll();draw()}));
+    $('#r-add').addEventListener('click',()=>{readAll();c.rates.push(normRate({service:SVC[S.co][0].id}));draw()});
+    $('#modalBox').querySelectorAll('[data-rdel]').forEach(b=>b.addEventListener('click',()=>{readAll();c.rates.splice(+b.dataset.rdel,1);draw()}));
+    $('#c-cancel').addEventListener('click',()=>$('#modal').hidden=true);
+    if($('#c-del'))$('#c-del').addEventListener('click',async()=>{if(S.dos.some(d=>d.customerId===id)||S.rentals.some(r=>r.customerId===id)){toast('这个客户已经有记录，不能删除');return}if(!await askConfirm('删除 '+c.name+'？'))return;M.customers=M.customers.filter(x=>x.id!==id);await store.saveMaster();$('#modal').hidden=true;renderAll()});
+    $('#c-save').addEventListener('click',async()=>{readAll();if(!c.name){toast('要填公司名');return}
+      const file=$('#q-file')?.files?.[0];if(file&&ASSETS){try{const r=await ASSETS.upload(file);c.quote={id:r.id,name:file.name}}catch(e){toast('报价单上载失败')}}
+      c.rates=c.rates.map(normRate);const i=M.customers.findIndex(x=>x.id===c.id);i>=0?M.customers[i]=c:M.customers.push(c);
+      await store.saveMaster();$('#modal').hidden=true;toast('已保存');renderAll()});
+  };
+  $('#modal').hidden=false;draw();
+}
+
+/* ================= boot ================= */
+{let th='dark';try{th=localStorage.getItem('bill.theme')||'dark'}catch(e){}applyTheme(th)}
+$('#themeBtn').addEventListener('click',()=>applyTheme(document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark'));
+loadLocal();renderAll();connect();
+
+</script>
+</body>
+</html>
