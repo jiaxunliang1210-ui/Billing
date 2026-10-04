@@ -417,7 +417,8 @@ function editDO(id){const d=S.d.delivery_orders.find(x=>x.id===id);if(!d)return;
 function doList(){
   const rows=S.d.delivery_orders.filter(d=>!S.unbilledOnly||!d.invoice_id);
   return `<section><div class="filters"><label class="f">${L("月份","Month")}<input type="month" value="${S.month}" onchange="setMonth(this.value)"></label>
-    <label class="chk"><input type="checkbox" ${S.unbilledOnly?"checked":""} onchange="S.unbilledOnly=this.checked;render()">${L("只看未开单","Unbilled only")}</label></div>
+    <label class="chk"><input type="checkbox" ${S.unbilledOnly?"checked":""} onchange="S.unbilledOnly=this.checked;render()">${L("只看未开单","Unbilled only")}</label>
+    <button class="btn sec" onclick="exportDO()">⬇ Excel</button></div>
   ${rows.length?`<div class="tw"><table><thead><tr><th>${L("日期","Date")}</th><th>DO No</th><th>${L("客户","Customer")}</th><th>Project</th><th>Service</th><th>${L("车牌","Vehicle")}</th>
     <th>In</th><th>Out</th><th>Day/Night</th><th>From</th><th>To</th><th class="num">${L("计费小时","Hrs")}</th><th class="num">Rate</th><th class="num">Surcharge</th><th class="num">${L("金额","Amount")}</th><th>Invoice</th></tr></thead><tbody>
   ${rows.map(d=>`<tr class="click" onclick="editDO('${d.id}')"><td>${dmy(d.do_date)}</td><td>${esc(d.do_no)}</td><td>${esc(custName(d.customer_id))}</td><td>${esc(d.project)}</td><td>${esc(d.service)}</td>
@@ -430,15 +431,12 @@ function doList(){
 
 /* ================= Invoice ================= */
 function invView(){
-  const F=S.invF,td=today();
-  let rows=S.d.invoices.filter(i=>(!F.customer||i.customer_id===F.customer)&&(!F.q||(i.invoice_no+" "+(i.description||"")+" "+(i.project||"")).toLowerCase().includes(F.q.toLowerCase())));
-  if(F.status==="Overdue")rows=rows.filter(i=>overdueDays(i)>0);else if(F.status)rows=rows.filter(i=>statusOf(i)===F.status);
-  const desc=i=>(i.description||S.d.invoice_lines.find(l=>l.invoice_id===i.id)?.description||"").split("\n").filter(Boolean).join(" / ");
+  const F=S.invF,rows=invRows(),desc=invDesc;
   return `<div class="filters">
     <label class="f">${L("客户","Customer")}<select onchange="S.invF.customer=this.value;render()">${optList(S.d.customers.map(c=>[c.id,c.name]),F.customer,L("全部","All"))}</select></label>
     <label class="f">${L("状态","Status")}<select onchange="S.invF.status=this.value;render()">${optList([["Unpaid",L("未付","Unpaid")],["Partial",L("部分付款","Partial")],["Paid",L("已付","Paid")],["Overdue",L("逾期","Overdue")]],F.status,L("全部","All"))}</select></label>
     <label class="f">${L("搜寻","Search")}<input value="${esc(F.q)}" placeholder="Invoice No / Project" onchange="S.invF.q=this.value;render()"></label>
-    <button class="btn" onclick="openInvForm()">${L("新增 Invoice","New invoice")}</button></div>
+    <button class="btn" onclick="openInvForm()">${L("新增 Invoice","New invoice")}</button><button class="btn sec" onclick="exportInv()">⬇ Excel</button></div>
   ${rows.length?`<div class="tw"><table><thead><tr><th>No</th><th>Invoice Date</th><th>Invoice No</th><th>${L("客户","Customer")}</th><th>Description</th>
     <th class="num">Amt before GST</th><th class="num">GST</th><th class="num">Total</th><th class="num">${L("已付","Paid")}</th><th class="num">${L("余额","Balance")}</th>
     <th>Due</th><th>${L("状态","Status")}</th><th>Checked</th><th>${L("发送","Sent")}</th><th>${L("最新付款","Last paid")}</th></tr></thead><tbody>
@@ -627,7 +625,7 @@ function payView(){
   const rows=S.d.payments.filter(p=>!S.payF.customer||p.customer_id===S.payF.customer);
   const alloc=p=>sum(S.d.payment_allocations.filter(a=>a.payment_id===p.id),a=>a.amount);
   return `<div class="filters"><label class="f">${L("客户","Customer")}<select onchange="S.payF.customer=this.value;render()">${optList(S.d.customers.map(c=>[c.id,c.name]),S.payF.customer,L("全部","All"))}</select></label>
-    <button class="btn" onclick="openPayForm({})">${L("记录收款","Record payment")}</button></div>
+    <button class="btn" onclick="openPayForm({})">${L("记录收款","Record payment")}</button><button class="btn sec" onclick="exportPay()">⬇ Excel</button></div>
   ${rows.length?`<div class="tw"><table><thead><tr><th>${L("日期","Date")}</th><th>${L("客户","Customer")}</th><th class="num">${L("金额","Amount")}</th><th>${L("方式","Method")}</th><th>Reference</th>
     <th>${L("付了哪些 invoice","Invoices settled")}</th><th class="num">${L("未分配（多付）","Unallocated")}</th><th>${L("附件","Files")}</th></tr></thead><tbody>
   ${rows.map(p=>{const un=r2(p.amount-alloc(p));const inv=S.d.payment_allocations.filter(a=>a.payment_id===p.id).map(a=>`${esc(invById(a.invoice_id)?.invoice_no||"?")} ($${money(a.amount)})`).join(", ");
@@ -710,7 +708,7 @@ function soaView(){
       <div class="mute" style="font-size:13px">${L("余额","Balance")} $${money(D.bal)}${D.intr?` + Interest $${money(D.intr)}`:""}${D.credit>0.005?` − ${L("多付","Credit")} $${money(D.credit)}`:""}</div></div>
     <div class="card"><h3>Aging</h3><div class="kv"><div><span>${L("未到期","Current")}</span>${money(D.ag.cur)}</div><div><span>1–30</span>${money(D.ag.d30)}</div><div><span>31–60</span>${money(D.ag.d60)}</div><div><span>61–90</span>${money(D.ag.d90)}</div><div><span>&gt; 90</span>${money(D.ag.over)}</div></div></div></div>
   <div class="actions" style="margin:0 0 12px"><button class="btn" onclick="printSOA()">🖨 ${L("打印 / PDF","Print / PDF")}</button>
-    <button class="btn sec" onclick="sendSOA('WhatsApp')">WhatsApp</button><button class="btn sec" onclick="sendSOA('Email')">Email</button></div>
+    <button class="btn sec" onclick="exportSOA()">⬇ Excel</button><button class="btn sec" onclick="sendSOA('WhatsApp')">WhatsApp</button><button class="btn sec" onclick="sendSOA('Email')">Email</button></div>
   ${D.rows.length?`<div class="tw"><table><thead><tr><th>${L("日期","Date")}</th><th>Invoice No</th><th>Description</th><th>Due</th><th class="num">Total</th><th class="num">${L("已付","Paid")}</th><th class="num">${L("余额","Balance")}</th><th class="num">${L("逾期天数","Days overdue")}</th><th class="num">Interest</th></tr></thead><tbody>
     ${D.rows.map(i=>`<tr class="click ${overdueDays(i,asOf)?"red":""}" onclick="openInv('${i.id}')"><td>${dmy(i.invoice_date)}</td><td>${esc(i.invoice_no)}</td><td class="wrap">${esc((i.description||"").replace(/\n/g," / "))}</td><td>${dmy(i.due_date)}</td>
       <td class="num">${money(i.total)}</td><td class="num">${money(paidOf(i))}</td><td class="num">${money(balOf(i))}</td><td class="num">${overdueDays(i,asOf)||""}</td><td class="num">${interestOf(i,asOf)?money(interestOf(i,asOf)):""}</td></tr>`).join("")}</tbody></table></div>`
@@ -741,7 +739,8 @@ function sumView(){
   const ap={};for(const s of S.d.supplier_invoices){if(s.payment_date)continue;const r=ap[s.supplier_id]=ap[s.supplier_id]||{bal:0,over:0,n:0,next:""};r.bal+=Number(s.total)||0;r.n++;
     if(s.due_date&&s.due_date<today())r.over+=Number(s.total)||0;else if(s.due_date&&(!r.next||s.due_date<r.next))r.next=s.due_date}
   const arR=Object.entries(ar),apR=Object.entries(ap);
-  return `<h2>${L("要马上处理","Needs action now")}</h2><div class="cards">
+  return `<div class="actions" style="margin:0 0 8px"><button class="btn sec" onclick="exportARAP()">⬇ ${L("下载 AR / AP Excel","Download AR / AP Excel")}</button></div>
+  <h2>${L("要马上处理","Needs action now")}</h2><div class="cards">
     <div class="card urgent"><h3>${L("客户逾期未付","Overdue receivables")} (${A.overdue.length})</h3>${li(A.overdue,i=>`<li onclick="openInv('${i.id}')"><span>${esc(i.invoice_no)} · ${esc(custName(i.customer_id))} · ${overdueDays(i)}${L("天","d")}</span><span>$${money(balOf(i))}</span></li>`)}</div>
     <div class="card urgent"><h3>${L("Supplier 逾期未付","Overdue payables")} (${A.apOver.length})</h3>${li(A.apOver,apLi)}</div>
     <div class="card urgent"><h3>${L("Diesel surcharge 不对","Surcharge mismatches")} (${A.mism.length})</h3>${li(A.mism,s=>`<li onclick="S.tab='sup';S.sub.sup='supplier_invoices';render()"><span>${esc(supName(s.supplier_id))} · ${esc(s.invoice_no)}</span><span>${esc(surchargeCheck(s).t)}</span></li>`)}</div></div>
@@ -749,7 +748,8 @@ function sumView(){
     <div class="card follow"><h3>${L("金额未检查","Amount not checked")} (${A.unchecked.length})</h3>${li(A.unchecked,invLi)}</div>
     <div class="card follow"><h3>${L("已检查未发送","Checked, not sent")} (${A.unsent.length})</h3>${li(A.unsent,invLi)}</div>
     <div class="card follow"><h3>${L("本月 Monthly Fix 未开单","Monthly fix not billed this month")} (${A.mfPend.length})</h3>${li(A.mfPend,c=>`<li onclick="setTab('mf')"><span>${esc(custName(c.customer_id))} · ${esc(c.description)}</span><span>${money(c.amount)}</span></li>`)}</div>
-    <div class="card follow"><h3>${L("7 天内要付 Supplier","Payables due within 7 days")} (${A.apSoon.length})</h3>${li(A.apSoon,apLi)}</div></div>
+    <div class="card follow"><h3>${L("7 天内要付 Supplier","Payables due within 7 days")} (${A.apSoon.length})</h3>${li(A.apSoon,apLi)}</div>
+    ${(backupAge()==null||backupAge()>7)?`<div class="card follow"><h3>${L("该备份了","Time to back up")}</h3><ul><li onclick="setTab('set')"><span>${backupAge()==null?L("这台设备还没备份过","Never backed up on this device"):L(`上次备份 ${backupAge()} 天前`,`Last backup ${backupAge()} days ago`)}</span><span>${L("去备份","Back up")}</span></li></ul></div>`:""}</div>
   <h2>AR · ${L("客户欠款","Receivables")}</h2>
   ${arR.length?`<div class="tw"><table><thead><tr><th>${L("客户","Customer")}</th><th class="num">${L("张数","Invoices")}</th><th class="num">${L("未付","Outstanding")}</th><th class="num">${L("逾期","Overdue")}</th><th class="num">Interest</th></tr></thead><tbody>
     ${arR.map(([cid,r])=>`<tr class="click" onclick="S.soaCust='${cid}';setTab('soa')"><td>${esc(custName(cid))}</td><td class="num">${r.n}</td><td class="num">${money(r.bal)}</td><td class="num">${r.over?`<span class="tag bad">${money(r.over)}</span>`:""}</td><td class="num">${r.intr?money(r.intr):""}</td></tr>`).join("")}</tbody>
@@ -826,7 +826,7 @@ function genView(keys,sk){
   const head=c=>SPECIAL[c]?L(...SPECIAL[c]):L(...cfg.fields.find(f=>f.k===c).label);
   const isNum=c=>["money","number","terms"].includes(cfg.fields.find(f=>f.k===c)?.type);
   return tabs+(cfg.note?`<p class="mute" style="font-size:13px">${L(...cfg.note)}</p>`:"")+
-    (e?genForm(ent,cfg,e,sk):`<div class="actions" style="margin:0 0 12px"><button class="btn" onclick="S.gEdit={};S.dirty=true;render()">${L("新增","Add")}</button></div>`)+
+    (e?genForm(ent,cfg,e,sk):`<div class="actions" style="margin:0 0 12px"><button class="btn" onclick="S.gEdit={};S.dirty=true;render()">${L("新增","Add")}</button><button class="btn sec" onclick="exportEnt('${ent}')">⬇ Excel</button></div>`)+
     (rows.length?`<div class="tw"><table><thead><tr>${cfg.cols.map(c=>`<th class="${isNum(c)?"num":""}">${head(c)}</th>`).join("")}</tr></thead><tbody>
       ${rows.map(r=>{const bad=ent==="supplier_invoices"&&(!surchargeCheck(r).ok||(!r.payment_date&&r.due_date&&r.due_date<today()));
         return `<tr class="click ${bad?"red":""}" onclick="gEdit('${ent}','${r.id}')">${cfg.cols.map(c=>`<td class="${isNum(c)?"num":""}">${genCell(cfg,c,r)}</td>`).join("")}</tr>`}).join("")}</tbody></table></div>`
@@ -942,6 +942,148 @@ async function importExcel(input){const file=input.files[0];if(!file)return;inpu
   }catch(e){alert(L("导入失败：","Import failed: ")+e.message);await loadAll();render()}}
 
 /* ================= 设定 ================= */
+/* ================= 备份 / 还原 ================= */
+const BK_TABLES=["customers","vehicles","suppliers","company_settings","rates","customer_surcharges","diesel_surcharges","monthly_fix","invoices","delivery_orders",
+  "invoice_lines","invoice_edits","payments","payment_allocations","reminders","soa_sends","monthly_fix_log","supplier_invoices","attachments"];
+const backupAge=()=>{const d=pref("lastBackup","");return d?daysBetween(d,today()):null};
+async function backupNow(){toast(L("备份中，请稍等…","Backing up…"));
+  try{const wb=XLSX.utils.book_new(),counts=[];
+    for(const t of BK_TABLES){const rows=await fetchAll(()=>sb.from(t).select("*"));counts.push([t,rows.length]);
+      const cols=rows.length?Object.keys(rows[0]):["id"];
+      const ws=XLSX.utils.json_to_sheet(rows.map(r=>Object.fromEntries(cols.map(k=>[k,r[k]==null?"":r[k]]))),{header:cols});
+      XLSX.utils.book_append_sheet(wb,ws,t)}
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet([["ETK · L3H billing backup"],["Date",new Date().toLocaleString("en-SG")],["User",S.user.email],[],["Table","Rows"],...counts]),"_info");
+    XLSX.writeFile(wb,`billing_backup_${today()}.xlsx`);setPref("lastBackup",today());render();
+    toast(L("备份完成，文件已下载","Backup downloaded"))}catch(e){toast(L("备份失败：","Backup failed: ")+e.message)}}
+async function restoreBackup(input){const file=input.files[0];input.value="";if(!file)return;
+  if(!confirm(L("还原会把备份文件里的资料写回系统：\n· 同一笔资料会变回备份时的样子\n· 备份之后新增的资料会保留，不会被删掉\n\n确定继续？",
+    "Restore writes the backup back into the system:\n· Records in the backup return to their backed-up state\n· Records added after the backup are kept\n\nContinue?")))return;
+  try{const wb=XLSX.read(await file.arrayBuffer(),{cellDates:false});
+    if(!wb.Sheets._info)throw new Error(L("这不是系统导出的备份文件","This is not a backup file from this system"));
+    const rep=[];toast(L("还原中，请不要关闭网页…","Restoring, keep this page open…"));
+    for(const t of BK_TABLES){const ws=wb.Sheets[t];if(!ws)continue;
+      let rows=XLSX.utils.sheet_to_json(ws,{defval:"",raw:true}).map(r=>{const o={};for(const[k,v]of Object.entries(r)){if(k==="updated_at")continue;o[k]=v===""?null:v}o.user_id=S.user.id;return o});
+      if(t==="company_settings")rows=rows.map(({id,...r})=>r);
+      for(let i=0;i<rows.length;i+=500){const{error}=await sb.from(t).upsert(rows.slice(i,i+500),{onConflict:t==="company_settings"?"user_id,company":"id"});if(error)throw new Error(t+": "+error.message)}
+      rep.push(`${t}: ${rows.length}`)}
+    await reload();alert(L("还原完成\n\n","Restore finished\n\n")+rep.join("\n"))}catch(e){alert(L("还原失败：","Restore failed: ")+e.message);await reload()}}
+
+/* ================= 下载 Excel ================= */
+let excelJSLoading=null;
+function loadExcelJS(){if(window.ExcelJS)return Promise.resolve();
+  return excelJSLoading||(excelJSLoading=new Promise((res,rej)=>{const sc=document.createElement("script");sc.src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js";
+    sc.onload=res;sc.onerror=()=>{excelJSLoading=null;rej(new Error(L("Excel 工具载入失败，请检查网络","Could not load the Excel library")))};document.head.appendChild(sc)}))}
+const XFILL={red:"FFF8D7D5",amber:"FFFFF0CC",green:"FFDFF2E7",head:"FF1F2A37",total:"FFE3E8EF"};
+const xDate=s=>{const[y,m,d]=String(s).slice(0,10).split("-").map(Number);return new Date(Date.UTC(y,m-1,d))};
+const xv=(v,t)=>v==null||v===""?null:t==="date"?xDate(v):(t==="money"||t==="num")?Number(v):v;
+const xDisp=(v,t)=>v==null||v===""?"":t==="money"?money(v):t==="date"?dmy(String(v).slice(0,10)):String(v);
+const xLen=str=>[...String(str)].reduce((n,ch)=>n+(ch.charCodeAt(0)>255?2:1),0);
+const solid=c=>({type:"pattern",pattern:"solid",fgColor:{argb:XFILL[c]}});
+const termEN=d=>(d==null||d==="")?"":Number(d)===0?"COD":`${d} days`;
+async function exportXlsx(filename,sheets){
+  try{toast(L("正在准备 Excel…","Preparing Excel…"));await loadExcelJS();const wb=new ExcelJS.Workbook();wb.creator="ETK · L3H Billing";
+    for(const sh of sheets){const ws=wb.addWorksheet(sh.name.slice(0,31));let r=1;
+      for(const[a,b]of sh.info||[]){const row=ws.getRow(r++);row.getCell(1).value=a;row.getCell(1).font={bold:true};if(b!=null)row.getCell(2).value=b}
+      if(sh.info?.length)r++;
+      const head=r++,hr=ws.getRow(head);hr.height=20;
+      sh.cols.forEach((c,i)=>{const cell=hr.getCell(i+1);cell.value=c.h;cell.font={bold:true,color:{argb:"FFFFFFFF"}};cell.fill=solid("head");cell.alignment={vertical:"middle"}});
+      sh.rows.forEach((vals,ri)=>{const row=ws.getRow(r++),fill=sh.fill?.(ri);
+        vals.forEach((v,i)=>{const c=sh.cols[i],cell=row.getCell(i+1);cell.value=xv(v,c.t);
+          if(c.t==="money")cell.numFmt="#,##0.00";else if(c.t==="date")cell.numFmt="d/m/yyyy";else if(c.t==="num")cell.numFmt="0.##";
+          cell.alignment={vertical:"top",wrapText:!!c.wrap};if(fill)cell.fill=solid(fill)})});
+      if(sh.total){const row=ws.getRow(r++);sh.total.forEach((v,i)=>{const c=sh.cols[i],cell=row.getCell(i+1);cell.value=xv(v,c.t);cell.font={bold:true};cell.fill=solid("total");
+        cell.border={top:{style:"thin"}};if(c.t==="money")cell.numFmt="#,##0.00";else if(c.t==="num")cell.numFmt="0.##"})}
+      if(sh.after?.length){r++;for(const[a,b,fill]of sh.after){const row=ws.getRow(r++);row.getCell(1).value=a;row.getCell(1).font={bold:true};
+        const cell=row.getCell(2);cell.value=typeof b==="number"?b:b??null;if(typeof b==="number")cell.numFmt="#,##0.00";if(fill){row.getCell(1).fill=solid(fill);cell.fill=solid(fill)}}}
+      if(sh.legend){r++;for(const[fill,text]of sh.legend){const row=ws.getRow(r++);row.getCell(1).fill=solid(fill);row.getCell(2).value=text}}
+      ws.views=[{state:"frozen",ySplit:head,xSplit:sh.freezeCols||0}];
+      if(sh.rows.length)ws.autoFilter={from:{row:head,column:1},to:{row:head,column:sh.cols.length}};
+      sh.cols.forEach((c,i)=>{const w=Math.max(xLen(c.h),...sh.rows.map(v=>xLen(xDisp(v[i],c.t))),...(sh.total?[xLen(xDisp(sh.total[i],c.t))]:[]));
+        ws.getColumn(i+1).width=Math.min(c.max||40,Math.max(8,w+2))});
+      if(sh.info?.length||sh.after?.length)ws.getColumn(1).width=Math.max(ws.getColumn(1).width||10,18)}
+    const buf=await wb.xlsx.writeBuffer(),a=document.createElement("a");
+    a.href=URL.createObjectURL(new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));a.download=filename.replace(/[\\/:*?"<>|]+/g,"-");
+    document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500);toast(L("Excel 已下载","Excel downloaded"))
+  }catch(e){toast(e.message)}}
+const LEG_INV=[["red","Overdue"],["amber","Not checked / not sent"]];
+function exportDO(){const rows=S.d.delivery_orders.filter(d=>!S.unbilledOnly||!d.invoice_id);
+  exportXlsx(`${S.company}_DO_${S.month}.xlsx`,[{name:`DO ${S.month}`,freezeCols:2,
+    cols:[{h:"Date",t:"date"},{h:"DO No"},{h:"Customer"},{h:"Project"},{h:"Service"},{h:"Vehicle No"},{h:"In"},{h:"Out"},{h:"Day/Night"},{h:"From"},{h:"To"},
+      {h:"Description"},{h:"Actual Hr",t:"num"},{h:"Billable Hr",t:"num"},{h:"Rate",t:"money"},{h:"Surcharge",t:"money"},{h:"Amount",t:"money"},{h:"Invoice No"},{h:"Customer PO"},{h:"Remark"}],
+    rows:rows.map(d=>[d.do_date,d.do_no,custName(d.customer_id),d.project,d.service,d.plate,d.start_time?.slice(0,5),d.end_time?.slice(0,5),d.shift,d.from_loc,d.to_loc,
+      d.description,d.actual_hours,d.billable_hours,d.rate,Number(d.surcharge)||null,d.amount,invById(d.invoice_id)?.invoice_no||"",d.customer_po,d.remark]),
+    fill:i=>rows[i].invoice_id?null:"amber",
+    total:["Total",`${rows.length} DO`,"","","","","","","","","","",sum(rows,d=>d.actual_hours),sum(rows,d=>d.billable_hours),"",sum(rows,d=>d.surcharge),sum(rows,d=>d.amount),"","",""],
+    legend:[["amber","Unbilled"]]}])}
+function invRows(){const F=S.invF;let rows=S.d.invoices.filter(i=>(!F.customer||i.customer_id===F.customer)&&(!F.q||(i.invoice_no+" "+(i.description||"")+" "+(i.project||"")).toLowerCase().includes(F.q.toLowerCase())));
+  if(F.status==="Overdue")rows=rows.filter(i=>overdueDays(i)>0);else if(F.status)rows=rows.filter(i=>statusOf(i)===F.status);return rows}
+const invDesc=i=>(i.description||S.d.invoice_lines.find(l=>l.invoice_id===i.id)?.description||"").split("\n").filter(Boolean).join(" / ");
+function exportInv(){const rows=invRows();
+  exportXlsx(`${S.company}_Invoices_${today()}.xlsx`,[{name:"Invoices",freezeCols:3,
+    cols:[{h:"No",t:"num"},{h:"Invoice Date",t:"date"},{h:"Invoice No"},{h:"Customer"},{h:"Project"},{h:"Description",max:50,wrap:1},{h:"Customer PO"},{h:"Our Ref"},
+      {h:"Amt before GST",t:"money"},{h:"GST",t:"money"},{h:"Total",t:"money"},{h:"Paid",t:"money"},{h:"Balance",t:"money"},{h:"Due Date",t:"date"},{h:"Days Overdue",t:"num"},
+      {h:"Interest",t:"money"},{h:"Status"},{h:"Checked"},{h:"Sent Date",t:"date"},{h:"Sent Via"},{h:"Last Payment",t:"date"},{h:"Remark",max:40,wrap:1}],
+    rows:rows.map((i,n)=>[n+1,i.invoice_date,i.invoice_no,custName(i.customer_id),i.project,invDesc(i),i.customer_po,i.our_ref,i.amount_before_gst,i.gst_amount,i.total,paidOf(i),balOf(i),
+      i.due_date,overdueDays(i)||null,interestOf(i)||null,overdueDays(i)?"Overdue":statusOf(i),i.checked?"Yes":"No",i.sent_at,i.sent_via,lastPayDate(i),i.remark]),
+    fill:n=>{const i=rows[n];return overdueDays(i)?"red":(!i.checked||!i.sent_at)&&statusOf(i)!=="Paid"?"amber":null},
+    total:["Total","","","","","","","",sum(rows,i=>i.amount_before_gst),sum(rows,i=>i.gst_amount),sum(rows,i=>i.total),sum(rows,paidOf),sum(rows,balOf),"","",sum(rows,i=>interestOf(i)),"","","","","",""],
+    legend:LEG_INV}])}
+function exportPay(){const rows=S.d.payments.filter(p=>!S.payF.customer||p.customer_id===S.payF.customer);
+  const alloc=p=>S.d.payment_allocations.filter(a=>a.payment_id===p.id);
+  exportXlsx(`${S.company}_Payments_${today()}.xlsx`,[{name:"Payments",
+    cols:[{h:"Payment Date",t:"date"},{h:"Customer"},{h:"Amount",t:"money"},{h:"Method"},{h:"Reference"},{h:"Invoices Settled",max:60,wrap:1},{h:"Applied",t:"money"},{h:"Unallocated",t:"money"},{h:"Remark"}],
+    rows:rows.map(p=>{const a=alloc(p),ap=sum(a,x=>x.amount);return[p.payment_date,custName(p.customer_id),p.amount,p.method,p.reference,
+      a.map(x=>`${invById(x.invoice_id)?.invoice_no||"?"} (${money(x.amount)})`).join(", "),ap,r2(p.amount-ap)||null,p.remark]}),
+    fill:i=>{const p=rows[i];return r2(p.amount-sum(alloc(p),x=>x.amount))>0.005?"amber":null},
+    total:["Total","",sum(rows,p=>p.amount),"","","","","",""],legend:[["amber","Has unallocated amount (overpayment / not applied)"]]}])}
+function exportSOA(){const cid=S.soaCust;if(!cid)return toast(L("先选客户","Choose a customer first"));const c=custOf(cid),s=settingsOf(S.company),D=soaData(cid,S.soaAsOf),a=S.soaAsOf;
+  exportXlsx(`SOA_${c.name}_${a}.xlsx`,[{name:"Statement",
+    info:[["Statement of Account",s.name],["Customer",c.name],["As at",dmy(a)],["Terms",termEN(c.payment_terms_days)]],
+    cols:[{h:"Invoice Date",t:"date"},{h:"Invoice No"},{h:"Description",max:50,wrap:1},{h:"Customer PO"},{h:"Due Date",t:"date"},{h:"Amount",t:"money"},{h:"Paid",t:"money"},
+      {h:"Balance",t:"money"},{h:"Days Overdue",t:"num"},{h:"Interest",t:"money"}],
+    rows:D.rows.map(i=>[i.invoice_date,i.invoice_no,invDesc(i),i.customer_po,i.due_date,i.total,paidOf(i),balOf(i),overdueDays(i,a)||null,interestOf(i,a)||null]),
+    fill:n=>overdueDays(D.rows[n],a)?"red":null,
+    total:["Total","","","","",sum(D.rows,i=>i.total),sum(D.rows,paidOf),D.bal,"",D.intr||null],
+    after:[["Current",D.ag.cur],["1 – 30 days",D.ag.d30],["31 – 60 days",D.ag.d60],["61 – 90 days",D.ag.d90,D.ag.d90?"red":null],["Over 90 days",D.ag.over,D.ag.over?"red":null],
+      ["Interest",D.intr],["Less credit",D.credit>0.005?-D.credit:0],["Total outstanding",D.total,"amber"]],
+    legend:[["red","Overdue"]]}])}
+function exportARAP(){const td=today();
+  const arInv=S.d.invoices.filter(i=>balOf(i)>0.005).sort((a,b)=>custName(a.customer_id).localeCompare(custName(b.customer_id))||a.invoice_date.localeCompare(b.invoice_date));
+  const bucket=i=>{const d=overdueDays(i);return!d?"Current":d<=30?"1-30":d<=60?"31-60":d<=90?"61-90":">90"};
+  const custs=[...new Set(arInv.map(i=>i.customer_id))];
+  const arSum=custs.map(cid=>{const l=arInv.filter(i=>i.customer_id===cid),b=k=>sum(l.filter(i=>bucket(i)===k),balOf);
+    return[custName(cid),l.length,sum(l,balOf),b("Current"),b("1-30"),b("31-60"),b("61-90"),b(">90"),sum(l,i=>interestOf(i))]});
+  const ap=S.d.supplier_invoices.filter(x=>!x.payment_date).sort((a,b)=>(a.due_date||"").localeCompare(b.due_date||""));
+  const tot=(rows,i)=>sum(rows,r=>r[i]);
+  exportXlsx(`${S.company}_AR_AP_${td}.xlsx`,[
+    {name:"AR Summary",info:[["AR Summary",settingsOf(S.company).name],["As at",dmy(td)]],
+      cols:[{h:"Customer"},{h:"Invoices",t:"num"},{h:"Outstanding",t:"money"},{h:"Current",t:"money"},{h:"1-30",t:"money"},{h:"31-60",t:"money"},{h:"61-90",t:"money"},{h:">90",t:"money"},{h:"Interest",t:"money"}],
+      rows:arSum,fill:i=>arSum[i][4]+arSum[i][5]+arSum[i][6]+arSum[i][7]>0?"red":null,
+      total:["Total",tot(arSum,1),tot(arSum,2),tot(arSum,3),tot(arSum,4),tot(arSum,5),tot(arSum,6),tot(arSum,7),tot(arSum,8)],legend:[["red","Has overdue amount"]]},
+    {name:"AR Detail",freezeCols:2,
+      cols:[{h:"Customer"},{h:"Invoice No"},{h:"Invoice Date",t:"date"},{h:"Due Date",t:"date"},{h:"Description",max:50,wrap:1},{h:"Total",t:"money"},{h:"Paid",t:"money"},{h:"Balance",t:"money"},
+        {h:"Days Overdue",t:"num"},{h:"Aging"},{h:"Interest",t:"money"},{h:"Checked"},{h:"Sent Date",t:"date"}],
+      rows:arInv.map(i=>[custName(i.customer_id),i.invoice_no,i.invoice_date,i.due_date,invDesc(i),i.total,paidOf(i),balOf(i),overdueDays(i)||null,bucket(i),interestOf(i)||null,i.checked?"Yes":"No",i.sent_at]),
+      fill:n=>overdueDays(arInv[n])?"red":(!arInv[n].checked||!arInv[n].sent_at)?"amber":null,
+      total:["Total","","","","",sum(arInv,i=>i.total),sum(arInv,paidOf),sum(arInv,balOf),"","",sum(arInv,i=>interestOf(i)),"",""],legend:LEG_INV},
+    {name:"AP Unpaid",
+      cols:[{h:"Supplier"},{h:"Invoice No"},{h:"Invoice Date",t:"date"},{h:"Due Date",t:"date"},{h:"Charged To"},{h:"Description",max:40,wrap:1},{h:"Total",t:"money"},
+        {h:"Trips",t:"num"},{h:"Surcharge Charged",t:"money"},{h:"Surcharge Check",max:40},{h:"Status"}],
+      rows:ap.map(x=>[supName(x.supplier_id),x.invoice_no,x.invoice_date,x.due_date,x.charged_to,x.description,x.total,x.trips,x.surcharge_charged,surchargeCheck(x).t,x.due_date&&x.due_date<td?"Overdue":"Unpaid"]),
+      fill:n=>{const x=ap[n];return(x.due_date&&x.due_date<td)||!surchargeCheck(x).ok?"red":x.due_date&&x.due_date<=addDays(td,7)?"amber":null},
+      total:["Total","","","","","",sum(ap,x=>x.total),"","","",""],legend:[["red","Overdue or surcharge mismatch"],["amber","Due within 7 days"]]}])}
+function exportEnt(ent){const cfg=ENT[ent],rows=S.d[ent];
+  const tmap={money:"money",number:"num",date:"date",month:"date"};
+  const cols=cfg.fields.map(f=>({h:f.label[1],t:tmap[f.type],max:f.type==="textarea"?50:40,wrap:f.type==="textarea"}));
+  const val=(f,v)=>{switch(f.type){case"customer":return custName(v);case"supplier":return supName(v);case"terms":return termEN(v);case"bool":return v?"Yes":"No";case"serviceOpt":return v||"All services";default:return v}};
+  const si=ent==="supplier_invoices";
+  if(si)cols.push({h:"Status"},{h:"Surcharge Check",max:40});
+  const data=rows.map(r=>{const a=cfg.fields.map(f=>val(f,r[f.k]));if(si)a.push(r.payment_date?"Paid":r.due_date&&r.due_date<today()?"Overdue":"Unpaid",surchargeCheck(r).t);return a});
+  exportXlsx(`${["customers","vehicles","rates","customer_surcharges","monthly_fix"].includes(ent)?S.company+"_":""}${cfg.label[1].replace(/\W+/g,"_")}_${today()}.xlsx`,
+    [{name:cfg.label[1],cols,rows:data,
+      fill:si?(n=>{const r=rows[n];return(!r.payment_date&&r.due_date&&r.due_date<today())||!surchargeCheck(r).ok?"red":null}):ent==="monthly_fix"?(n=>rows[n].active?null:"amber"):null,
+      legend:si?[["red","Overdue or surcharge mismatch"]]:ent==="monthly_fix"?[["amber","Stopped"]]:null}])}
+
 const SET_FIELDS=[["name",["公司名称","Company name"]],["address",["地址","Address"]],["tel",["电话","Tel"]],["fax",["Fax","Fax"]],["email",["Email","Email"]],
   ["reg_no",["Co. Reg No","Co. Reg No"]],["gst_no",["GST Reg No","GST Reg No"]],["bank",["银行户口（印在 invoice）","Bank (printed on invoice)"]],["inv_prefix",["Invoice 号码开头","Invoice number prefix"]]];
 function setView(){const s=settingsOf(S.company);
@@ -949,6 +1091,14 @@ function setView(){const s=settingsOf(S.company);
   <form id="setForm" class="grid" oninput="S.dirty=true">${SET_FIELDS.map(([k,l])=>k==="address"?`<label class="f wide">${L(...l)}<textarea name="${k}">${esc(s[k]||"")}</textarea></label>`:fld(k,L(...l),s[k]||"")).join("")}</form>
   <p class="mute" style="font-size:13px">${L("Invoice 号码格式：开头 + 年月 + 流水号，例如 ","Invoice number format: prefix + YYMM + running number, e.g. ")}${esc(s.inv_prefix||"")}${today().slice(2,4)}${today().slice(5,7)}/01</p>
   <div class="actions"><button class="btn" onclick="saveSettings()">${L("保存","Save")}</button></div></section>
+  <section class="panel"><h2>${L("备份 / 还原","Backup / restore")}</h2>
+  <p style="margin-top:0">${(()=>{const a=backupAge();return a==null?`<span class="tag bad">${L("这台设备还没备份过","Never backed up on this device")}</span>`
+    :a>7?`<span class="tag warn">${L(`上次备份 ${a} 天前`,`Last backup ${a} days ago`)}</span>`:`<span class="tag ok">${L(`上次备份：${dmy(pref("lastBackup",""))}`,`Last backup: ${dmy(pref("lastBackup",""))}`)}</span>`})()}</p>
+  <p class="mute" style="font-size:14px">${L("备份会把 ETK 和 L3H 全部资料下载成一个 Excel（每个表格一个 sheet）。建议每星期备份一次，存在电脑和 Google Drive。附件文件本身还在云端，备份里只有附件记录。",
+    "Downloads all ETK and L3H data as one Excel file, one sheet per table. Back up weekly and keep a copy on your computer and Google Drive. Attachment files stay in the cloud; the backup lists them.")}</p>
+  <div class="actions"><button class="btn" onclick="backupNow()">⬇ ${L("立即备份","Back up now")}</button>
+    <label class="btn sec file">⬆ ${L("从备份还原","Restore from backup")}<input type="file" accept=".xlsx" hidden onchange="restoreBackup(this)"></label></div>
+  <p class="mute" style="font-size:13px">${L("还原：选之前下载的备份文件。备份里的资料会写回去，备份之后新增的资料不会被删掉。","Restore: choose a backup file. Its records are written back; anything added after the backup is kept.")}</p></section>
   <section class="panel"><h2>${L("账号","Account")}</h2><p>${esc(S.user.email)}</p></section>`}
 async function saveSettings(){const fd=new FormData($("#setForm")),row={company:S.company,user_id:S.user.id};for(const[k]of SET_FIELDS)row[k]=fd.get(k)||null;
   const{error}=await sb.from("company_settings").upsert(row,{onConflict:"user_id,company"});if(error)return toast(error.message);
