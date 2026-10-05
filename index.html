@@ -912,13 +912,14 @@ function downloadTemplate(){const wb=XLSX.utils.book_new();
 function toYMD(v){if(v==null||v==="")return null;if(v instanceof Date)return ymd(new Date(v.getTime()+60000));const s=String(v).trim();
   let m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);if(m)return `${m[1]}-${z2(m[2])}-${z2(m[3])}`;
   m=s.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);if(m){const y=m[3].length===2?"20"+m[3]:m[3];return `${y}-${z2(m[2])}-${z2(m[1])}`}return null}
-const numOr=(v,d=null)=>v===""||v==null?d:Number(String(v).replace(/[$,]/g,""));
+const numOr=(v,d=null)=>{if(v===""||v==null)return d;const n=Number(String(v).replace(/[$,\s]/g,""));return isNaN(n)?d:n};
+const termOr=v=>{const t=String(v??"").trim().toUpperCase();if(!t)return 30;if(t.includes("COD")||t.includes("CASH"))return 0;const n=parseInt(t.replace(/\D/g,""),10);return isNaN(n)?30:n};
 async function importExcel(input){const file=input.files[0];if(!file)return;input.value="";
   try{const wb=XLSX.read(await file.arrayBuffer(),{cellDates:true});
     const rows=n=>wb.Sheets[n]?XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,defval:""}).slice(1).filter(r=>r.some(v=>String(v).trim()!=="")):[];
     const co=S.company,rep=[];
     const cRows=rows("Customers"),have=new Set(S.d.customers.map(c=>c.name.trim().toLowerCase()));
-    const cIns=cRows.filter(r=>r[0]&&!have.has(String(r[0]).trim().toLowerCase())).map(r=>({company:co,name:String(r[0]).trim(),payment_terms_days:numOr(r[1],30),attention:r[2]||null,email:r[3]||null,whatsapp:r[4]?String(r[4]):null,tel:r[5]?String(r[5]):null,fax:r[6]?String(r[6]):null,address:r[7]||null}));
+    const cIns=cRows.filter(r=>r[0]&&!have.has(String(r[0]).trim().toLowerCase())).map(r=>({company:co,name:String(r[0]).trim(),payment_terms_days:termOr(r[1]),attention:r[2]||null,email:r[3]||null,whatsapp:r[4]?String(r[4]):null,tel:r[5]?String(r[5]):null,fax:r[6]?String(r[6]):null,address:r[7]||null}));
     if(cIns.length){const{error}=await sb.from("customers").insert(cIns);if(error)throw error}rep.push(`${L("客户","Customers")}: +${cIns.length} (${L("跳过","skipped")} ${cRows.length-cIns.length})`);
     const vRows=rows("Vehicles"),hv=new Set(S.d.vehicles.map(v=>v.plate.toUpperCase()));
     const vIns=vRows.filter(r=>r[0]&&!hv.has(String(r[0]).trim().toUpperCase())).map(r=>({company:co,plate:String(r[0]).trim().toUpperCase(),vehicle_type:r[1]||null}));
