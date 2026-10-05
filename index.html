@@ -598,7 +598,8 @@ async function toggleChecked(id){const i=invById(id);const{error}=await sb.from(
   if(error)return toast(error.message);await loadAll();render()}
 async function setInterest(id,on){const{error}=await sb.from("invoices").update({interest_enabled:on}).eq("id",id);if(error)return toast(error.message);await loadAll();render()}
 function waLink(num,text){let n=String(num||"").replace(/\D/g,"");if(n.length===8)n="65"+n;return `https://wa.me/${n}?text=${encodeURIComponent(text)}`}
-function mailLink(to,subj,body){return `mailto:${encodeURIComponent(to||"")}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`}
+const emailList=v=>String(v||"").split(/[\s,;]+/).map(x=>x.trim()).filter(x=>x.includes("@"));
+function mailLink(to,subj,body){return `mailto:${emailList(to).join(",")}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`}
 function openOut(via,c,subj,text){if(via==="WhatsApp"){if(!c.whatsapp)toast(L("客户没有 WhatsApp 号码，请在 Master List 加","No WhatsApp number for this customer"));window.open(waLink(c.whatsapp,text),"_blank")}
   else{if(!c.email)toast(L("客户没有 email，请在 Master List 加","No email for this customer"));location.href=mailLink(c.email,subj,text)}}
 async function sendInv(id,via){const i=invById(id),c=custOf(i.customer_id),s=settingsOf(i.company);
@@ -786,7 +787,7 @@ function mfInvoice(cid){const c=S.d.monthly_fix.find(x=>x.id===cid),m=S.mfMonth+
 const F=(k,type,req,label,def)=>({k,type,req,label,def});
 const ENT={
   customers:{scoped:1,label:["客户","Customers"],fields:[F("name","text",1,["名称","Name"]),F("payment_terms_days","terms",1,["付款期限","Payment terms"],30),F("attention","text",0,["Attn","Attn"]),
-    F("email","email",0,["Email","Email"]),F("whatsapp","text",0,["WhatsApp","WhatsApp"]),F("tel","text",0,["电话","Tel"]),F("fax","text",0,["Fax","Fax"]),F("address","textarea",0,["地址","Address"]),F("remark","text",0,["Remark","Remark"])],
+    F("email","text",0,["Email（多个用逗号分开）","Email (separate with commas)"]),F("whatsapp","text",0,["WhatsApp","WhatsApp"]),F("tel","text",0,["电话","Tel"]),F("fax","text",0,["Fax","Fax"]),F("address","textarea",0,["地址","Address"]),F("remark","text",0,["Remark","Remark"])],
     cols:["name","payment_terms_days","attention","email","whatsapp"]},
   vehicles:{scoped:1,label:["车牌","Vehicles"],fields:[F("plate","text",1,["车牌","Vehicle No"]),F("vehicle_type","text",0,["车型","Type"]),F("remark","text",0,["Remark","Remark"])],cols:["plate","vehicle_type","remark"]},
   rates:{scoped:1,label:["价钱","Rates"],fields:[F("customer_id","customer",1,["客户","Customer"]),F("service","rateService",1,["Service","Service"]),F("unit","text",0,["单位","Unit"],"per hr"),
