@@ -685,6 +685,8 @@ function payView(){
   <tfoot><tr><td colspan="2">${L("合计","Total")}</td><td class="num">${money(sum(rows,p=>p.amount))}</td><td colspan="5"></td></tr></tfoot></table></div>`
   :`<div class="panel empty">${L("还没有收款记录。","No payments recorded yet.")}</div>`}`;
 }
+const payUnalloc=p=>r2(Number(p.amount)-sum(S.d.payment_allocations.filter(a=>a.payment_id===p.id),a=>a.amount));
+const custCredits=(cid,exceptId)=>S.d.payments.filter(p=>p.customer_id===cid&&p.id!==exceptId&&payUnalloc(p)>0.005);
 const balExcl=(inv,pid)=>r2(Number(inv.total)-sum(S.d.payment_allocations.filter(a=>a.invoice_id===inv.id&&a.payment_id!==pid),a=>a.amount));
 function openPayForm(p){
   const f=p.id?{...p,alloc:Object.fromEntries(S.d.payment_allocations.filter(a=>a.payment_id===p.id).map(a=>[a.invoice_id,Number(a.amount)]))}
@@ -702,6 +704,9 @@ function payFormView(f){
     <label class="f">${L("方式","Method")}<select data-k="method">${optList(PAY_METHODS.map(m=>[m,m]),f.method)}</select></label>
     <label class="f">Reference<input data-k="reference" value="${esc(f.reference||"")}"></label>
     <label class="f">Remark<input data-k="remark" value="${esc(f.remark||"")}"></label></div>
+  ${f.customer_id&&custCredits(f.customer_id,f.id).length?`<div class="note" style="margin:8px 0">${L("这个客户之前有多付的余款：","This customer has unapplied credit:")}
+    ${custCredits(f.customer_id,f.id).map(p=>`<a href="#" onclick="event.preventDefault();openPayForm(S.d.payments.find(x=>x.id==='${p.id}'))">${dmy(p.payment_date)} ${esc(p.reference||p.method||"")} · $${money(payUnalloc(p))}</a>`).join(" &nbsp; ")}
+    <br>${L("要用余款付新的 invoice：点上面那笔收款，在下面分配给新的 invoice，不用另外记一笔。","To use it on a new invoice, open that payment and apply it below — don't record a new payment.")}</div>`:""}
   <h3>${L("这笔钱付哪些 invoice","Apply to invoices")}</h3>
   ${f.customer_id?(list.length?`<div class="tw"><table><thead><tr><th>Invoice No</th><th>${L("日期","Date")}</th><th>Due</th><th class="num">Total</th><th class="num">${L("未付","Balance")}</th><th class="num">${L("这次付","Apply")}</th></tr></thead><tbody>
     ${list.map(i=>`<tr><td>${esc(i.invoice_no)}</td><td>${dmy(i.invoice_date)}</td><td>${dmy(i.due_date)}</td><td class="num">${money(i.total)}</td><td class="num">${money(balExcl(i,f.id))}</td>
@@ -1113,7 +1118,9 @@ function exportARAP(){const td=today();
   exportXlsx(`${S.company}_AR_AP_${td}.xlsx`,[
     {name:"AR Summary",info:[["AR Summary",settingsOf(S.company).name],["As at",dmy(td)]],cols:sumCols,
       rows:arList.map((i,n)=>[n+1,i.invoice_date,i.invoice_no,custName(i.customer_id),invDesc(i),i.amount_before_gst,i.gst_amount,i.total]),
-      total:["Total","","","","",sum(arList,i=>i.amount_before_gst),sum(arList,i=>i.gst_amount),sum(arList,i=>i.total)]},
+      total:["Total","","","","",sum(arList,i=>i.amount_before_gst),sum(arList,i=>i.gst_amount),sum(arList,i=>i.total)],
+      after:(()=>{const cr=S.d.payments.filter(p=>payUnalloc(p)>0.005);if(!cr.length)return[];const out=sum(arList,balOf),c=sum(cr,payUnalloc);
+        return[["Outstanding (after part payments)",out],...cr.map(p=>[`Less overpayment: ${custName(p.customer_id)} (${dmy(p.payment_date)} ${p.reference||p.method||""})`,-payUnalloc(p),"amber"]),["Net receivable",r2(out-c)]]})()},
     {name:"AP Summary",info:[["AP Summary","All suppliers"],["As at",dmy(td)]],cols:sumCols,
       rows:apList.map((x,n)=>[n+1,x.invoice_date,x.invoice_no,supName(x.supplier_id),x.description||"",apBase(x),apGst(x),x.total]),
       total:["Total","","","","",sum(apList,apBase),sum(apList,apGst),sum(apList,x=>x.total)]},
@@ -1226,9 +1233,9 @@ async function printInv(id){const inv=invById(id);try{const dos=await fetchAll((
 /* ---- SOA：照 ETK SOA template，一页 ---- */
 const W1=["","One","Two","Three","Four","Five","Six","Seven","Eight","Nine","Ten","Eleven","Twelve","Thirteen","Fourteen","Fifteen","Sixteen","Seventeen","Eighteen","Nineteen"],W10=["","","Twenty","Thirty","Forty","Fifty","Sixty","Seventy","Eighty","Ninety"];
 const w999=n=>[n>=100?W1[Math.floor(n/100)]+" Hundred":"",(n%=100)>=20?W10[Math.floor(n/10)]+(n%10?" "+W1[n%10]:""):n?W1[n]:""].filter(Boolean).join(" ");
-function amtWords(x){x=Math.abs(r2(x));let d=Math.floor(x+1e-9);const c=Math.round((x-d)*100),p=[];
+function amtWords(x){const neg=r2(x)<-0.005;x=Math.abs(r2(x));let d=Math.floor(x+1e-9);const c=Math.round((x-d)*100),p=[];
   for(const[v,w]of[[1e6,"Million"],[1e3,"Thousand"],[1,""]]){const q=Math.floor(d/v);if(q){p.push(w999(q)+(w?" "+w:""));d%=v}}
-  return `Singapore Dollar ${p.join(" ")||"Zero"} Dollar${Math.floor(x)===1?"":"s"}${c?` and ${w999(c)} Cents`:""}.`}
+  return `${neg?"Credit Balance : ":""}Singapore Dollar ${p.join(" ")||"Zero"} Dollar${Math.floor(x)===1?"":"s"}${c?` and ${w999(c)} Cents`:""}.`}
 function soaLedger(cid,asOf){
   const inv=S.d.invoices.filter(i=>i.customer_id===cid&&i.company===S.company&&i.status!=="Cancelled"&&i.invoice_date<=asOf)
     .map(i=>({date:i.invoice_date,type:"IN",ref:i.invoice_no,desc:/interest/i.test(i.description||"")?"Interest":"Invoice",dr:Number(i.total)||0,cr:0}));
@@ -1257,8 +1264,8 @@ function printSOA(){const cid=S.soaCust,c=custOf(cid),s=settingsOf(S.company),D=
   </tbody></table></div>
   <table class="wd"><colgroup><col style="width:85%"><col style="width:15%"></colgroup><tr><td>${esc(amtWords(G.total))}</td><td>${bl(G.total)}</td></tr></table>
   <div class="snote">Note : Payment should be made by crossed cheque in favour of <b>${esc(payeeOf(s))}</b><br>Bank transfer: ${esc(bank)}</div>
-  <table class="ag"><tr><td>Current</td><td>30 days</td><td>60 days</td><td>90 days</td><td>90+</td></tr>
-  <tr>${[D.ag.cur,D.ag.d30,D.ag.d60,D.ag.d90,D.ag.over].map(v=>`<td>${v>0.005?"$"+money(v):""}</td>`).join("")}</tr></table>
+  <table class="ag"><tr><td>Current</td><td>30 days</td><td>60 days</td><td>90 days</td><td>90+</td>${D.credit>0.005?"<td>Less : Overpayment</td>":""}</tr>
+  <tr>${[D.ag.cur,D.ag.d30,D.ag.d60,D.ag.d90,D.ag.over].map(v=>`<td>${v>0.005?"$"+money(v):""}</td>`).join("")}${D.credit>0.005?`<td>($${money(D.credit)})</td>`:""}</tr></table>
   <div class="nb2">- Invoices considered correct unless disputes notified to us within SEVEN (7) days from date of invoice<br>- Interest at the rate of 1.5% per month will be charged on all overdue amounts</div></div>`;
   document.title=`${S.company} SOA - ${(c.name||"").replace(/[\\/:*?"<>|]+/g," ")} ${dmy(S.soaAsOf).replace(/\//g,"-")}`;setTimeout(()=>{window.print();document.title="ETK · L3H 开单系统"},100)}
 
