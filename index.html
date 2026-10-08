@@ -296,6 +296,8 @@ function findRate(c,svc,date){return S.d.rates.filter(r=>r.customer_id===c&&r.se
   .sort((a,b)=>b.effective_from.localeCompare(a.effective_from))[0]||null}
 function findSurcharge(c,svc,date){const s=S.d.customer_surcharges.filter(x=>x.customer_id===c&&(!x.service||x.service===svc)&&inRange(date,x.start_date,x.end_date))
   .sort((a,b)=>(b.service?1:0)-(a.service?1:0)||b.start_date.localeCompare(a.start_date))[0];return s?Number(s.amount_per_do):0}
+const isDayRate=r=>!!r&&/8\s*hrs?|day|天/i.test(r.unit||"");
+const baseHrsOf=r=>Number(r?.min_hours)||8;
 function recompute(f){
   f.shift=f.service==="TMA"?shiftOf(f.start_time):null;
   const rs=f.service==="TMA"?(f.shift?`TMA ${f.shift}`:null):f.service;
@@ -305,7 +307,11 @@ function recompute(f){
   if(!f._rateTouched)f.rate=rate?Number(rate.price):null;
   if(!f._surTouched)f.surcharge=findSurcharge(f.customer_id,f.service,f.do_date);
   if(!f._descTouched)f.description=f.service==="TMA"&&f.shift?`TMA Lorry ${f.shift} Work`:(f.service||"");
-  f.amount=(f.billable_hours!=null&&f.rate!=null)?r2(f.billable_hours*f.rate+(Number(f.surcharge)||0)):null;
+  if(isDayRate(rate)){const base=baseHrsOf(rate),ot=f.billable_hours!=null?r2(Math.max(0,f.billable_hours-base)):null;
+    f._otHours=ot;f._otRate=Number(rate.ot_rate)||0;
+    f.amount=(f.billable_hours!=null&&f.rate!=null)?r2(Number(f.rate)+ot*f._otRate+(Number(f.surcharge)||0)):null}
+  else{f._otHours=null;f._otRate=null;
+    f.amount=(f.billable_hours!=null&&f.rate!=null)?r2(f.billable_hours*f.rate+(Number(f.surcharge)||0)):null}
   return f;
 }
 const paidOf=inv=>sum(S.d.payment_allocations.filter(a=>a.invoice_id===inv.id),a=>a.amount);
@@ -434,6 +440,7 @@ const noRateMsg=f=>(f.customer_id&&f.service&&(f.service!=="TMA"||f.start_time)&
 function calcView(f){return `<div>Day/Night<b>${f.shift?`<span class="tag ${f.shift}">${f.shift}</span>`:"—"}</b></div>
   <div>${L("实际小时","Actual hrs")}<b>${f.actual_hours??"—"}</b></div>
   <div>${L("计费小时","Billable hrs")}<b>${f.billable_hours??"—"}${f.hours_overridden?` <small class="mute" style="font-size:12px">${L("手动","manual")}</small>`:""}</b></div>
+  ${f._otHours!=null?`<div>OT<b>${f._otHours} hr × $${money(f._otRate)}</b></div>`:""}
   <div class="total">${L("金额","Amount")}<b>${f.amount!=null?"$"+money(f.amount):"—"}</b></div>`}
 function doInput(e){
   const el=e.target,f=S.doForm;if(!el.name)return;S.dirty=true;let v=el.value;
@@ -852,10 +859,10 @@ const ENT={
     F("email","text",0,["Email（多个用逗号分开）","Email (separate with commas)"]),F("whatsapp","text",0,["WhatsApp","WhatsApp"]),F("tel","text",0,["电话","Tel"]),F("fax","text",0,["Fax","Fax"]),F("address","textarea",0,["地址","Address"]),F("remark","text",0,["Remark","Remark"])],
     cols:["name","payment_terms_days","attention","email","whatsapp"]},
   vehicles:{scoped:1,label:["车牌","Vehicles"],fields:[F("plate","text",1,["车牌","Vehicle No"]),F("vehicle_type","text",0,["车型","Type"]),F("remark","text",0,["Remark","Remark"])],cols:["plate","vehicle_type","remark"]},
-  rates:{scoped:1,label:["价钱","Rates"],fields:[F("customer_id","customer",1,["客户","Customer"]),F("service","rateService",1,["Service","Service"]),F("unit","text",0,["单位","Unit"],"per hr"),
-    F("price","money",1,["价钱","Price"]),F("effective_from","date",1,["生效日期","Effective from"]),F("effective_to","date",0,["结束日期","Effective to"]),
+  rates:{scoped:1,label:["价钱","Rates"],fields:[F("customer_id","customer",1,["客户","Customer"]),F("service","rateService",1,["Service","Service"]),F("unit","rateUnit",0,["计价方式","Unit"],"per hr"),
+    F("price","money",1,["价钱（按小时 = 每小时；8 小时价 = 8 小时的价钱）","Price (per hr, or price for 8 hrs)"]),F("ot_rate","money",0,["OT 每小时（8 小时价才用）","OT per hr (for 8-hr rate)"]),F("effective_from","date",1,["生效日期","Effective from"]),F("effective_to","date",0,["结束日期","Effective to"]),
     F("break_after_hours","number",0,["超过几小时扣吃饭","Meal break if over (hrs)"]),F("break_hours","number",0,["扣几小时","Deduct (hrs)"]),F("min_hours","number",0,["最少小时","Min hrs"]),F("remark","text",0,["Remark","Remark"])],
-    cols:["customer_id","service","price","unit","effective_from","effective_to","break_after_hours","break_hours","min_hours","remark"],
+    cols:["customer_id","service","price","unit","ot_rate","effective_from","effective_to","break_after_hours","break_hours","min_hours","remark"],
     note:["改价钱：旧的那条填「结束日期」，再新增一条新价钱和生效日期。这样旧的单还是用旧价钱，也能查到几时改了什么价钱。","To change a price: set an end date on the old rate, then add a new rate with its effective date. Old DOs keep the old price and the history stays visible."]},
   customer_surcharges:{scoped:1,label:["Diesel Surcharge（客户）","Diesel surcharge (customer)"],fields:[F("customer_id","customer",1,["客户","Customer"]),F("service","serviceOpt",0,["Service","Service"]),
     F("amount_per_do","money",1,["每张 DO 金额","Amount per DO"]),F("start_date","date",1,["开始日期","Start date"]),F("end_date","date",0,["结束日期","End date"]),F("remark","text",0,["Remark","Remark"])],
@@ -910,6 +917,7 @@ function genInput(f,v){const lab=L(...f.label)+(f.req?" *":"");v=v??f.def??"";
     case"supplier":return `<label class="f">${lab}<select name="${f.k}">${optList(S.d.suppliers.map(s=>[s.id,s.name]),v,"")}</select></label>`;
     case"rateService":return `<label class="f">${lab}<select name="${f.k}">${optList(RATE_SERVICES[S.company].map(s=>[s,s]),v)}</select></label>`;
     case"serviceOpt":return `<label class="f">${lab}<select name="${f.k}">${optList(SERVICES[S.company].map(s=>[s,s]),v,L("所有 service","All services"))}</select></label>`;
+    case"rateUnit":return `<label class="f">${lab}<select name="${f.k}">${optList([["per hr",L("按小时（per hr）","per hr")],["per 8 hrs",L("8 小时一个价 + OT（per 8 hrs）","per 8 hrs + OT")]],v)}</select></label>`;
     case"terms":return `<label class="f">${lab}<select name="${f.k}">${optList(TERMS.map(d=>[d,termLabel(d)]),v)}</select></label>`;
     case"chargedTo":return `<label class="f">${lab}<input name="${f.k}" list="chargedList" value="${esc(v)}"><datalist id="chargedList"><option value="CHC"><option value="ETK"><option value="L3H"></datalist></label>`;
     case"bool":return `<label class="f">${lab}<select name="${f.k}">${optList([["true",L("是","Yes")],["false",L("停止","Stopped")]],String(v))}</select></label>`;
@@ -965,10 +973,10 @@ function masterView(){return `<div class="panel"><h2>${L("导入现有资料","I
   <label class="btn file">⬆ ${L("上传 Excel 导入","Upload Excel")}<input type="file" accept=".xlsx,.xls,.csv" hidden onchange="importExcel(this)"></label></div></div>
   ${genView(["customers","vehicles","rates","customer_surcharges"],"master")}`}
 const TPL={Customers:["Name","Payment Terms (0=COD,7,14,30,60)","Attn","Email","WhatsApp","Tel","Fax","Address"],Vehicles:["Vehicle No","Type"],
-  Rates:["Customer","Service","Unit","Price","Effective From","Effective To","Meal break if over (hrs)","Deduct (hrs)","Min hrs"],
+  Rates:["Customer","Service","Unit","Price","Effective From","Effective To","Meal break if over (hrs)","Deduct (hrs)","Min hrs","OT per hr"],
   Invoices:["Invoice No","Invoice Date","Customer","Project","Description","Amt before GST","GST","Total","Paid so far","Customer PO"]};
 function downloadTemplate(){const wb=XLSX.utils.book_new();
-  const info=[["怎样填 / How to fill"],["日期格式：2026-08-13 或 13/8/2026"],[`Service（Rates）：${RATE_SERVICES[S.company].join(" / ")}`],["Customer 名称要跟 Customers sheet 一样"],["Invoices：只填还没收完钱的；Paid so far = 已经收了多少"],["这个 Instructions sheet 不会被导入"]];
+  const info=[["怎样填 / How to fill"],["日期格式：2026-08-13 或 13/8/2026"],[`Service（Rates）：${RATE_SERVICES[S.company].join(" / ")}`],["Customer 名称要跟 Customers sheet 一样"],["Invoices：只填还没收完钱的；Paid so far = 已经收了多少"],["Rates 的 Unit：per hr（按小时）或 per 8 hrs（8 小时一个价 + OT，OT per hr 填 OT 每小时价钱）"],["这个 Instructions sheet 不会被导入"]];
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(info),"Instructions");
   for(const[n,h]of Object.entries(TPL)){const ws=XLSX.utils.aoa_to_sheet([h]);ws["!cols"]=h.map(x=>({wch:Math.max(14,x.length+2)}));XLSX.utils.book_append_sheet(wb,ws,n)}
   XLSX.writeFile(wb,`${S.company}_import_template.xlsx`)}
@@ -990,7 +998,7 @@ async function importExcel(input){const file=input.files[0];if(!file)return;inpu
     await loadAll();const cid=n=>S.d.customers.find(c=>c.name.trim().toLowerCase()===String(n||"").trim().toLowerCase());
     const rRows=rows("Rates"),bad=[];
     const rIns=rRows.map(r=>{const c=cid(r[0]);if(!c||!RATE_SERVICES[co].includes(String(r[1]).trim())||!toYMD(r[4])){bad.push(r[0]+" / "+r[1]);return null}
-      return{company:co,customer_id:c.id,service:String(r[1]).trim(),unit:r[2]||"per hr",price:numOr(r[3],0),effective_from:toYMD(r[4]),effective_to:toYMD(r[5]),break_after_hours:numOr(r[6]),break_hours:numOr(r[7]),min_hours:numOr(r[8])}}).filter(Boolean);
+      return{company:co,customer_id:c.id,service:String(r[1]).trim(),unit:r[2]||"per hr",price:numOr(r[3],0),effective_from:toYMD(r[4]),effective_to:toYMD(r[5]),break_after_hours:numOr(r[6]),break_hours:numOr(r[7]),min_hours:numOr(r[8]),...(numOr(r[9])!=null?{ot_rate:numOr(r[9])}:{})}}).filter(Boolean);
     if(rIns.length){const{error}=await sb.from("rates").insert(rIns);if(error)throw error}rep.push(`${L("价钱","Rates")}: +${rIns.length}${bad.length?` (${L("有问题","problems")}: ${bad.join(", ")})`:""}`);
     const iRows=rows("Invoices"),hi=new Set(S.d.invoices.map(i=>i.invoice_no));let ni=0;const ibad=[];
     for(const r of iRows){const no=String(r[0]).trim(),c=cid(r[2]),d=toYMD(r[1]);if(!no||hi.has(no))continue;if(!c||!d){ibad.push(no);continue}
@@ -1218,8 +1226,9 @@ function chunkPages(rows,per,make){const ch=[];for(let i=0;i<rows.length;i+=per)
 function breakdownHTML(inv,dos){const g={};for(const d of dos)(g[d.service]=g[d.service]||[]).push(d);const c=custOf(inv.customer_id);
   return Object.entries(g).map(([svc,list])=>{const month=sumMonth(inv,list);
     if(svc==="TMA"&&!inv.project){
-      const rows=list.map(d=>{const rr=findRate(d.customer_id,`TMA ${d.shift||"Day"}`,d.do_date),mx=Number(rr?.min_hours)||8,bh=Number(d.billable_hours)||0,hr=Number(d.rate)||0,
-        ot=r2(Math.max(0,bh-mx)),otAmt=r2(ot*hr),sur=Number(d.surcharge)||0,tot=r2(Number(d.amount)||0);return{d,mx,th:Math.min(bh,mx),ot,day:r2(hr*mx),hr,amt:r2(tot-otAmt-sur),otAmt,sur,tot}});
+      const rows=list.map(d=>{const rr=findRate(d.customer_id,`TMA ${d.shift||"Day"}`,d.do_date),mx=baseHrsOf(rr),bh=Number(d.billable_hours)||0,sur=Number(d.surcharge)||0,tot=r2(Number(d.amount)||0),ot=r2(Math.max(0,bh-mx));
+        if(isDayRate(rr)){const day=Number(d.rate)||0,otAmt=r2(tot-sur-day),otr=ot?r2(otAmt/ot):(Number(rr.ot_rate)||0);return{d,mx,th:Math.min(bh,mx),ot,day,hr:otr,amt:day,otAmt,sur,tot}}
+        const hr=Number(d.rate)||0,otAmt=r2(ot*hr);return{d,mx,th:Math.min(bh,mx),ot,day:r2(hr*mx),hr,amt:r2(tot-otAmt-sur),otAmt,sur,tot}});
       const S2=k=>sum(rows,x=>x[k]);
       return chunkPages(rows,16,(rs,pi,last)=>`${sumHead([`Hire Of TMA Truck Summary Report For ${month}`,`INV NO : ${inv.invoice_no}`,`Customer : ${c.name||""}`])}
       <table class="sm"><colgroup><col style="width:4%"><col style="width:8%"><col style="width:8%"><col style="width:6.5%"><col style="width:6.5%"><col style="width:6.5%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:8%"><col style="width:7%"><col style="width:8%"><col style="width:7%"><col style="width:6.5%"><col style="width:8%"></colgroup>
