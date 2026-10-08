@@ -125,6 +125,16 @@ label.file{cursor:pointer}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 
 /* ===== 打印 / PDF ===== */
+#cropOv{position:fixed;inset:0;z-index:200;background:rgba(5,8,12,.82);display:flex;align-items:center;justify-content:center;padding:12px}
+#cropOv .cropbox{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;width:min(960px,100%);max-height:100%;overflow:auto}
+#cropOv .crophead{display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;margin-bottom:8px}
+#cropOv .cropstage{position:relative;display:flex;justify-content:center;touch-action:none;user-select:none;background:#0b0f14;border-radius:8px;padding:8px}
+#cropOv canvas{display:block;max-width:100%}
+#cropOv .cropsel{position:absolute;border:2px solid var(--amber);box-shadow:0 0 0 9999px rgba(0,0,0,.45);cursor:move;touch-action:none}
+#cropOv .cropsel i{position:absolute;width:22px;height:22px;background:var(--amber);border-radius:50%;border:2px solid #fff}
+#cropOv .cropsel i[data-h=nw]{left:-12px;top:-12px;cursor:nwse-resize}#cropOv .cropsel i[data-h=ne]{right:-12px;top:-12px;cursor:nesw-resize}
+#cropOv .cropsel i[data-h=sw]{left:-12px;bottom:-12px;cursor:nesw-resize}#cropOv .cropsel i[data-h=se]{right:-12px;bottom:-12px;cursor:nwse-resize}
+#cropOv .actions{margin-top:10px;flex-wrap:wrap}
 #print{display:none}
 /* margin 0 = 浏览器不会印网址、日期、页码 */
 @page{size:A4 portrait;margin:0}
@@ -269,7 +279,7 @@ const inRange=(d,from,to)=>d&&from&&from<=d&&(!to||to>=d);
 const sum=(a,f)=>r2(a.reduce((s,x)=>s+(Number(f(x))||0),0));
 
 /* ================= 状态 ================= */
-const S={lang:pref("lang","zh"),theme:pref("theme","dark"),company:pref("company","ETK"),
+const S={doPerPage:pref("doPerPage","6"),lang:pref("lang","zh"),theme:pref("theme","dark"),company:pref("company","ETK"),
   tab:"do",month:today().slice(0,7),unbilledOnly:false,user:null,live:false,lastSync:null,dirty:false,pending:false,
   d:{customers:[],vehicles:[],rates:[],customer_surcharges:[],delivery_orders:[],invoices:[],invoice_lines:[],payments:[],
      payment_allocations:[],reminders:[],soa_sends:[],monthly_fix:[],monthly_fix_log:[],suppliers:[],supplier_invoices:[],
@@ -432,6 +442,7 @@ function doView(){
   </div>
   <div class="calc" id="calc">${calcView(f)}</div>
   <div class="warn" id="noRate">${noRateMsg(f)}</div>
+  ${doPhotoBox(f)}
   ${billed?`<div class="note">${L(`这张 DO 已开在 invoice ${esc(billed.invoice_no)}，改金额后要到 Invoice 重新生成明细。`,`Billed on ${esc(billed.invoice_no)}. Rebuild the invoice lines after changing amounts.`)}</div>`:""}
   <div class="warn" id="doWarn"></div>
   <div class="actions"><button class="btn" onclick="saveDO()">${L("保存","Save")}</button>
@@ -468,15 +479,17 @@ async function saveDO(){
     do_no:f.do_no.trim(),customer_po:f.customer_po||null,start_time:f.start_time||null,end_time:f.end_time||null,from_loc:f.from_loc||null,to_loc:f.to_loc||null,
     description:f.description||null,actual_hours:f.actual_hours,billable_hours:f.billable_hours,hours_overridden:!!f.hours_overridden,rate:f.rate,
     surcharge:Number(f.surcharge)||0,amount:f.amount,remark:f.remark||null};
-  const{error}=f.id?await sb.from("delivery_orders").update(row).eq("id",f.id):await sb.from("delivery_orders").insert(row);
-  if(error){w.textContent=error.message;return}
-  toast(L("已保存到云端","Saved to cloud"));
+  const res=f.id?await sb.from("delivery_orders").update(row).eq("id",f.id).select().single():await sb.from("delivery_orders").insert(row).select().single();
+  if(res.error){w.textContent=res.error.message;return}
+  const pend=f._pending||[];if(pend.length){try{for(const x of pend)await storeJpeg("do",res.data.id,"DO",x.blob,x.name)}catch(e){toast(L("DO 已保存，但照片上传失败：","DO saved, photo upload failed: ")+(e.message||e));}}
+  toast(L("已保存到云端","Saved to cloud")+(pend.length?L(` · ${pend.length} 张照片`,` · ${pend.length} photo(s)`):""));
   const keep={do_date:f.do_date,customer_id:f.customer_id,project:f.project,service:f.service};
   S.doForm=null;done();await loadDO();S.lastSync=new Date();S.doForm=recompute({...blankDO(),...keep});render();
   document.querySelector('.grid [name="do_no"]')?.focus();
 }
 async function delDO(id){if(!confirm(L("确定删除这张 DO？","Delete this DO?")))return;
   const{error}=await sb.from("delivery_orders").delete().eq("id",id);if(error)return toast(error.message);
+  const ph=doPhotos(id);if(ph.length){await sb.storage.from("attachments").remove(ph.map(a=>a.file_path));await sb.from("attachments").delete().in("id",ph.map(a=>a.id));S.d.attachments=S.d.attachments.filter(a=>!ph.includes(a))}
   toast(L("已删除","Deleted"));S.doForm=null;done();await loadDO();render()}
 function editDO(id){const d=S.d.delivery_orders.find(x=>x.id===id);if(!d)return;
   S.doForm=recompute({...d,start_time:d.start_time?.slice(0,5)||"",end_time:d.end_time?.slice(0,5)||"",_rateTouched:true,_surTouched:true,_descTouched:true});
@@ -487,12 +500,12 @@ function doList(){
     <label class="chk"><input type="checkbox" ${S.unbilledOnly?"checked":""} onchange="S.unbilledOnly=this.checked;render()">${L("只看未开单","Unbilled only")}</label>
     <button class="btn sec" onclick="exportDO()">⬇ Excel</button></div>
   ${rows.length?`<div class="tw"><table><thead><tr><th>${L("日期","Date")}</th><th>DO No</th><th>${L("客户","Customer")}</th><th>Project</th><th>Service</th><th>${L("车牌","Vehicle")}</th>
-    <th>In</th><th>Out</th><th>Day/Night</th><th>From</th><th>To</th><th class="num">${L("计费小时","Hrs")}</th><th class="num">Rate</th><th class="num">Surcharge</th><th class="num">${L("金额","Amount")}</th><th>Invoice</th></tr></thead><tbody>
+    <th>In</th><th>Out</th><th>Day/Night</th><th>From</th><th>To</th><th class="num">${L("计费小时","Hrs")}</th><th class="num">Rate</th><th class="num">Surcharge</th><th class="num">${L("金额","Amount")}</th><th>Invoice</th><th>📷</th></tr></thead><tbody>
   ${rows.map(d=>`<tr class="click" onclick="editDO('${d.id}')"><td>${dmy(d.do_date)}</td><td>${esc(d.do_no)}</td><td>${esc(custName(d.customer_id))}</td><td>${esc(d.project)}</td><td>${esc(d.service)}</td>
     <td>${esc(d.plate)}</td><td>${d.start_time?.slice(0,5)||""}</td><td>${d.end_time?.slice(0,5)||""}</td><td>${d.shift?`<span class="tag ${d.shift}">${d.shift}</span>`:""}</td>
     <td>${esc(d.from_loc)}</td><td>${esc(d.to_loc)}</td><td class="num">${d.billable_hours??""}</td><td class="num">${money(d.rate)}</td><td class="num">${Number(d.surcharge)?money(d.surcharge):""}</td>
-    <td class="num">${money(d.amount)}</td><td>${d.invoice_id?esc(invById(d.invoice_id)?.invoice_no||"✓"):`<span class="tag mute">${L("未开单","Unbilled")}</span>`}</td></tr>`).join("")}</tbody>
-  <tfoot><tr><td colspan="11">${L("合计","Total")} ${rows.length} DO</td><td class="num">${sum(rows,d=>d.billable_hours)}</td><td></td><td></td><td class="num">$${money(sum(rows,d=>d.amount))}</td><td></td></tr></tfoot></table></div>`
+    <td class="num">${money(d.amount)}</td><td>${d.invoice_id?esc(invById(d.invoice_id)?.invoice_no||"✓"):`<span class="tag mute">${L("未开单","Unbilled")}</span>`}</td><td>${doPhotos(d.id).length?`<span class="tag ok">${doPhotos(d.id).length}</span>`:`<span class="tag warn">—</span>`}</td></tr>`).join("")}</tbody>
+  <tfoot><tr><td colspan="11">${L("合计","Total")} ${rows.length} DO</td><td class="num">${sum(rows,d=>d.billable_hours)}</td><td></td><td></td><td class="num">$${money(sum(rows,d=>d.amount))}</td><td></td><td>${rows.filter(d=>!doPhotos(d.id).length).length?`<span class="tag warn">${rows.filter(d=>!doPhotos(d.id).length).length} ${L("缺","missing")}</span>`:""}</td></tr></tfoot></table></div>`
   :`<div class="panel empty">${L("这个月还没有 DO，在上面新增第一张。","No DOs this month yet. Add the first one above.")}</div>`}</section>`;
 }
 
@@ -506,14 +519,15 @@ function invView(){
     <button class="btn" onclick="openInvForm()">${L("新增 Invoice","New invoice")}</button><button class="btn sec" onclick="exportInv()">⬇ Excel</button></div>
   ${rows.length?`<div class="tw"><table><thead><tr><th>No</th><th>Invoice Date</th><th>Invoice No</th><th>${L("客户","Customer")}</th><th>Description</th>
     <th class="num">Amt before GST</th><th class="num">GST</th><th class="num">Total</th><th class="num">${L("已付","Paid")}</th><th class="num">${L("余额","Balance")}</th>
-    <th>Due</th><th>${L("状态","Status")}</th><th>Checked</th><th>${L("发送","Sent")}</th><th>${L("最新付款","Last paid")}</th></tr></thead><tbody>
+    <th>Due</th><th>${L("状态","Status")}</th><th>Checked</th><th>${L("签名","Signed")}</th><th>${L("发送","Sent")}</th><th>${L("最新付款","Last paid")}</th></tr></thead><tbody>
   ${rows.map((i,n)=>`<tr class="click" onclick="openInv('${i.id}')"><td>${n+1}</td><td>${dmy(i.invoice_date)}</td><td>${esc(i.invoice_no)}</td><td>${esc(custName(i.customer_id))}</td>
     <td class="wrap">${esc(desc(i).slice(0,80))}</td><td class="num">${money(i.amount_before_gst)}</td><td class="num">${money(i.gst_amount)}</td><td class="num">${money(i.total)}</td>
     <td class="num">${money(paidOf(i))}</td><td class="num">${money(balOf(i))}</td><td>${dmy(i.due_date)}</td><td>${statusTag(i)}</td>
     <td>${i.checked?`<span class="tag ok">✓</span>`:`<span class="tag warn">${L("未检查","Not checked")}</span>`}</td>
+    <td>${signedOf(i)?`<span class="tag ok">✓</span>`:i.sent_at?"":`<span class="tag warn">${L("未签","Unsigned")}</span>`}</td>
     <td>${i.sent_at?`${dmy(i.sent_at)} ${esc(i.sent_via||"")}`:`<span class="tag mute">${L("未发","Not sent")}</span>`}</td><td>${dmy(lastPayDate(i))}</td></tr>`).join("")}</tbody>
   <tfoot><tr><td colspan="5">${L("合计","Total")} ${rows.length}</td><td class="num">${money(sum(rows,i=>i.amount_before_gst))}</td><td class="num">${money(sum(rows,i=>i.gst_amount))}</td>
-    <td class="num">${money(sum(rows,i=>i.total))}</td><td class="num">${money(sum(rows,paidOf))}</td><td class="num">${money(sum(rows,balOf))}</td><td colspan="5"></td></tr></tfoot></table></div>`
+    <td class="num">${money(sum(rows,i=>i.total))}</td><td class="num">${money(sum(rows,paidOf))}</td><td class="num">${money(sum(rows,balOf))}</td><td colspan="6"></td></tr></tfoot></table></div>`
   :`<div class="panel empty">${L("还没有 invoice。按「新增 Invoice」，选客户和期间，系统会带出未开单的 DO。","No invoices yet. Press New invoice, pick a customer and period, and unbilled DOs will load.")}</div>`}`;
 }
 function prevMonthRange(){const d=new Date();return[ymd(new Date(d.getFullYear(),d.getMonth()-1,1)),ymd(new Date(d.getFullYear(),d.getMonth(),0))]}
@@ -627,7 +641,8 @@ async function saveInv(){
 }
 const lineUnit=l=>l.unit||(l.unit_price==null?"hrs":"LS");
 
-function openInv(id){S.modal={kind:"inv",id,edits:null};render();
+function openInv(id){S.modal={kind:"inv",id,edits:null,dos:null};render();
+  sb.from("delivery_orders").select("id,do_no,do_date").eq("invoice_id",id).then(({data})=>{if(S.modal?.id===id){S.modal.dos=data||[];render()}});
   sb.from("invoice_edits").select("*").eq("invoice_id",id).order("created_at",{ascending:false}).then(({data})=>{if(S.modal?.id===id){S.modal.edits=data||[];render()}})}
 function invDetailView(id){
   const i=invById(id);if(!i)return `<div class="mhead"><h2>—</h2><button class="close" onclick="closeModal()">✕</button></div>`;
@@ -651,6 +666,7 @@ function invDetailView(id){
     <button class="btn sec" onclick="openPayForm({customer_id:'${i.customer_id}',invoice_id:'${id}'})">${L("记录收款","Record payment")}</button>
     ${bal>0.005?`<button class="btn sec" onclick="remind('${id}','WhatsApp')">${L("WhatsApp 提醒","WhatsApp reminder")}</button><button class="btn sec" onclick="remind('${id}','Email')">${L("Email 提醒","Email reminder")}</button>`:""}
     <button class="btn sec" onclick="openInvForm(invById('${id}'))">${L("修改","Edit")}</button><button class="btn del" onclick="delInv('${id}')">${L("删除","Delete")}</button></div>
+  ${signBox(i)}
   <div class="kv" style="margin-top:14px"><div><span>${L("检查","Checked")}</span>${i.checked?`✓ ${i.checked_at?dmy(i.checked_at.slice(0,10)):""}`:L("未检查","Not yet")}</div>
     <div><span>${L("发送","Sent")}</span>${i.sent_at?`${dmy(i.sent_at)} · ${esc(i.sent_via||"")}`:L("未发送","Not sent")}</div>
     <div><label class="chk"><input type="checkbox" ${i.interest_enabled?"checked":""} onchange="setInterest('${id}',this.checked)">${L("逾期收 interest","Charge overdue interest")}</label></div></div>
@@ -670,6 +686,7 @@ function mailLink(to,subj,body){return `mailto:${emailList(to).join(",")}?subjec
 function openOut(via,c,subj,text){if(via==="WhatsApp"){if(!c.whatsapp)toast(L("客户没有 WhatsApp 号码，请在 Master List 加","No WhatsApp number for this customer"));window.open(waLink(c.whatsapp,text),"_blank")}
   else{if(!c.email)toast(L("客户没有 email，请在 Master List 加","No email for this customer"));location.href=mailLink(c.email,subj,text)}}
 async function sendInv(id,via){const i=invById(id),c=custOf(i.customer_id),s=settingsOf(i.company);
+  if(!signedOf(i)&&!confirm(L("这张 invoice 还没上传 Chris 签名的第一页。确定现在就发？","No signed page uploaded for this invoice yet. Send anyway?")))return;
   const first=(i.description||"").split("\n")[0];
   const text=`Dear ${c.attention||c.name||"Sir/Madam"},\n\nPlease find attached our invoice ${i.invoice_no} dated ${dmy(i.invoice_date)}${first?` (${first})`:""}, total $${money(i.total)}.\nPayment due on ${dmy(i.due_date)}.\n\nThank you.\n${s.name}`;
   openOut(via,c,`Invoice ${i.invoice_no} - ${s.name}`,text);
@@ -801,6 +818,8 @@ function actionLists(){const td=today(),inv=S.d.invoices.filter(i=>i.status!=="C
     apOver:S.d.supplier_invoices.filter(s=>!s.payment_date&&s.due_date&&s.due_date<td),
     mism:S.d.supplier_invoices.filter(s=>!surchargeCheck(s).ok),
     unchecked:inv.filter(i=>!i.checked),unsent:inv.filter(i=>i.checked&&!i.sent_at),
+    unsigned:inv.filter(i=>i.checked&&!signedOf(i)&&!i.sent_at),signedUnsent:inv.filter(i=>signedOf(i)&&!i.sent_at),
+    noPhoto:S.d.delivery_orders.filter(d=>!doPhotos(d.id).length),
     mfPend:S.d.monthly_fix.filter(mfApplies(m)).filter(c=>!["Billed","Skipped"].includes(mfLog(c.id,m)?.status)),
     apSoon:S.d.supplier_invoices.filter(s=>!s.payment_date&&s.due_date&&s.due_date>=td&&s.due_date<=addDays(td,7))}}
 function urgentCount(){if(!S.user)return 0;const a=actionLists();return a.overdue.length+a.apOver.length+a.mism.length}
@@ -819,7 +838,9 @@ function sumView(){
     <div class="card urgent"><h3>${L("Diesel surcharge 不对","Surcharge mismatches")} (${A.mism.length})</h3>${li(A.mism,s=>`<li onclick="S.tab='sup';S.sub.sup='supplier_invoices';render()"><span>${esc(supName(s.supplier_id))} · ${esc(s.invoice_no)}</span><span>${esc(surchargeCheck(s).t)}</span></li>`)}</div></div>
   <h2>${L("待跟进（大概正常）","To follow up (probably normal)")}</h2><div class="cards">
     <div class="card follow"><h3>${L("金额未检查","Amount not checked")} (${A.unchecked.length})</h3>${li(A.unchecked,invLi)}</div>
-    <div class="card follow"><h3>${L("已检查未发送","Checked, not sent")} (${A.unsent.length})</h3>${li(A.unsent,invLi)}</div>
+    <div class="card follow"><h3>${L("等 Chris 签名","Waiting for signature")} (${A.unsigned.length})</h3>${li(A.unsigned,invLi)}</div>
+    <div class="card follow"><h3>${L("已签名未发送","Signed, not sent")} (${A.signedUnsent.length})</h3>${li(A.signedUnsent,invLi)}</div>
+    <div class="card follow"><h3>${L("DO 没有照片（这个月）","DOs without photo (this month)")} (${A.noPhoto.length})</h3>${li(A.noPhoto,d=>`<li onclick="setTab('do');editDO('${d.id}')"><span>${esc(d.do_no)} · ${esc(custName(d.customer_id))}</span><span>${dmy(d.do_date)}</span></li>`)}</div>
     <div class="card follow"><h3>${L("本月 Monthly Fix 未开单","Monthly fix not billed this month")} (${A.mfPend.length})</h3>${li(A.mfPend,c=>`<li onclick="setTab('mf')"><span>${esc(custName(c.customer_id))} · ${esc(c.description)}</span><span>${money(c.amount)}</span></li>`)}</div>
     <div class="card follow"><h3>${L("7 天内要付 Supplier","Payables due within 7 days")} (${A.apSoon.length})</h3>${li(A.apSoon,apLi)}</div>
     ${(backupAge()==null||backupAge()>7)?`<div class="card follow"><h3>${L("该备份了","Time to back up")}</h3><ul><li onclick="setTab('set')"><span>${backupAge()==null?L("这台设备还没备份过","Never backed up on this device"):L(`上次备份 ${backupAge()} 天前`,`Last backup ${backupAge()} days ago`)}</span><span>${L("去备份","Back up")}</span></li></ul></div>`:""}</div>
@@ -1190,6 +1211,139 @@ function setView(){const s=settingsOf(S.company);
 async function saveSettings(){const fd=new FormData($("#setForm")),row={company:S.company,user_id:S.user.id};for(const[k]of SET_FIELDS)row[k]=fd.get(k)||null;
   const{error}=await sb.from("company_settings").upsert(row,{onConflict:"user_id,company"});if(error)return toast(error.message);
   toast(L("已保存","Saved"));done();await loadAll();render()}
+
+/* ================= 签名页 / DO 照片 / 寄客户版本 ================= */
+const SIGNED_KIND="Signed Invoice";
+const signedOf=i=>S.d.attachments.filter(a=>a.entity_type==="invoice"&&a.entity_id===i.id&&a.kind===SIGNED_KIND).sort((a,b)=>String(b.created_at||"").localeCompare(String(a.created_at||"")))[0]||null;
+const doPhotos=id=>S.d.attachments.filter(a=>a.entity_type==="do"&&a.entity_id===id).sort((a,b)=>String(a.created_at||"").localeCompare(String(b.created_at||"")));
+let pdfjsLoading=null;
+function loadPdfJs(){if(window.pdfjsLib)return Promise.resolve();
+  return pdfjsLoading||(pdfjsLoading=new Promise((res,rej)=>{const sc=document.createElement("script");sc.src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+    sc.onload=()=>{window.pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";res()};
+    sc.onerror=()=>{pdfjsLoading=null;rej(new Error(L("PDF 读取工具载入失败，请检查网络","Could not load the PDF reader")))};document.head.appendChild(sc)}))}
+const canvasJpeg=(cv,q)=>new Promise(r=>cv.toBlob(b=>r(b),"image/jpeg",q));
+/* 照片 → 压缩 JPEG（最长边 1600px） */
+async function compressImage(file,maxPx=1600,q=0.72){
+  const url=URL.createObjectURL(file);
+  try{const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>rej(new Error(L("读不到这张照片","Could not read this image")));i.src=url});
+    const s=Math.min(1,maxPx/Math.max(img.naturalWidth,img.naturalHeight)),w=Math.round(img.naturalWidth*s),h=Math.round(img.naturalHeight*s);
+    const cv=document.createElement("canvas");cv.width=w;cv.height=h;const cx=cv.getContext("2d");cx.fillStyle="#fff";cx.fillRect(0,0,w,h);cx.drawImage(img,0,0,w,h);
+    return await canvasJpeg(cv,q)}finally{URL.revokeObjectURL(url)}}
+/* PDF → 每页变成 JPEG（约 200dpi） */
+async function pdfToJpegs(file,maxPages=6,q=0.75){
+  await loadPdfJs();const doc=await window.pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise,out=[];
+  for(let p=1;p<=Math.min(doc.numPages,maxPages);p++){const pg=await doc.getPage(p),v0=pg.getViewport({scale:1}),sc=Math.min(2.8,1700/Math.max(v0.width,v0.height)),v=pg.getViewport({scale:sc});
+    const cv=document.createElement("canvas");cv.width=Math.round(v.width);cv.height=Math.round(v.height);const cx=cv.getContext("2d");cx.fillStyle="#fff";cx.fillRect(0,0,cv.width,cv.height);
+    await pg.render({canvasContext:cx,viewport:v}).promise;out.push(await canvasJpeg(cv,q))}
+  return out}
+async function toJpegs(file,maxPages){return /pdf$/i.test(file.type)||/\.pdf$/i.test(file.name)?pdfToJpegs(file,maxPages):[await compressImage(file)]}
+async function storeJpeg(type,id,kind,blob,origName){const path=`${S.user.id}/${type}/${id}/${Date.now()}_${Math.random().toString(36).slice(2,7)}.jpg`;
+  const up=await sb.storage.from("attachments").upload(path,blob,{contentType:"image/jpeg"});if(up.error)throw up.error;
+  const{data,error}=await sb.from("attachments").insert({entity_type:type,entity_id:id,kind,file_path:path,file_name:origName||"photo.jpg"}).select().single();if(error)throw error;
+  S.d.attachments.push(data);return data}
+const kb=n=>n>=1048576?(n/1048576).toFixed(1)+" MB":Math.max(1,Math.round(n/1024))+" KB";
+
+/* ---- DO 照片 ---- */
+async function pickDoPhotos(input){const files=[...input.files];input.value="";if(!files.length)return;const f=S.doForm;
+  try{toast(L("处理照片中…","Processing…"));const blobs=[];let n=0;const raw=[];for(const file of files)for(const b of await toJpegs(file,6))raw.push({b,name:file.name});
+    for(const x of raw){n++;const c=await cropImage(x.b,`${L("DO 照片","DO photo")} ${n} / ${raw.length}`);if(c)blobs.push({blob:await compressImage(c),name:x.name})}
+    if(!blobs.length)return;
+    if(f.id){for(const x of blobs)await storeJpeg("do",f.id,"DO",x.blob,x.name);toast(L(`已上传 ${blobs.length} 张（${kb(blobs.reduce((s,x)=>s+x.blob.size,0))}）`,`Uploaded ${blobs.length}`))}
+    else{f._pending=(f._pending||[]).concat(blobs);toast(L("照片已准备好，按「保存」时一起上传","Photos ready — they upload when you save"))}
+    S.dirty=true;render()}catch(e){toast(e.message||String(e))}}
+function doPhotoBox(f){const list=f.id?doPhotos(f.id):[],pend=f._pending||[];
+  return `<div class="att" style="margin-top:10px"><h3>${L("DO 照片","DO photo")} ${list.length||pend.length?`<span class="tag ok">${list.length+pend.length}</span>`:`<span class="tag warn">${L("还没有","None yet")}</span>`}</h3>
+  ${list.length?`<ul>${list.map(a=>`<li><a href="#" onclick="openAtt('${a.id}');return false">📷 ${esc(a.file_name||"DO")}</a> <button class="x" onclick="delAtt('${a.id}')" title="Delete">✕</button></li>`).join("")}</ul>`:""}
+  ${pend.length?`<p class="mute">${L(`已选 ${pend.length} 张（${kb(pend.reduce((s,x)=>s+x.blob.size,0))}），按「保存」时上传`,`${pend.length} ready, uploads on save`)} <button class="btn sec sm" onclick="S.doForm._pending=[];render()">${L("清除","Clear")}</button></p>`:""}
+  <div class="attadd"><label class="btn sm file">📷 ${L("拍照","Take photo")}<input type="file" hidden accept="image/*" capture="environment" onchange="pickDoPhotos(this)"></label>
+    <label class="btn sec sm file">📎 ${L("选照片 / PDF","Choose photo / PDF")}<input type="file" hidden accept="image/*,application/pdf" multiple onchange="pickDoPhotos(this)"></label></div></div>`}
+
+/* ---- 签名页 ---- */
+async function upSigned(id,input){const file=input.files[0];input.value="";if(!file)return;
+  try{toast(L("处理签名页中…","Processing signed page…"));const[raw]=await toJpegs(file,1);const c=await cropImage(raw,L("签名页 — 检查清楚再确定","Signed page — check before saving"));if(!c)return;const blob=await compressImage(c,1800,0.78);
+    await storeJpeg("invoice",id,SIGNED_KIND,blob,file.name);toast(L(`签名页已上传（${kb(file.size)} → ${kb(blob.size)}）`,`Signed page uploaded (${kb(blob.size)})`));render()}catch(e){toast(e.message||String(e))}}
+function signBox(i){const sg=signedOf(i),dos=S.modal?.dos||S.d.delivery_orders.filter(d=>d.invoice_id===i.id),noPic=dos.filter(d=>!doPhotos(d.id).length),share=!!navigator.canShare;
+  return `<div class="panel" style="margin:14px 0 4px;padding:14px 16px"><h3 style="margin-top:0">${L("寄客户版本","Customer copy")}</h3>
+  <div class="kv"><div><span>${L("签名页","Signed page")}</span>${sg?`<b class="tag ok" style="display:inline-block;width:auto">✓</b> <a href="#" onclick="openAtt('${sg.id}');return false">${dmy(String(sg.created_at||today()).slice(0,10))}</a>`:`<b class="tag warn" style="display:inline-block;width:auto">${L("还没上传","Not uploaded")}</b>`}</div>
+    <div><span>${L("DO 照片","DO photos")}</span>${dos.length?(noPic.length?`<b class="tag warn" style="display:inline-block;width:auto">${dos.length-noPic.length} / ${dos.length}</b> <em class="mute" style="font-size:12px;font-style:normal">${L("缺：","Missing: ")}${noPic.slice(0,6).map(d=>esc(d.do_no)).join(", ")}${noPic.length>6?" …":""}</em>`:`<b class="tag ok" style="display:inline-block;width:auto">${dos.length} / ${dos.length}</b>`):`<em class="mute" style="font-style:normal">${S.modal?.dos==null?L("载入中…","Loading…"):"—"}</em>`}</div></div>
+  <div class="actions" style="margin-top:10px"><label class="btn ${sg?"sec":""} file">✍️ ${sg?L("换签名页","Replace signed page"):L("上传签名页（PDF / 照片）","Upload signed page (PDF / photo)")}<input type="file" hidden accept="application/pdf,image/*" onchange="upSigned('${i.id}',this)"></label>
+    <button class="btn ${sg?"":"sec"}" onclick="custCopy('${i.id}')">⬇ ${L("下载寄客户版本","Download customer copy")}</button>
+    ${share?`<button class="btn sec" onclick="custCopy('${i.id}',1)">📤 ${L("分享到 WhatsApp / Email","Share to WhatsApp / Email")}</button>`:""}</div>
+  <p class="mute" style="font-size:13px;margin:6px 0 0">${L("会合成一个 PDF：签名的第一页 + Summary + 所有 DO 照片。","One PDF: signed first page + summary + all DO photos.")}
+    &nbsp; ${L("DO 每页","DOs per page")} <select onchange="S.doPerPage=this.value;setPref('doPerPage',this.value)">${[4,6,8].map(n=>`<option ${Number(S.doPerPage||6)===n?"selected":""}>${n}</option>`).join("")}</select></p></div>`}
+
+/* ---- 合成寄客户的 PDF ---- */
+const blobToDataURL=b=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(b)});
+const imgSize=src=>new Promise((res,rej)=>{const i=new Image();i.onload=()=>res([i.naturalWidth,i.naturalHeight]);i.onerror=rej;i.src=src});
+async function attDataURL(a){const{data,error}=await sb.storage.from("attachments").download(a.file_path);if(error)throw error;
+  if(!/^image\//.test(data.type)&&!/\.(jpe?g|png)$/i.test(a.file_path)){const[jb]=await toJpegs(new File([data],a.file_name||"f.pdf",{type:data.type||"application/pdf"}),1);return blobToDataURL(jb)}
+  return blobToDataURL(data)}
+async function addImagePage(pdf,first,src,margin){const[w,h]=await imgSize(src),land=w>h*1.15,W=land?297:210,H=land?210:297;
+  if(!first)pdf.addPage("a4",land?"landscape":"portrait");const k=Math.min((W-2*margin)/w,(H-2*margin)/h),dw=w*k,dh=h*k;
+  pdf.addImage(src,"JPEG",(W-dw)/2,(H-dh)/2,dw,dh,undefined,"FAST")}
+async function buildCustomerPdf(inv){
+  const dos=await fetchAll(()=>sb.from("delivery_orders").select("*").eq("invoice_id",inv.id).order("do_date").order("start_time"));
+  await loadPdfLibs();const{jsPDF}=window.jspdf,pdf=new jsPDF({orientation:"portrait",unit:"mm",format:"a4",compress:true}),box=$("#print"),warn=[];
+  const sg=signedOf(inv);
+  if(sg)await addImagePage(pdf,true,await attDataURL(sg),0);
+  else{warn.push(L("还没上传签名页，第一页用没签名的 invoice","No signed page — unsigned invoice used"));box.innerHTML=invoiceHTML(inv,dos.length>0)}
+  if(!sg||dos.length){if(sg)box.innerHTML="";box.innerHTML+=breakdownHTML(inv,dos);box.classList.add("cap");
+    try{if(document.fonts?.ready)await document.fonts.ready;await new Promise(r=>setTimeout(r,60));let first=!sg;
+      for(const pg of box.querySelectorAll(".pg")){const land=pg.classList.contains("land"),W=land?297:210,H=land?210:297,cv=await html2canvas(pg,{scale:2,backgroundColor:"#ffffff",logging:false});
+        if(!first)pdf.addPage("a4",land?"landscape":"portrait");first=false;let w=W,h=cv.height*W/cv.width;if(h>H){h=H;w=cv.width*H/cv.height}
+        pdf.addImage(cv.toDataURL("image/jpeg",0.85),"JPEG",0,0,w,h,undefined,"FAST")}}finally{box.classList.remove("cap")}}
+  let missing=0;const pics=[];for(const d of dos){const ph=doPhotos(d.id);if(!ph.length){missing++;continue}for(const a of ph)pics.push(a)}
+  const per=Number(S.doPerPage)||6,cols=2,rows=per/cols,M=8,G=4,cw=(210-2*M-(cols-1)*G)/cols,ch=(297-2*M-(rows-1)*G)/rows;
+  for(let i=0;i<pics.length;i++){if(i%per===0)pdf.addPage("a4","portrait");const src=await attDataURL(pics[i]),[w,h]=await imgSize(src),pos=i%per,cx=M+(pos%cols)*(cw+G),cy=M+Math.floor(pos/cols)*(ch+G);
+    const k=Math.min(cw/w,ch/h),dw=w*k,dh=h*k;pdf.addImage(src,"JPEG",cx+(cw-dw)/2,cy+(ch-dh)/2,dw,dh,undefined,"FAST");pdf.setDrawColor(190);pdf.setLineWidth(0.2);pdf.rect(cx+(cw-dw)/2,cy+(ch-dh)/2,dw,dh)}
+  if(missing)warn.push(L(`${missing} 张 DO 没有照片`,`${missing} DO(s) without photo`));
+  return{blob:pdf.output("blob"),warn}}
+async function custCopy(id,share){const inv=invById(id),name=inv.invoice_no.replace(/[\\/:*?"<>|]+/g,"-")+".pdf";
+  if(!signedOf(inv)&&!confirm(L("这张还没上传 Chris 签名的第一页。还是要下载没签名的版本吗？","No signed page uploaded yet. Download the unsigned version anyway?")))return;
+  try{toast(L("正在合成 PDF…","Building PDF…"));const{blob,warn}=await buildCustomerPdf(inv),file=new File([blob],name,{type:"application/pdf"});
+    if(share&&navigator.canShare?.({files:[file]})){try{await navigator.share({files:[file],title:name,text:`Invoice ${inv.invoice_no}`})}catch(e){if(e.name!=="AbortError")throw e;return}}
+    else{const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},2000)}
+    toast(`${name} · ${kb(blob.size)}${warn.length?" · ⚠️ "+warn.join("；"):""}`);
+    if(!inv.sent_at)setTimeout(async()=>{if(confirm(L("已经发给客户了吗？按确定记录今天的发送日期。","Sent to the customer? Press OK to record today's date."))){
+      const{error}=await sb.from("invoices").update({sent_at:today(),sent_via:share?"Share":"PDF"}).eq("id",id);if(error)return toast(error.message);await loadAll();render()}},1200)
+  }catch(e){toast(e.message||String(e))}}
+/* ---- 预览 + 裁切（上传前） ---- */
+function cropImage(blob,title){return new Promise(resolve=>{
+  const url=URL.createObjectURL(blob),img=new Image();
+  img.onerror=()=>{URL.revokeObjectURL(url);resolve(blob)};
+  img.onload=()=>{
+    let rot=0,src=img;const ov=document.createElement("div");ov.id="cropOv";
+    ov.innerHTML=`<div class="cropbox"><div class="crophead"><b>${esc(title||L("预览 / 裁切","Preview / crop"))}</b><span class="mute">${L("拉四个角或拖动框，只留 DO 单","Drag the corners or the frame to keep only the DO slip")}</span></div>
+      <div class="cropstage"><canvas></canvas><div class="cropsel"><i data-h="nw"></i><i data-h="ne"></i><i data-h="sw"></i><i data-h="se"></i></div></div>
+      <div class="actions"><button class="btn sec" data-a="rl">⟲ ${L("左转","Rotate left")}</button><button class="btn sec" data-a="rr">⟳ ${L("右转","Rotate right")}</button><button class="btn sec" data-a="full">${L("全图","Full image")}</button>
+        <span style="flex:1"></span><button class="btn sec" data-a="skip">${L("不要这张","Discard")}</button><button class="btn" data-a="ok">✓ ${L("确定","Use this")}</button></div></div>`;
+    document.body.appendChild(ov);
+    const cv=ov.querySelector("canvas"),sel=ov.querySelector(".cropsel"),stage=ov.querySelector(".cropstage");let k=1,R;
+    const draw=()=>{const w=rot%180?src.naturalHeight:src.naturalWidth,h=rot%180?src.naturalWidth:src.naturalHeight;
+      const maxW=Math.min(stage.clientWidth||900,900),maxH=Math.max(260,window.innerHeight-230);k=Math.min(maxW/w,maxH/h,1);
+      cv.width=Math.round(w*k);cv.height=Math.round(h*k);const cx=cv.getContext("2d");cx.save();cx.translate(cv.width/2,cv.height/2);cx.rotate(rot*Math.PI/180);
+      cx.drawImage(src,-src.naturalWidth*k/2,-src.naturalHeight*k/2,src.naturalWidth*k,src.naturalHeight*k);cx.restore();
+      R={x:cv.width*.03,y:cv.height*.03,w:cv.width*.94,h:cv.height*.94};place()};
+    const place=()=>{Object.assign(sel.style,{left:cv.offsetLeft+R.x+"px",top:cv.offsetTop+R.y+"px",width:R.w+"px",height:R.h+"px"})};
+    let drag=null;
+    sel.addEventListener("pointerdown",e=>{e.preventDefault();sel.setPointerCapture(e.pointerId);drag={h:e.target.dataset.h||"move",x:e.clientX,y:e.clientY,r:{...R}}});
+    sel.addEventListener("pointermove",e=>{if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y,o=drag.r,W=cv.width,H=cv.height,m=30;let{x,y,w,h}=o;
+      if(drag.h==="move"){x=Math.min(Math.max(0,o.x+dx),W-o.w);y=Math.min(Math.max(0,o.y+dy),H-o.h)}
+      else{if(drag.h.includes("w")){x=Math.min(Math.max(0,o.x+dx),o.x+o.w-m);w=o.x+o.w-x}if(drag.h.includes("e"))w=Math.min(Math.max(m,o.w+dx),W-o.x);
+        if(drag.h.includes("n")){y=Math.min(Math.max(0,o.y+dy),o.y+o.h-m);h=o.y+o.h-y}if(drag.h.includes("s"))h=Math.min(Math.max(m,o.h+dy),H-o.y)}
+      R={x,y,w,h};place()});
+    sel.addEventListener("pointerup",()=>drag=null);
+    const finish=async ok=>{if(!ok){ov.remove();URL.revokeObjectURL(url);return resolve(null)}
+      const full=document.createElement("canvas"),fw=rot%180?src.naturalHeight:src.naturalWidth,fh=rot%180?src.naturalWidth:src.naturalHeight;full.width=fw;full.height=fh;
+      const fx=full.getContext("2d");fx.translate(fw/2,fh/2);fx.rotate(rot*Math.PI/180);fx.drawImage(src,-src.naturalWidth/2,-src.naturalHeight/2);
+      const s=1/k,out=document.createElement("canvas");out.width=Math.round(R.w*s);out.height=Math.round(R.h*s);
+      const ox=out.getContext("2d");ox.fillStyle="#fff";ox.fillRect(0,0,out.width,out.height);ox.drawImage(full,R.x*s,R.y*s,R.w*s,R.h*s,0,0,out.width,out.height);
+      const b=await canvasJpeg(out,0.8);ov.remove();URL.revokeObjectURL(url);resolve(b)};
+    ov.querySelector(".actions").addEventListener("click",e=>{const a=e.target.closest("button")?.dataset.a;if(!a)return;
+      if(a==="rl"){rot=(rot+270)%360;draw()}else if(a==="rr"){rot=(rot+90)%360;draw()}else if(a==="full"){R={x:0,y:0,w:cv.width,h:cv.height};place()}
+      else finish(a==="ok")});
+    requestAnimationFrame(draw)};
+  img.src=url})}
 
 /* ================= 打印 ================= */
 const coOf=s=>(s.inv_prefix||"").startsWith("L3H")||/^L3H/i.test(s.name||"")?"L3H":"ETK";
