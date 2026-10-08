@@ -165,6 +165,8 @@ label.file{cursor:pointer}
 }
 #print .pg{box-sizing:border-box;width:210mm;min-height:297mm;padding:14mm 15mm 12mm;background:#fff;color:#000;break-after:page;page-break-after:always;overflow:hidden;position:relative}
 #print .pg:last-child{break-after:auto;page-break-after:auto}
+html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adjust:100%}
+#print,#print *{-webkit-text-size-adjust:none!important;text-size-adjust:none!important}
 #print.cap{display:block;position:fixed;left:-12000px;top:0;z-index:-1;pointer-events:none}
 #print.cap .pg{margin:0 0 10px}
 #print .land{page:land;width:297mm;min-height:210mm;height:210mm;padding:12mm 13mm 10mm}
