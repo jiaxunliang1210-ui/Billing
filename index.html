@@ -135,6 +135,20 @@ label.file{cursor:pointer}
 #cropOv .cropsel i[data-h=nw]{left:-12px;top:-12px;cursor:nwse-resize}#cropOv .cropsel i[data-h=ne]{right:-12px;top:-12px;cursor:nesw-resize}
 #cropOv .cropsel i[data-h=sw]{left:-12px;bottom:-12px;cursor:nesw-resize}#cropOv .cropsel i[data-h=se]{right:-12px;bottom:-12px;cursor:nwse-resize}
 #cropOv .actions{margin-top:10px;flex-wrap:wrap}
+.dobig{font:700 26px/1.1 "IBM Plex Sans",system-ui,sans-serif;color:var(--amber);letter-spacing:.5px}
+#photoOv{position:fixed;inset:0;z-index:190;background:rgba(5,8,12,.82);display:flex;align-items:center;justify-content:center;padding:12px}
+#photoOv .pvbox{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;width:min(1100px,100%);max-height:100%;overflow:auto}
+#photoOv .pvhead{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
+#photoOv .pvbody{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(240px,1fr);gap:16px}
+#photoOv .pvimg img{width:100%;border-radius:6px;background:#0b0f14;margin-bottom:8px}
+#photoOv .pvnone,#photoOv .gnone{display:flex;align-items:center;justify-content:center;text-align:center;min-height:180px;border:1px dashed var(--line);border-radius:8px;color:var(--mute)}
+#photoOv .kv1 div{display:flex;gap:10px;padding:6px 0;border-bottom:1px solid var(--line);font-size:14px}#photoOv .kv1 span{color:var(--mute);min-width:70px}
+#photoOv .gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+#photoOv .gcell{border:1px solid var(--line);border-radius:8px;overflow:hidden;cursor:zoom-in;background:var(--panel2)}
+#photoOv .gcell img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;background:#0b0f14}
+#photoOv .gcell .gnone{aspect-ratio:4/3;min-height:0;border:0}
+#photoOv .gcap{display:flex;flex-direction:column;padding:6px 8px;font-size:13px}#photoOv .gcap b{color:var(--amber);font-size:15px}#photoOv .gcap span{color:var(--mute)}
+@media (max-width:700px){#photoOv .pvbody{grid-template-columns:1fr}#photoOv .gal{grid-template-columns:repeat(2,minmax(0,1fr))}}
 #print{display:none}
 /* margin 0 = 浏览器不会印网址、日期、页码 */
 @page{size:A4 portrait;margin:0}
@@ -280,7 +294,7 @@ const sum=(a,f)=>r2(a.reduce((s,x)=>s+(Number(f(x))||0),0));
 
 /* ================= 状态 ================= */
 const S={doPerPage:pref("doPerPage","6"),lang:pref("lang","zh"),theme:pref("theme","dark"),company:pref("company","ETK"),
-  tab:"do",month:today().slice(0,7),unbilledOnly:false,user:null,live:false,lastSync:null,dirty:false,pending:false,
+  tab:"do",month:today().slice(0,7),unbilledOnly:false,doF:{q:"",customer:"",service:"",plate:"",shift:"",billed:"",photo:""},user:null,live:false,lastSync:null,dirty:false,pending:false,
   d:{customers:[],vehicles:[],rates:[],customer_surcharges:[],delivery_orders:[],invoices:[],invoice_lines:[],payments:[],
      payment_allocations:[],reminders:[],soa_sends:[],monthly_fix:[],monthly_fix_log:[],suppliers:[],supplier_invoices:[],
      diesel_surcharges:[],attachments:[],company_settings:[]},
@@ -495,18 +509,19 @@ function editDO(id){const d=S.d.delivery_orders.find(x=>x.id===id);if(!d)return;
   S.doForm=recompute({...d,start_time:d.start_time?.slice(0,5)||"",end_time:d.end_time?.slice(0,5)||"",_rateTouched:true,_surTouched:true,_descTouched:true});
   S.dirty=true;render();window.scrollTo({top:0,behavior:"smooth"})}
 function doList(){
-  const rows=S.d.delivery_orders.filter(d=>!S.unbilledOnly||!d.invoice_id);
+  const rows=doFiltered();
   return `<section><div class="filters"><label class="f">${L("月份","Month")}<input type="month" value="${S.month}" onchange="setMonth(this.value)"></label>
     <label class="chk"><input type="checkbox" ${S.unbilledOnly?"checked":""} onchange="S.unbilledOnly=this.checked;render()">${L("只看未开单","Unbilled only")}</label>
-    <button class="btn sec" onclick="exportDO()">⬇ Excel</button></div>
+    <button class="btn sec" onclick="exportDO()">⬇ Excel</button><button class="btn sec" onclick="photoGallery()">📷 ${L("照片核对","Photo check")}</button></div>
+  ${doFilterBar()}${rows.length!==S.d.delivery_orders.length?`<p class="mute" style="margin:0 0 8px;font-size:13px">${L(`显示 ${rows.length} / ${S.d.delivery_orders.length} 张`,`Showing ${rows.length} of ${S.d.delivery_orders.length}`)}</p>`:""}
   ${rows.length?`<div class="tw"><table><thead><tr><th>${L("日期","Date")}</th><th>DO No</th><th>${L("客户","Customer")}</th><th>Project</th><th>Service</th><th>${L("车牌","Vehicle")}</th>
     <th>In</th><th>Out</th><th>Day/Night</th><th>From</th><th>To</th><th class="num">${L("计费小时","Hrs")}</th><th class="num">Rate</th><th class="num">Surcharge</th><th class="num">${L("金额","Amount")}</th><th>Invoice</th><th>📷</th></tr></thead><tbody>
   ${rows.map(d=>`<tr class="click" onclick="editDO('${d.id}')"><td>${dmy(d.do_date)}</td><td>${esc(d.do_no)}</td><td>${esc(custName(d.customer_id))}</td><td>${esc(d.project)}</td><td>${esc(d.service)}</td>
     <td>${esc(d.plate)}</td><td>${d.start_time?.slice(0,5)||""}</td><td>${d.end_time?.slice(0,5)||""}</td><td>${d.shift?`<span class="tag ${d.shift}">${d.shift}</span>`:""}</td>
     <td>${esc(d.from_loc)}</td><td>${esc(d.to_loc)}</td><td class="num">${d.billable_hours??""}</td><td class="num">${money(d.rate)}</td><td class="num">${Number(d.surcharge)?money(d.surcharge):""}</td>
-    <td class="num">${money(d.amount)}</td><td>${d.invoice_id?esc(invById(d.invoice_id)?.invoice_no||"✓"):`<span class="tag mute">${L("未开单","Unbilled")}</span>`}</td><td>${doPhotos(d.id).length?`<span class="tag ok">${doPhotos(d.id).length}</span>`:`<span class="tag warn">—</span>`}</td></tr>`).join("")}</tbody>
+    <td class="num">${money(d.amount)}</td><td>${d.invoice_id?esc(invById(d.invoice_id)?.invoice_no||"✓"):`<span class="tag mute">${L("未开单","Unbilled")}</span>`}</td><td onclick="event.stopPropagation();viewDoPhoto('${d.id}')" title="${L("看照片","View photo")}">${doPhotos(d.id).length?`<span class="tag ok" style="cursor:zoom-in">📷 ${doPhotos(d.id).length}</span>`:`<span class="tag warn" style="cursor:pointer">—</span>`}</td></tr>`).join("")}</tbody>
   <tfoot><tr><td colspan="11">${L("合计","Total")} ${rows.length} DO</td><td class="num">${sum(rows,d=>d.billable_hours)}</td><td></td><td></td><td class="num">$${money(sum(rows,d=>d.amount))}</td><td></td><td>${rows.filter(d=>!doPhotos(d.id).length).length?`<span class="tag warn">${rows.filter(d=>!doPhotos(d.id).length).length} ${L("缺","missing")}</span>`:""}</td></tr></tfoot></table></div>`
-  :`<div class="panel empty">${L("这个月还没有 DO，在上面新增第一张。","No DOs this month yet. Add the first one above.")}</div>`}</section>`;
+  :`<div class="panel empty">${S.d.delivery_orders.length?L("没有符合筛选的 DO。","No DOs match the filters."):L("这个月还没有 DO，在上面新增第一张。","No DOs this month yet. Add the first one above.")}</div>`}</section>`;
 }
 
 /* ================= Invoice ================= */
@@ -1102,7 +1117,7 @@ async function exportXlsx(filename,sheets){
     document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500);toast(L("Excel 已下载","Excel downloaded"))
   }catch(e){toast(e.message)}}
 const LEG_INV=[["red","Overdue"],["amber","Not checked / not sent"]];
-function exportDO(){const rows=S.d.delivery_orders.filter(d=>!S.unbilledOnly||!d.invoice_id);
+function exportDO(){const rows=doFiltered();
   exportXlsx(`${S.company}_DO_${S.month}.xlsx`,[{name:`DO ${S.month}`,freezeCols:2,
     cols:[{h:"Date",t:"date"},{h:"DO No"},{h:"Customer"},{h:"Project"},{h:"Service"},{h:"Vehicle No"},{h:"In"},{h:"Out"},{h:"Day/Night"},{h:"From"},{h:"To"},
       {h:"Description"},{h:"Actual Hr",t:"num"},{h:"Billable Hr",t:"num"},{h:"Rate",t:"money"},{h:"Surcharge",t:"money"},{h:"Amount",t:"money"},{h:"Invoice No"},{h:"Customer PO"},{h:"Remark"}],
@@ -1212,6 +1227,62 @@ async function saveSettings(){const fd=new FormData($("#setForm")),row={company:
   const{error}=await sb.from("company_settings").upsert(row,{onConflict:"user_id,company"});if(error)return toast(error.message);
   toast(L("已保存","Saved"));done();await loadAll();render()}
 
+/* ================= DO 搜索 / 筛选 / 照片核对 ================= */
+function doFiltered(){const F=S.doF,q=String(F.q||"").trim().toLowerCase();
+  return S.d.delivery_orders.filter(d=>(!S.unbilledOnly||!d.invoice_id)&&(!F.customer||d.customer_id===F.customer)&&(!F.service||d.service===F.service)&&(!F.plate||d.plate===F.plate)
+    &&(!F.shift||d.shift===F.shift)&&(!F.billed||(F.billed==="yes")===!!d.invoice_id)&&(!F.photo||(F.photo==="yes")===!!doPhotos(d.id).length)
+    &&(!q||[d.do_no,custName(d.customer_id),d.plate,d.project,d.from_loc,d.to_loc,d.description,d.customer_po,invById(d.invoice_id)?.invoice_no].some(v=>String(v||"").toLowerCase().includes(q))))}
+let doQTimer=null;
+function doSearch(el){S.doF.q=el.value;clearTimeout(doQTimer);doQTimer=setTimeout(()=>{const pos=el.selectionStart;render();const n=$("#doQ");if(n){n.focus();try{n.setSelectionRange(pos,pos)}catch(e){}}},250)}
+function doFilterBar(){const F=S.doF,all=S.d.delivery_orders,on=Object.entries(F).some(([k,v])=>v&&k!=="q")||F.q;
+  const plates=[...new Set(all.map(d=>d.plate).filter(Boolean))].sort(),custs=[...new Set(all.map(d=>d.customer_id))].map(id=>[id,custName(id)]).sort((a,b)=>a[1].localeCompare(b[1]));
+  const sel=(k,opts,lab)=>`<label class="f">${lab}<select onchange="S.doF.${k}=this.value;render()">${optList(opts,F[k],L("全部","All"))}</select></label>`;
+  return `<div class="filters">
+    <label class="f" style="min-width:220px">${L("搜索","Search")}<input id="doQ" type="search" value="${esc(F.q||"")}" placeholder="${L("DO 号码 / 客户 / 车牌 / 地点","DO no / customer / vehicle / place")}" oninput="doSearch(this)"></label>
+    ${sel("customer",custs,L("客户","Customer"))}${sel("service",SERVICES[S.company].map(s=>[s,s]),"Service")}${sel("plate",plates.map(p=>[p,p]),L("车牌","Vehicle"))}
+    ${sel("shift",[["Day","Day"],["Night","Night"]],"Day/Night")}${sel("billed",[["no",L("未开单","Unbilled")],["yes",L("已开单","Billed")]],L("开单","Billed"))}
+    ${sel("photo",[["yes",L("有照片","Has photo")],["no",L("没有照片","No photo")]],L("照片","Photo"))}
+    ${on?`<button class="btn sec sm" onclick="S.doF={q:'',customer:'',service:'',plate:'',shift:'',billed:'',photo:''};S.unbilledOnly=false;render()">✕ ${L("清除筛选","Clear filters")}</button>`:""}</div>`}
+
+/* ---- 照片网址（暂存 9 分钟） ---- */
+const photoUrlCache={};
+async function photoUrls(atts){const now=Date.now(),need=atts.filter(a=>!(photoUrlCache[a.file_path]&&photoUrlCache[a.file_path].exp>now));
+  if(need.length){for(let i=0;i<need.length;i+=100){const part=need.slice(i,i+100);const{data,error}=await sb.storage.from("attachments").createSignedUrls(part.map(a=>a.file_path),600);
+    if(error)throw error;(data||[]).forEach((x,j)=>{if(x.signedUrl)photoUrlCache[part[j].file_path]={url:x.signedUrl,exp:now+540000}})}}
+  return Object.fromEntries(atts.map(a=>[a.id,photoUrlCache[a.file_path]?.url||""]))}
+
+/* ---- 单张查看：照片 + DO 资料对照 ---- */
+function doInfoHTML(d){const inv=invById(d.invoice_id);
+  return `<div class="dobig">DO ${esc(d.do_no)}</div><div class="kv1">
+  <div><span>${L("日期","Date")}</span>${dmy(d.do_date)}</div><div><span>${L("客户","Customer")}</span>${esc(custName(d.customer_id))}</div>
+  <div><span>${L("车牌","Vehicle")}</span>${esc(d.plate||"—")}</div><div><span>${L("时间","Time")}</span>${d.start_time?.slice(0,5)||""} – ${d.end_time?.slice(0,5)||""} ${d.shift?`<span class="tag ${d.shift}">${d.shift}</span>`:""}</div>
+  <div><span>${L("地点","Location")}</span>${esc([d.from_loc,d.to_loc].filter(Boolean).join(" → ")||"—")}</div><div><span>Service</span>${esc(d.service||"")}${d.project?" · "+esc(d.project):""}</div>
+  <div><span>${L("金额","Amount")}</span>$${money(d.amount)}</div><div><span>Invoice</span>${inv?esc(inv.invoice_no):L("未开单","Unbilled")}</div></div>`}
+async function viewDoPhoto(id,list){const ids=list||doFiltered().map(d=>d.id);let idx=Math.max(0,ids.indexOf(id));
+  let ov=$("#photoOv");if(!ov){ov=document.createElement("div");ov.id="photoOv";document.body.appendChild(ov)}
+  const show=async()=>{const d=S.d.delivery_orders.find(x=>x.id===ids[idx]);if(!d){ov.remove();return}const ph=doPhotos(d.id);
+    ov.innerHTML=`<div class="pvbox"><div class="pvhead"><b>${L("核对 DO 照片","Check DO photo")} · ${idx+1} / ${ids.length}</b><span style="flex:1"></span>
+      <button class="btn sec sm" data-a="prev" ${idx?"":"disabled"}>‹ ${L("上一张","Prev")}</button><button class="btn sec sm" data-a="next" ${idx<ids.length-1?"":"disabled"}>${L("下一张","Next")} ›</button><button class="close" data-a="x">✕</button></div>
+      <div class="pvbody"><div class="pvimg">${ph.length?ph.map(a=>`<img data-att="${a.id}" alt="DO ${esc(d.do_no)}">`).join(""):`<div class="pvnone">${L("这张 DO 还没有照片","No photo for this DO yet")}</div>`}</div>
+      <div class="pvinfo">${doInfoHTML(d)}<p class="mute" style="font-size:13px">${L("对照照片上的 DO 号码、日期、车牌和时间。","Compare the DO number, date, vehicle and time on the photo.")}</p>
+      <div class="actions"><button class="btn sec" data-a="edit">${L("修改这张 DO / 换照片","Edit DO / replace photo")}</button></div></div></div></div>`;
+    if(ph.length){try{const u=await photoUrls(ph);ov.querySelectorAll("img[data-att]").forEach(im=>im.src=u[im.dataset.att])}catch(e){toast(e.message)}}};
+  ov.onclick=e=>{const a=e.target.closest("[data-a]")?.dataset.a||(e.target===ov?"x":"");if(a==="prev"&&idx>0){idx--;show()}else if(a==="next"&&idx<ids.length-1){idx++;show()}
+    else if(a==="x")ov.remove();else if(a==="edit"){const id2=ids[idx];ov.remove();S.tab="do";editDO(id2)}};
+  document.onkeydown=e=>{if(!$("#photoOv"))return;if(e.key==="ArrowLeft"&&idx>0){idx--;show()}else if(e.key==="ArrowRight"&&idx<ids.length-1){idx++;show()}else if(e.key==="Escape")$("#photoOv")?.remove()};
+  await show()}
+
+/* ---- 照片核对：整个列表一次看 ---- */
+async function photoGallery(){const rows=doFiltered();let ov=$("#photoOv");if(!ov){ov=document.createElement("div");ov.id="photoOv";document.body.appendChild(ov)}
+  const atts=rows.map(d=>doPhotos(d.id)[0]).filter(Boolean),miss=rows.filter(d=>!doPhotos(d.id).length).length;
+  ov.innerHTML=`<div class="pvbox wide"><div class="pvhead"><b>${L("照片核对","Photo check")} · ${rows.length} DO</b>${miss?`<span class="tag warn">${miss} ${L("张没有照片","without photo")}</span>`:`<span class="tag ok">${L("全部有照片","All have photos")}</span>`}
+    <span style="flex:1"></span><button class="close" data-a="x">✕</button></div>
+    <p class="mute" style="margin:0 0 10px;font-size:13px">${L("每张照片下面是系统里的 DO 资料，对一下是不是同一张。点照片看大图。","Each photo shows the DO details from the system underneath — check they match. Tap a photo to enlarge.")}</p>
+    <div class="gal">${rows.map(d=>{const a=doPhotos(d.id)[0];return `<div class="gcell" data-id="${d.id}">${a?`<img data-att="${a.id}" loading="lazy" alt="">`:`<div class="gnone">📷<br>${L("没有照片","No photo")}</div>`}
+      <div class="gcap"><b>DO ${esc(d.do_no)}</b><span>${dmy(d.do_date)} · ${esc(d.plate||"")}</span><span>${esc(custName(d.customer_id))}</span><span>${d.start_time?.slice(0,5)||""}–${d.end_time?.slice(0,5)||""}</span></div></div>`}).join("")}</div></div>`;
+  ov.onclick=e=>{if(e.target.closest("[data-a=x]")||e.target===ov){ov.remove();return}const c=e.target.closest(".gcell");if(c)viewDoPhoto(c.dataset.id,rows.map(d=>d.id))};
+  if(atts.length){try{const u=await photoUrls(atts);ov.querySelectorAll("img[data-att]").forEach(im=>im.src=u[im.dataset.att])}catch(e){toast(e.message)}}}
+
 /* ================= 签名页 / DO 照片 / 寄客户版本 ================= */
 const SIGNED_KIND="Signed Invoice";
 const signedOf=i=>S.d.attachments.filter(a=>a.entity_type==="invoice"&&a.entity_id===i.id&&a.kind===SIGNED_KIND).sort((a,b)=>String(b.created_at||"").localeCompare(String(a.created_at||"")))[0]||null;
@@ -1245,16 +1316,19 @@ const kb=n=>n>=1048576?(n/1048576).toFixed(1)+" MB":Math.max(1,Math.round(n/1024
 
 /* ---- DO 照片 ---- */
 async function pickDoPhotos(input){const files=[...input.files];input.value="";if(!files.length)return;const f=S.doForm;
+  if(!String(f.do_no||"").trim()){toast(L("先填 DO 号码再拍照，才不会对错","Fill in the DO number first"));document.querySelector('.grid [name="do_no"]')?.focus();return}
+  const tag=`DO ${f.do_no.trim()} · ${custName(f.customer_id)||"—"} · ${dmy(f.do_date)}${f.plate?" · "+f.plate:""}`;
   try{toast(L("处理照片中…","Processing…"));const blobs=[];let n=0;const raw=[];for(const file of files)for(const b of await toJpegs(file,6))raw.push({b,name:file.name});
-    for(const x of raw){n++;const c=await cropImage(x.b,`${L("DO 照片","DO photo")} ${n} / ${raw.length}`);if(c)blobs.push({blob:await compressImage(c),name:x.name})}
+    for(const x of raw){n++;const c=await cropImage(x.b,tag+(raw.length>1?` (${n}/${raw.length})`:""),f.do_no.trim());if(c)blobs.push({blob:await compressImage(c),name:`DO-${f.do_no.trim()}${raw.length>1?"-"+n:""}.jpg`})}
     if(!blobs.length)return;
     if(f.id){for(const x of blobs)await storeJpeg("do",f.id,"DO",x.blob,x.name);toast(L(`已上传 ${blobs.length} 张（${kb(blobs.reduce((s,x)=>s+x.blob.size,0))}）`,`Uploaded ${blobs.length}`))}
     else{f._pending=(f._pending||[]).concat(blobs);toast(L("照片已准备好，按「保存」时一起上传","Photos ready — they upload when you save"))}
     S.dirty=true;render()}catch(e){toast(e.message||String(e))}}
 function doPhotoBox(f){const list=f.id?doPhotos(f.id):[],pend=f._pending||[];
-  return `<div class="att" style="margin-top:10px"><h3>${L("DO 照片","DO photo")} ${list.length||pend.length?`<span class="tag ok">${list.length+pend.length}</span>`:`<span class="tag warn">${L("还没有","None yet")}</span>`}</h3>
-  ${list.length?`<ul>${list.map(a=>`<li><a href="#" onclick="openAtt('${a.id}');return false">📷 ${esc(a.file_name||"DO")}</a> <button class="x" onclick="delAtt('${a.id}')" title="Delete">✕</button></li>`).join("")}</ul>`:""}
+  return `<div class="att" style="margin-top:10px"><h3>${L("DO 照片","DO photo")}${f.do_no?` · DO ${esc(f.do_no)}`:""} ${list.length||pend.length?`<span class="tag ok">${list.length+pend.length}</span>`:`<span class="tag warn">${L("还没有","None yet")}</span>`}</h3>
+  ${list.length?`<ul>${list.map(a=>`<li><a href="#" onclick="viewDoPhoto('${f.id}',['${f.id}']);return false">📷 ${esc(a.file_name||"DO")}</a> <button class="x" onclick="delAtt('${a.id}')" title="Delete">✕</button></li>`).join("")}</ul>`:""}
   ${pend.length?`<p class="mute">${L(`已选 ${pend.length} 张（${kb(pend.reduce((s,x)=>s+x.blob.size,0))}），按「保存」时上传`,`${pend.length} ready, uploads on save`)} <button class="btn sec sm" onclick="S.doForm._pending=[];render()">${L("清除","Clear")}</button></p>`:""}
+  ${f.do_no?"":`<p class="mute" style="font-size:13px;margin:4px 0">${L("先填 DO 号码，才可以拍照。","Fill in the DO number before taking the photo.")}</p>`}
   <div class="attadd"><label class="btn sm file">📷 ${L("拍照","Take photo")}<input type="file" hidden accept="image/*" capture="environment" onchange="pickDoPhotos(this)"></label>
     <label class="btn sec sm file">📎 ${L("选照片 / PDF","Choose photo / PDF")}<input type="file" hidden accept="image/*,application/pdf" multiple onchange="pickDoPhotos(this)"></label></div></div>`}
 
@@ -1308,12 +1382,12 @@ async function custCopy(id,share){const inv=invById(id),name=inv.invoice_no.repl
       const{error}=await sb.from("invoices").update({sent_at:today(),sent_via:share?"Share":"PDF"}).eq("id",id);if(error)return toast(error.message);await loadAll();render()}},1200)
   }catch(e){toast(e.message||String(e))}}
 /* ---- 预览 + 裁切（上传前） ---- */
-function cropImage(blob,title){return new Promise(resolve=>{
+function cropImage(blob,title,big){return new Promise(resolve=>{
   const url=URL.createObjectURL(blob),img=new Image();
   img.onerror=()=>{URL.revokeObjectURL(url);resolve(blob)};
   img.onload=()=>{
     let rot=0,src=img;const ov=document.createElement("div");ov.id="cropOv";
-    ov.innerHTML=`<div class="cropbox"><div class="crophead"><b>${esc(title||L("预览 / 裁切","Preview / crop"))}</b><span class="mute">${L("拉四个角或拖动框，只留 DO 单","Drag the corners or the frame to keep only the DO slip")}</span></div>
+    ov.innerHTML=`<div class="cropbox">${big?`<div class="dobig" style="margin-bottom:4px">DO ${esc(big)}</div>`:""}<div class="crophead"><b>${esc(title||L("预览 / 裁切","Preview / crop"))}</b><span class="mute">${big?L("确认照片上的 DO 号码一样，再拉四个角只留 DO 单","Check the DO number on the photo matches, then crop to the slip"):L("拉四个角或拖动框，只留 DO 单","Drag the corners or the frame to keep only the DO slip")}</span></div>
       <div class="cropstage"><canvas></canvas><div class="cropsel"><i data-h="nw"></i><i data-h="ne"></i><i data-h="sw"></i><i data-h="se"></i></div></div>
       <div class="actions"><button class="btn sec" data-a="rl">⟲ ${L("左转","Rotate left")}</button><button class="btn sec" data-a="rr">⟳ ${L("右转","Rotate right")}</button><button class="btn sec" data-a="full">${L("全图","Full image")}</button>
         <span style="flex:1"></span><button class="btn sec" data-a="skip">${L("不要这张","Discard")}</button><button class="btn" data-a="ok">✓ ${L("确定","Use this")}</button></div></div>`;
