@@ -147,6 +147,18 @@ label.file{cursor:pointer}
 #photoOv .qpages{max-height:calc(100vh - 170px);overflow:auto;background:#0b0f14;border-radius:6px;padding:6px}#photoOv .qpages img{width:100%;display:block;margin-bottom:6px;background:#fff}
 #photoOv .qright{max-height:calc(100vh - 120px);overflow:auto}#photoOv .qright table{font-size:13px}
 @media(max-width:760px){#photoOv.qov .pvbody{grid-template-columns:1fr}#photoOv .qpages{max-height:55vh}#photoOv .qright{max-height:none}}
+#photoOv .tl{border:1px solid var(--line);border-radius:8px;overflow:hidden}#photoOv .tlr{display:grid;grid-template-columns:62px 1fr;border-bottom:1px solid var(--line);font-size:12px}
+#photoOv .tlr>span{padding:3px 6px;color:var(--mute);white-space:nowrap}#photoOv .tlr.sun>span{color:#e57373}#photoOv .tlr.hd{font-size:11px}
+#photoOv .tlr .bar{position:relative;min-height:22px;background:repeating-linear-gradient(90deg,transparent 0,transparent calc(25% - 1px),var(--line) calc(25% - 1px),var(--line) 25%)}
+#photoOv .tlr .bar.none{background-color:rgba(127,127,127,.08)}#photoOv .tlr.hd .bar{background:none}#photoOv .tlr.hd i{position:absolute;font-style:normal;color:var(--mute);transform:translateX(2px)}
+#photoOv .seg{position:absolute;top:2px;bottom:2px;background:#2e7d32;color:#fff;border-radius:4px;font-size:11px;line-height:18px;padding:0 4px;overflow:hidden;white-space:nowrap;cursor:pointer}
+#photoOv .seg.nt{background:#3949ab}#photoOv .seg.bad{background:#d32f2f;box-shadow:0 0 0 2px #ffcdd2}
+.seg-k{display:inline-block;width:10px;height:10px;border-radius:2px;background:#2e7d32;margin:0 3px 0 8px;vertical-align:middle}.seg-k.nt{background:#3949ab}.seg-k.bad{background:#d32f2f}
+table.chg .inp{min-width:0;width:100%}table.chg tr.chgd td{background:rgba(245,166,35,.14)}
+.calc .why{flex-basis:100%;width:100%;grid-column:1/-1;display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12.5px;color:var(--mute);border-top:1px dashed var(--line);padding-top:6px;margin-top:2px}.calc .why .w{color:#f5a623}
+label.f.need input{border-color:#f5a623!important;box-shadow:0 0 0 2px rgba(245,166,35,.25)}
+.ckl{margin-top:12px;padding:12px 14px}.ck{display:flex;gap:10px;padding:5px 0;border-bottom:1px solid var(--line);font-size:14px}.ck>b{width:20px;text-align:center}.ck.ok>b{color:#4caf50}.ck.bad>b{color:#e53935}.ck.warn>b{color:#f5a623}
+#photoOv .seg.ld{background:#6d6d6d}.l3chk{display:flex;gap:18px;flex-wrap:wrap;align-items:center}
 #photoOv .gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
 #photoOv .gcell{border:1px solid var(--line);border-radius:8px;overflow:hidden;cursor:zoom-in;background:var(--panel2)}
 #photoOv .gcell img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;background:#0b0f14}
@@ -221,6 +233,10 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 #print table.sm th.dk{background:#bfbfbf!important}
 #print table.sm td{border:.75pt solid #000;padding:1.6mm 1.8mm;text-align:center;vertical-align:middle}
 #print table.sm td.a{text-align:left}
+#print .rech{display:flex;justify-content:space-between;align-items:flex-end;font-family:Calibri,Carlito,Arial,sans-serif;font-size:11pt;margin:0 0 3mm}
+#print .rech div b{display:block;line-height:1.35}#print .sumlist{padding:22mm 16mm}#print .sumlist table.rec{font-size:10.5pt}#print .sumlist table.rec td{padding:2.4mm 1.6mm}#print .rech .no{font-size:11pt;padding-right:6mm}
+#print table.rec{font-size:9pt}#print table.rec th{padding:1.8mm 1mm}#print table.rec td{padding:1.4mm 1mm}
+#print table.rec th.y{background:#ffff00!important}#print table.rec th.o{background:#ffc000!important}
 #print table.sm tr.tt td{border:0;font-weight:700;padding-top:2mm}
 #print table.sm tr.tt td.u{border-bottom:3px double #000}
 #print table.sm tr.tt td.lb{text-align:right;font-weight:400}
@@ -261,7 +277,7 @@ const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 const SERVICES={ETK:["TMA","VMS"],L3H:["Tipper","Lorry Crane","Excavator"]};
-const RATE_SERVICES={ETK:["TMA Day","TMA Night","VMS"],L3H:["Tipper","Lorry Crane","Excavator"]};
+const RATE_SERVICES={ETK:["TMA Day","TMA Night","VMS"],L3H:["Lorry Crane","Tipper","Tipper Load","Excavator","Internal Work","Transfer","Supply","Disposal"]};
 const L3H_DESC={"Tipper":"Provide Tipper Truck Transportation with diesel / driver (G.S.G)",
   "Lorry Crane":"Provide Lorry Crane with Lifting Supervisor (inclusive of transportation, diesel & driver – G.S.G)",
   "Excavator":"Provide Excavator Rental with operator"};
@@ -303,7 +319,7 @@ const S={poInc:{},doPerPage:pref("doPerPage","6"),lang:pref("lang","zh"),theme:p
   tab:"do",month:today().slice(0,7),unbilledOnly:false,doF:{q:"",customer:"",service:"",plate:"",shift:"",billed:"",photo:""},user:null,live:false,lastSync:null,dirty:false,pending:false,
   d:{customers:[],vehicles:[],rates:[],customer_surcharges:[],delivery_orders:[],invoices:[],invoice_lines:[],payments:[],
      payment_allocations:[],reminders:[],soa_sends:[],monthly_fix:[],monthly_fix_log:[],suppliers:[],supplier_invoices:[],
-     diesel_surcharges:[],attachments:[],company_settings:[]},
+     diesel_surcharges:[],attachments:[],company_settings:[],drivers:[],do_voids:[],projects:[]},tlPlate:"",pbMonth:"",
   doForm:null,sub:{master:"customers",sup:"supplier_invoices",mf:"monthly_fix"},gEdit:null,modal:null,
   invF:{status:"",customer:"",q:""},soaCust:"",soaAsOf:today(),mfMonth:today().slice(0,7),payF:{customer:""}};
 const L=(zh,en)=>S.lang==="zh"?zh:en;
@@ -331,7 +347,7 @@ function findSurcharge(c,svc,date){const s=S.d.customer_surcharges.filter(x=>x.c
   .sort((a,b)=>(b.service?1:0)-(a.service?1:0)||b.start_date.localeCompare(a.start_date))[0];return s?Number(s.amount_per_do):0}
 const isDayRate=r=>!!r&&/8\s*hrs?|day|天/i.test(r.unit||"");
 const baseHrsOf=r=>Number(r?.min_hours)||8;
-function recompute(f){
+function recompute(f){if(isL3())return recomputeL3(f);
   f.shift=f.service==="TMA"?shiftOf(f.start_time):null;
   const rs=f.service==="TMA"?(f.shift?`TMA ${f.shift}`:null):f.service;
   const rate=rs?findRate(f.customer_id,rs,f.do_date):null; f._rateRow=rate;
@@ -390,6 +406,7 @@ async function loadAll(){
       q("attachments",b=>b.order("created_at")),q("company_settings")]);
     ["customers","vehicles","rates","customer_surcharges","invoices","invoice_lines","payments","payment_allocations","reminders","soa_sends",
      "monthly_fix","monthly_fix_log","suppliers","supplier_invoices","diesel_surcharges","attachments","company_settings"].forEach((k,i)=>S.d[k]=r[i]);
+    for(const t of["drivers","do_voids","projects"]){try{S.d[t]=await fetchAll(()=>sb.from(t).select("*").eq("company",co))}catch(e){S.d[t]=[]}}
     await loadDO(); S.lastSync=new Date();
   }catch(e){toast(e.message)}
 }
@@ -446,9 +463,11 @@ function doView(){
   <div class="grid" oninput="doInput(event)" onchange="doInput(event)">
     ${fld("do_date",L("日期","Date"),f.do_date,"date")}
     <label class="f">${L("客户","Customer")}<select name="customer_id">${custOpts(f.customer_id)}</select></label>
-    <label class="f">Project<input name="project" list="projList" value="${esc(f.project)}"><datalist id="projList">${projects.map(p=>`<option value="${esc(p)}">`).join("")}</datalist></label>
+    ${isL3()?`<label class="f">Project${projRequired(f.customer_id)?" *":""}<select name="project">${projOpts(f.project,f.customer_id)}</select></label>`
+      :`<label class="f">Project<input name="project" list="projList" value="${esc(f.project)}"><datalist id="projList">${[...new Set([...projects,...S.d.projects.map(p=>p.code)])].map(p=>`<option value="${esc(p)}">`).join("")}</datalist></label>`}
     <label class="f">Service<select name="service">${optList(SERVICES[S.company].map(s=>[s,s]),f.service)}</select></label>
     <label class="f">${L("车牌","Vehicle No")}<input name="plate" list="plateList" value="${esc(f.plate)}"><datalist id="plateList">${S.d.vehicles.map(v=>`<option value="${esc(v.plate)}">`).join("")}</datalist></label>
+    ${isL3()?`<label class="f">${L("司机","Driver")}<input name="driver" list="drvList" value="${esc(f.driver||"")}"><datalist id="drvList">${S.d.drivers.map(d=>`<option value="${esc(d.name)}">`).join("")}</datalist></label>`:""}
     ${fld("do_no",L("DO 号码","DO No"),f.do_no)}
     ${fld("customer_po",L("客户 PO","Customer PO"),f.customer_po)}
     ${fld("start_time",L("开始时间","Start time"),f.start_time,"text",'inputmode="numeric" placeholder="2100"')}
@@ -459,10 +478,16 @@ function doView(){
     ${fld("rate","Rate",f.rate??"","number",'step="0.01"')}
     ${fld("surcharge","Surcharge",f.surcharge??0,"number",'step="0.01"')}
     ${fld("remark","Remark",f.remark)}
+    ${isL3()&&f.service==="Tipper"?fld("loads",L("Load 数量（没写时间才按 load 算）","Loads (if no time)"),f.loads??"","number",'step="0.5"'):""}
+    ${isL3()?fld("price_note",L("改价原因（价钱跟 Master List 不一样才要填）","Price change reason"),f.price_note||"","text","",f._priceChanged?"need":""):""}
+    ${isL3()?`<div class="wide l3chk">${f.service==="Lorry Crane"?`<label class="chk"><input type="checkbox" name="lifting_sup" ${f.lifting_sup?"checked":""}>${L("有 Lifting Supervisor（白天价）","With lifting supervisor (day rate)")} <small class="mute">${f._supTouched?L("手动","manual"):L("自动：司机 / 17:00 前开工","auto: driver / start before 17:00")}</small></label>`:""}
+      <label class="chk"><input type="checkbox" name="hourly" ${f.hourly!==false?"checked":""}>${L("按小时收（价钱 × 小时）","Charge by the hour")}</label>
+      <label class="chk"><input type="checkbox" name="record_only" ${f.record_only?"checked":""}>${L("只记录 NIL，不收钱（例：Samwoh 的料）","Record only (NIL)")}</label></div>`:""}
   </div>
   <div class="calc" id="calc">${calcView(f)}</div>
+  <div id="ovl">${f._ovl?ovlMsg(f,f._ovl):""}</div>${isL3()?chgBox(f):""}
   <div class="warn" id="noRate">${noRateMsg(f)}</div>
-  ${doPhotoBox(f)}
+  ${doPhotoBox(f)}${(setTimeout(checkOverlap,0),"")}
   ${billed?`<div class="note">${L(`这张 DO 已开在 invoice ${esc(billed.invoice_no)}，改金额后要到 Invoice 重新生成明细。`,`Billed on ${esc(billed.invoice_no)}. Rebuild the invoice lines after changing amounts.`)}</div>`:""}
   <div class="warn" id="doWarn"></div>
   <div class="actions"><button class="btn" onclick="saveDO()">${L("保存","Save")}</button>
@@ -470,8 +495,8 @@ function doView(){
     ${f.id?`<button class="btn del" onclick="delDO('${f.id}')">${L("删除","Delete")}</button>`:""}</div></section>
   ${doList()}`;
 }
-const noRateMsg=f=>(f.customer_id&&f.service&&(f.service!=="TMA"||f.start_time)&&!f._rateRow&&!f._rateTouched)?L("找不到这个客户 / service 在这个日期的价钱，请先到 Master List → 价钱 设定。","No rate for this customer / service on this date. Set it in Master List → Rates."):"";
-function calcView(f){return `<div>Day/Night<b>${f.shift?`<span class="tag ${f.shift}">${f.shift}</span>`:"—"}</b></div>
+const noRateMsg=f=>isL3()?noRateL3(f):(f.customer_id&&f.service&&(f.service!=="TMA"||f.start_time)&&!f._rateRow&&!f._rateTouched)?L("找不到这个客户 / service 在这个日期的价钱，请先到 Master List → 价钱 设定。","No rate for this customer / service on this date. Set it in Master List → Rates."):"";
+function calcView(f){if(isL3())return calcViewL3(f);return `<div>Day/Night<b>${f.shift?`<span class="tag ${f.shift}">${f.shift}</span>`:"—"}</b></div>
   <div>${L("实际小时","Actual hrs")}<b>${f.actual_hours??"—"}</b></div>
   <div>${L("计费小时","Billable hrs")}<b>${f.billable_hours??"—"}${f.hours_overridden?` <small class="mute" style="font-size:12px">${L("手动","manual")}</small>`:""}</b></div>
   ${f._otHours!=null?`<div>OT<b>${f._otHours} hr × $${money(f._otRate)}</b></div>`:""}
@@ -479,7 +504,8 @@ function calcView(f){return `<div>Day/Night<b>${f.shift?`<span class="tag ${f.sh
 function doInput(e){
   const el=e.target,f=S.doForm;if(!el.name)return;S.dirty=true;let v=el.value;
   if(el.name==="start_time"||el.name==="end_time"){if(e.type==="change"){v=normTime(v);el.value=v}f[el.name]=v.length>=3&&!v.includes(":")?normTime(v):v}
-  else if(["billable_hours","rate","surcharge"].includes(el.name)){f[el.name]=v===""?null:Number(v);
+  else if(el.type==="checkbox"){f[el.name]=el.checked;if(el.name==="lifting_sup"){f._supTouched=true;f._rateTouched=false}}
+  else if(["billable_hours","rate","surcharge","loads"].includes(el.name)){f[el.name]=v===""?null:Number(v);
     if(el.name==="billable_hours")f.hours_overridden=v!=="";if(el.name==="rate")f._rateTouched=v!=="";if(el.name==="surcharge")f._surTouched=true}
   else{f[el.name]=v;if(el.name==="description")f._descTouched=v!==""}
   recompute(f);
@@ -487,48 +513,392 @@ function doInput(e){
   for(const[n,val,touched]of[["description",f.description,f._descTouched],["billable_hours",f.billable_hours??"",f.hours_overridden],["rate",f.rate??"",f._rateTouched],["surcharge",f.surcharge??0,f._surTouched]]){
     const x=g(n);if(document.activeElement!==x)x.value=val;x.classList.toggle("auto",!touched)}
   $("#calc").innerHTML=calcView(f);$("#noRate").textContent=noRateMsg(f);
+  const sup=g("lifting_sup");if(sup)sup.checked=!!f.lifting_sup;
+  if(isL3()){if(["service","customer_id","record_only"].includes(el.name)||(e.type==="change"&&["start_time","end_time"].includes(el.name)&&f.service==="Tipper")){render();return}
+    const cb=$("#chg");if(cb)cb.outerHTML=chgBox(f);const pn=g("price_note");if(pn)pn.closest("label").classList.toggle("need",!!f._priceChanged&&!f.price_note)}
+  if(["plate","do_date","start_time","end_time"].includes(el.name))checkOverlap();
 }
 async function saveDO(){
   const f=S.doForm,w=$("#doWarn");
   const miss=[["do_date",L("日期","Date")],["customer_id",L("客户","Customer")],["service","Service"],["do_no",L("DO 号码","DO No")]].filter(([k])=>!f[k]).map(([,l])=>l);
   if(miss.length){w.textContent=L("请填写：","Please fill in: ")+miss.join(", ");return}
+  if(isL3()){
+    if(projRequired(f.customer_id)&&!f.project){w.textContent=L("这个客户要按 Project 开单，请选 Project。","Choose a project for this customer.");return}
+    if(f._priceChanged&&!String(f.price_note||"").trim()){w.textContent=L("价钱跟 Master List 不一样，请在「改价原因」写原因（例：客户特别价）。","Price differs from Master List — enter a reason.");document.querySelector('.grid [name="price_note"]')?.focus();return}
+    if(f._tipLoad&&!f.record_only&&!(Number(f.loads)>0)&&!(f.charges||[]).length){w.textContent=L("Tipper 没写时间：请填「Load 数量」，或填开始 / 结束时间。","Tipper without time: enter loads or times.");return}}
   const dup=await sb.from("delivery_orders").select("id,do_date").eq("company",S.company).eq("do_no",f.do_no.trim());
   const other=(dup.data||[]).find(x=>x.id!==f.id);
   if(other){w.textContent=L(`DO 号码已存在（日期 ${dmy(other.do_date)}），不能重复。`,`DO number already exists (dated ${dmy(other.do_date)}).`);return}
+  const xco=await sb.from("delivery_orders").select("company,do_date").eq("do_no",f.do_no.trim()).neq("company",S.company);
+  if((xco.data||[]).length&&!confirm(L(`${xco.data[0].company} 也有 DO ${f.do_no.trim()}（${dmy(xco.data[0].do_date)}）。确定不是同一张？`,`${xco.data[0].company} also has DO ${f.do_no.trim()}. Save anyway?`)))return;
   const row={company:S.company,do_date:f.do_date,customer_id:f.customer_id,project:f.project||null,service:f.service,shift:f.shift,plate:f.plate||null,
     do_no:f.do_no.trim(),customer_po:f.customer_po||null,start_time:f.start_time||null,end_time:f.end_time||null,from_loc:f.from_loc||null,to_loc:f.to_loc||null,
     description:f.description||null,actual_hours:f.actual_hours,billable_hours:f.billable_hours,hours_overridden:!!f.hours_overridden,rate:f.rate,
     surcharge:Number(f.surcharge)||0,amount:f.amount,remark:f.remark||null};
+  if(isL3())Object.assign(row,{driver:f.driver||null,lifting_sup:f.service==="Lorry Crane"?!!f.lifting_sup:null,hourly:f.hourly!==false,
+    charges:(f.charges||[]).map(({item,material,desc,qty,uom,rate,amount,_rt,_qt})=>({item,material:material||null,desc:desc||null,qty,uom,rate,amount,_rt:!!_rt,_qt:!!_qt})),
+    loads:f.service==="Tipper"&&f.loads!=null&&f.loads!==""?Number(f.loads):null,record_only:!!f.record_only,price_note:f._priceChanged?(f.price_note||null):null});
+  if(f.id&&f.invoice_id){const old=S.d.delivery_orders.find(x=>x.id===f.id)||{},ch=doChanges(old,row);
+    if(Object.keys(ch).length){const inv=invById(f.invoice_id),reason=prompt(L(`这张 DO 已开在 ${inv?.invoice_no||"invoice"}。改了什么、为什么改？（会留记录，改金额后要到 invoice 重新生成明细）`,`This DO is billed on ${inv?.invoice_no}. Reason for the change?`));
+      if(!reason)return;row.edit_log=[...(old.edit_log||[]),{at:new Date().toISOString(),reason,changes:ch}]}}
   const res=f.id?await sb.from("delivery_orders").update(row).eq("id",f.id).select().single():await sb.from("delivery_orders").insert(row).select().single();
   if(res.error){w.textContent=res.error.message;return}
   const pend=f._pending||[];if(pend.length){try{for(const x of pend)await storeJpeg("do",res.data.id,"DO",x.blob,x.name)}catch(e){toast(L("DO 已保存，但照片上传失败：","DO saved, photo upload failed: ")+(e.message||e));}}
-  toast(L("已保存到云端","Saved to cloud")+(pend.length?L(` · ${pend.length} 张照片`,` · ${pend.length} photo(s)`):""));
-  const keep={do_date:f.do_date,customer_id:f.customer_id,project:f.project,service:f.service};
+  const lateI=isL3()?lateInvOf(res.data):null;
+  toast(L("已保存到云端","Saved to cloud")+(pend.length?L(` · ${pend.length} 张照片`,` · ${pend.length} photo(s)`):"")+(lateI?L(` · ⚠ 补单：这个月已开 ${lateI.invoice_no}，这张要开在下一张`,` · ⚠ Late: ${lateI.invoice_no} already issued`):""));
+  const keep={do_date:f.do_date,customer_id:f.customer_id,project:f.project,service:f.service};if(isL3())Object.assign(keep,{plate:f.plate,driver:f.driver});
   S.doForm=null;done();await loadDO();S.lastSync=new Date();S.doForm=recompute({...blankDO(),...keep});render();
   document.querySelector('.grid [name="do_no"]')?.focus();
 }
-async function delDO(id){if(!confirm(L("确定删除这张 DO？","Delete this DO?")))return;
+async function delDO(id){const dd=S.d.delivery_orders.find(x=>x.id===id);if(dd?.invoice_id)return toast(L(`这张 DO 已开在 ${invById(dd.invoice_id)?.invoice_no||"invoice"}，要先从 invoice 拿出来才可以删除。`,"Billed DO — remove it from the invoice first."));
+  if(!confirm(L("确定删除这张 DO？","Delete this DO?")))return;
   const{error}=await sb.from("delivery_orders").delete().eq("id",id);if(error)return toast(error.message);
   const ph=doPhotos(id);if(ph.length){await sb.storage.from("attachments").remove(ph.map(a=>a.file_path));await sb.from("attachments").delete().in("id",ph.map(a=>a.id));S.d.attachments=S.d.attachments.filter(a=>!ph.includes(a))}
   toast(L("已删除","Deleted"));S.doForm=null;done();await loadDO();render()}
 function editDO(id){const d=S.d.delivery_orders.find(x=>x.id===id);if(!d)return;
-  S.doForm=recompute({...d,start_time:d.start_time?.slice(0,5)||"",end_time:d.end_time?.slice(0,5)||"",_rateTouched:true,_surTouched:true,_descTouched:true});
+  S.doForm=recompute({...d,start_time:d.start_time?.slice(0,5)||"",end_time:d.end_time?.slice(0,5)||"",_rateTouched:true,_surTouched:true,_descTouched:true,_supTouched:d.lifting_sup!=null,
+    charges:(d.charges||[]).map(x=>({...x,_rt:true,_qt:true}))});
   S.dirty=true;render();window.scrollTo({top:0,behavior:"smooth"})}
 function doList(){
-  const rows=doFiltered();
-  return `<section><div class="filters"><label class="f">${L("月份","Month")}<input type="month" value="${S.month}" onchange="setMonth(this.value)"></label>
+  const rows=doFiltered(),ovIds=monthOverlapIds(),l3=isL3();
+  return `<section>${ovIds.size?`<div class="note" style="border-color:#d9534f">⚠ ${L(`这个月有 ${ovIds.size} 张 DO 同一辆车时间重叠（红色标记）。按「🚚 每车时间表」看。`,`${ovIds.size} DOs overlap on the same vehicle this month (marked red).`)}</div>`:""}<div class="filters"><label class="f">${L("月份","Month")}<input type="month" value="${S.month}" onchange="setMonth(this.value)"></label>
     <label class="chk"><input type="checkbox" ${S.unbilledOnly?"checked":""} onchange="S.unbilledOnly=this.checked;render()">${L("只看未开单","Unbilled only")}</label>
-    <button class="btn sec" onclick="exportDO()">⬇ Excel</button><button class="btn sec" onclick="photoGallery()">📷 ${L("照片核对","Photo check")}</button></div>
+    <button class="btn sec" onclick="exportDO()">⬇ Excel</button><button class="btn sec" onclick="photoGallery()">📷 ${L("照片核对","Photo check")}</button><button class="btn sec" onclick="vehicleTimeline()">🚚 ${L("每车时间表","Vehicle timeline")}</button><button class="btn sec" onclick="doGaps()">🔢 ${L("DO 断号","Missing DO nos")}</button></div>
   ${doFilterBar()}${rows.length!==S.d.delivery_orders.length?`<p class="mute" style="margin:0 0 8px;font-size:13px">${L(`显示 ${rows.length} / ${S.d.delivery_orders.length} 张`,`Showing ${rows.length} of ${S.d.delivery_orders.length}`)}</p>`:""}
-  ${rows.length?`<div class="tw"><table><thead><tr><th>${L("日期","Date")}</th><th>DO No</th><th>${L("客户","Customer")}</th><th>Project</th><th>Service</th><th>${L("车牌","Vehicle")}</th>
+  ${rows.length?`<div class="tw"><table><thead><tr><th>${L("日期","Date")}</th><th>DO No</th><th>${L("客户","Customer")}</th><th>Project</th><th>Service</th><th>${L("车牌","Vehicle")}</th>${l3?`<th>${L("司机","Driver")}</th>`:""}
     <th>In</th><th>Out</th><th>Day/Night</th><th>From</th><th>To</th><th class="num">${L("计费小时","Hrs")}</th><th class="num">Rate</th><th class="num">Surcharge</th><th class="num">${L("金额","Amount")}</th><th>Invoice</th><th>📷</th></tr></thead><tbody>
-  ${rows.map(d=>`<tr class="click" onclick="editDO('${d.id}')"><td>${dmy(d.do_date)}</td><td>${esc(d.do_no)}</td><td>${esc(custName(d.customer_id))}</td><td>${esc(d.project)}</td><td>${esc(d.service)}</td>
-    <td>${esc(d.plate)}</td><td>${d.start_time?.slice(0,5)||""}</td><td>${d.end_time?.slice(0,5)||""}</td><td>${d.shift?`<span class="tag ${d.shift}">${d.shift}</span>`:""}</td>
+  ${rows.map(d=>`<tr class="click" onclick="editDO('${d.id}')"><td>${dmy(d.do_date)}</td><td>${esc(d.do_no)}${ovIds.has(d.id)?` <span class="tag bad" title="${L("同一辆车时间重叠 / 可能重复","Overlap / duplicate")}">⚠</span>`:""}${l3&&lateInvOf(d)?` <span class="tag warn" title="${L("这个月已开单，这张是补单","Late entry")}">${L("补单","Late")}</span>`:""}${d.price_note?` <span class="tag warn" title="${esc(d.price_note)}">${L("改价","Price")}</span>`:""}${d.record_only?` <span class="tag mute">NIL</span>`:""}${(d.edit_log||[]).length?` <span class="tag mute" title="${esc(d.edit_log.map(x=>dmy(x.at.slice(0,10))+" "+x.reason).join(" / "))}">${L("改过","Edited")}</span>`:""}</td><td>${esc(custName(d.customer_id))}</td><td>${esc(d.project)}</td><td>${esc(d.service)}${(d.charges||[]).length?` <span class="tag mute">+${d.charges.length}</span>`:""}</td>
+    <td>${esc(d.plate)}</td>${l3?`<td>${esc(d.driver||"")}</td>`:""}<td>${d.start_time?.slice(0,5)||""}</td><td>${d.end_time?.slice(0,5)||""}</td><td>${d.lifting_sup===true?`<span class="tag Day">Sup</span>`:d.shift?`<span class="tag ${d.shift}">${d.shift}</span>`:""}</td>
     <td>${esc(d.from_loc)}</td><td>${esc(d.to_loc)}</td><td class="num">${d.billable_hours??""}</td><td class="num">${money(d.rate)}</td><td class="num">${Number(d.surcharge)?money(d.surcharge):""}</td>
     <td class="num">${money(d.amount)}</td><td>${d.invoice_id?esc(invById(d.invoice_id)?.invoice_no||"✓"):`<span class="tag mute">${L("未开单","Unbilled")}</span>`}</td><td onclick="event.stopPropagation();viewDoPhoto('${d.id}')" title="${L("看照片","View photo")}">${doPhotos(d.id).length?`<span class="tag ok" style="cursor:zoom-in">📷 ${doPhotos(d.id).length}</span>`:`<span class="tag warn" style="cursor:pointer">—</span>`}</td></tr>`).join("")}</tbody>
-  <tfoot><tr><td colspan="11">${L("合计","Total")} ${rows.length} DO</td><td class="num">${sum(rows,d=>d.billable_hours)}</td><td></td><td></td><td class="num">$${money(sum(rows,d=>d.amount))}</td><td></td><td>${rows.filter(d=>!doPhotos(d.id).length).length?`<span class="tag warn">${rows.filter(d=>!doPhotos(d.id).length).length} ${L("缺","missing")}</span>`:""}</td></tr></tfoot></table></div>`
+  <tfoot><tr><td colspan="${l3?12:11}">${L("合计","Total")} ${rows.length} DO</td><td class="num">${sum(rows,d=>d.billable_hours)}</td><td></td><td></td><td class="num">$${money(sum(rows,d=>d.amount))}</td><td></td><td>${rows.filter(d=>!doPhotos(d.id).length).length?`<span class="tag warn">${rows.filter(d=>!doPhotos(d.id).length).length} ${L("缺","missing")}</span>`:""}</td></tr></tfoot></table></div>`
   :`<div class="panel empty">${S.d.delivery_orders.length?L("没有符合筛选的 DO。","No DOs match the filters."):L("这个月还没有 DO，在上面新增第一张。","No DOs this month yet. Add the first one above.")}</div>`}</section>`;
 }
+
+/* ================= L3H：Project / 车牌价钱 / 司机 / 多行收费 / 检查 / 记录表 ================= */
+const isL3=()=>S.company==="L3H";
+const L3_ITEMS=[["Internal Work","hr"],["Transfer","trip"],["Supply","load"],["Disposal","load"],["Lorry Crane","hr"],["Excavator","hr"],["Other","LS"]];
+const MATERIALS=["Hardcore","Soil","Good Earth","Earth","RCA","Millwaste","Graded Stone","Premix Block","Base Course","Sand"];
+const itemUom=it=>(L3_ITEMS.find(x=>x[0]===it)||[,"LS"])[1];
+const drvOf=n=>S.d.drivers.find(d=>String(d.name||"").trim().toLowerCase()===String(n||"").trim().toLowerCase());
+const fmtH=h=>h==null?"—":String(r2(h));
+
+/* ---- Project 名单 ---- */
+const projOf=code=>S.d.projects.find(p=>String(p.code||"").toLowerCase()===String(code||"").trim().toLowerCase());
+function projByText(t){t=String(t||"").toLowerCase();if(!t)return null;
+  return S.d.projects.find(p=>t.includes(String(p.code).toLowerCase()))||S.d.projects.find(p=>String(p.aliases||"").split(/[,;\/]+/).map(x=>x.trim().toLowerCase()).filter(x=>x.length>=2).some(a=>new RegExp(`(^|[^a-z0-9])${a.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")}([^a-z0-9]|$)`).test(t)))||null}
+function projOpts(v,cid){const ps=S.d.projects.filter(p=>(p.active!==false||p.code===v)&&(!cid||!p.customer_id||p.customer_id===cid)).sort((a,b)=>(+a.no||999)-(+b.no||999)||String(a.code).localeCompare(String(b.code)));
+  let o=optList(ps.map(p=>[p.code,`${p.code}${p.no?` (No.${p.no})`:""}`]),v,"—");
+  if(v&&!ps.some(p=>p.code===v))o+=`<option value="${esc(v)}" selected>${esc(v)}</option>`;return o}
+const projRequired=cid=>!!cid&&S.d.projects.some(p=>p.customer_id===cid&&p.active!==false);
+
+/* ---- 价钱：客户 + 车牌 + 材料，越准确越优先；没指定客户 = 所有客户 ---- */
+function findL3Rate(cid,svc,plate,date,material){
+  return S.d.rates.filter(r=>r.service===svc&&inRange(date,r.effective_from,r.effective_to)&&(!r.customer_id||r.customer_id===cid)&&(!r.plate||r.plate===plate)&&(!r.material||r.material===material))
+    .map(r=>({r,k:(r.customer_id?4:0)+(r.plate?2:0)+(r.material?1:0)})).sort((a,b)=>b.k-a.k||String(b.r.effective_from).localeCompare(String(a.r.effective_from)))[0]?.r||null}
+const rateFor=(r,crane,sup)=>r?Number(crane&&!sup&&r.price_night!=null?r.price_night:r.price):null;
+const exactHours=(s,e)=>{const a=mins(s),b=mins(e);if(a==null||b==null)return null;let d=b-a;if(d<=0)d+=1440;return d/60};
+const isTipLoad=d=>d.service==="Tipper"&&!d.start_time&&!d.end_time&&Number(d.loads)>0;
+function lineTitle(l){if(l.desc)return l.desc;const m=l.material?l.material+" ":"";
+  return {"Supply":`Supply ${m}inclusive transportation`,"Disposal":`Being Disposal of ${l.material||""}`.trim(),"Transfer":`Transfer ${l.material||""}`.trim(),
+    "Internal Work":"Internal Work Charges","Lorry Crane":"Lorry Crane Charges","Excavator":"Excavator Rental"}[l.item]||l.item||""}
+function calcLine(f,l){l.uom=l.uom||itemUom(l.item);
+  const r=findL3Rate(f.customer_id,l.item,f.plate,f.do_date,l.material||null);l._auto=r?Number(r.price):null;
+  if(!l._rt)l.rate=l._auto;
+  if(!l._qt)l.qty=l.uom==="hr"?(f.billable_hours??null):(l.qty??1);
+  l.amount=(l.qty!=null&&l.rate!=null)?r2(Number(l.qty)*Number(l.rate)):0;
+  l._chg=l._auto!=null&&l.rate!=null&&Number(l.rate)!==l._auto;return l}
+function recomputeL3(f){
+  const crane=f.service==="Lorry Crane",why=[];
+  if(crane){if(!f._supTouched){const dr=drvOf(f.driver);f.lifting_sup=!!dr?.usual_sup||(f.start_time?mins(f.start_time)<17*60:true)}f.shift=f.lifting_sup?"Day":"Night"}
+  else{f.lifting_sup=null;f.shift=shiftOf(f.start_time)}
+  if(f.hourly==null)f.hourly=true;
+  f.charges=(f.charges||[]).map(l=>calcLine(f,l));
+  f._tipLoad=f.service==="Tipper"&&!f.start_time&&!f.end_time;
+  f.actual_hours=actualHours(f.start_time,f.end_time);
+  if(f.record_only){f._rateRow=null;if(!f._rateTouched)f.rate=null;f.billable_hours=f.start_time?f.billable_hours:null;f._main=0;f.amount=0;f._autoRate=null;f._priceChanged=false;f._why=[L("只记录（NIL），不收钱 —— 例：Samwoh 的料","Record only (NIL) — not charged")];return f}
+  if(f._tipLoad){const r=findL3Rate(f.customer_id,"Tipper Load",f.plate,f.do_date,null);f._rateRow=r;f._autoRate=r?Number(r.price):null;
+    if(!f._rateTouched)f.rate=f._autoRate;f.billable_hours=null;f._hx=null;
+    if(!f._surTouched)f.surcharge=0;
+    const n=Number(f.loads)||0;f._main=n&&f.rate!=null?r2(n*f.rate):0;
+    why.push(n?L(`没写时间 → 按 load：${n} load × $${money(f.rate)} = $${money(f._main)}`,`No time → by load: ${n} × $${money(f.rate)}`):L("没写时间 → 填「Load 数量」按 load 算","No time → enter loads"));
+  }else{
+    const rate=findL3Rate(f.customer_id,f.service,f.plate,f.do_date,null);f._rateRow=rate;
+    if(!f.hours_overridden){let h=exactHours(f.start_time,f.end_time);
+      if(h!=null)why.push(L(`实际 ${fmtH(h)} 小时`,`Actual ${fmtH(h)} hrs`));
+      const after=rate?.break_after_hours!=null?Number(rate.break_after_hours):8,brk=rate?.break_hours!=null?Number(rate.break_hours):1;
+      if(h!=null&&after&&h>after){h-=brk;why.push(L(`超过 ${after} 小时 → 扣 ${brk} 小时吃饭 → ${fmtH(h)}`,`Over ${after} hrs → minus ${brk} meal → ${fmtH(h)}`))}
+      const cm=custOf(f.customer_id).min_hours_crane,min=crane&&cm!=null&&cm!==""?Number(cm):Number(rate?.min_hours)||0;
+      if(h!=null&&min&&h<min){h=min;why.push(L(`不够最少 ${min} 小时 → 算 ${min}`,`Below min ${min} hrs → ${min}`))}
+      f._hx=h;f.billable_hours=h==null?null:r2(h)}else{f._hx=f.billable_hours;why.push(L(`手动小时 ${f.billable_hours}`,`Manual hrs ${f.billable_hours}`))}
+    f._autoRate=rateFor(rate,crane,f.lifting_sup);
+    if(!f._rateTouched)f.rate=f._autoRate;
+    if(f.hourly&&f.rate!=null)why.push(crane?L(`${f.lifting_sup?"白天价（有 Lifting Supervisor）":"晚上价（没有 Lifting Supervisor）"} ${f.plate||""} $${money(f.rate)}/hr`,`${f.lifting_sup?"Day":"Night"} rate $${money(f.rate)}/hr`):L(`${f.plate||f.service} $${money(f.rate)}/hr`,`$${money(f.rate)}/hr`));
+    if(!f._surTouched)f.surcharge=findSurcharge(f.customer_id,f.service,f.do_date);
+    f._main=f.hourly&&f._hx!=null&&f.rate!=null?r2(f._hx*f.rate):0;
+    if(!f.hourly)why.push(L("不按小时收","Not charged by the hour"));
+  }
+  if(Number(f.surcharge))why.push(`Diesel Surcharge $${money(f.surcharge)}`);
+  const mainChg=(f._tipLoad||f.hourly)&&f._autoRate!=null&&f.rate!=null&&Number(f.rate)!==Number(f._autoRate);
+  if(mainChg)why.push(L(`⚠ 手动改价：系统价 $${money(f._autoRate)}，现在 $${money(f.rate)}`,`⚠ Price changed: system $${money(f._autoRate)}`));
+  for(const l of f.charges)if(l._chg)why.push(L(`⚠ ${lineTitle(l)} 手动改价：系统价 $${money(l._auto)}`,`⚠ ${lineTitle(l)} price changed`));
+  f._priceChanged=mainChg||f.charges.some(l=>l._chg);
+  const empty=!f._tipLoad&&f.hourly&&f._hx==null&&!f.charges.length;
+  f.amount=empty?null:r2(f._main+sum(f.charges,l=>l.amount)+(Number(f.surcharge)||0));
+  f._otHours=null;f._otRate=null;f._why=why;
+  return f}
+function calcViewL3(f){const ex=sum(f.charges||[],l=>l.amount);
+  return `<div>${f.service==="Lorry Crane"?"Lifting Sup":"Day/Night"}<b>${f.service==="Lorry Crane"?(f.lifting_sup?`<span class="tag Day">✓ ${L("有","Yes")}</span>`:`<span class="tag Night">${L("没有（晚上价）","No (night rate)")}</span>`):(f.shift?`<span class="tag ${f.shift}">${f.shift}</span>`:"—")}</b></div>
+  ${f._tipLoad?`<div>Load<b>${Number(f.loads)||0}</b></div>`:`<div>${L("实际小时","Actual hrs")}<b>${f.actual_hours??"—"}</b></div>
+  <div>${L("计费小时","Billable hrs")}<b>${f.billable_hours??"—"}${f.hours_overridden?` <small class="mute" style="font-size:12px">${L("手动","manual")}</small>`:""}</b></div>`}
+  <div>${f._tipLoad?L("按 load","By load"):L("按小时","Hourly")}<b>${f.record_only?"NIL":(f._tipLoad||f.hourly)?`$${money(f._main)}`:L("不收","—")}</b></div>
+  ${(f.charges||[]).length?`<div>${L("其他收费","Other charges")}<b>$${money(ex)}</b></div>`:""}
+  <div class="total">${L("金额","Amount")}<b>${f.record_only?"NIL":f.amount!=null?"$"+money(f.amount):"—"}</b></div>
+  ${(f._why||[]).length?`<div class="why">${f._why.map(w=>`<span class="${w.startsWith("⚠")?"w":""}">${esc(w)}</span>`).join("")}</div>`:""}`}
+const noRateL3=f=>{if(f.record_only||!f.customer_id||!f.service)return"";
+  if(f._tipLoad)return Number(f.loads)>0&&f.rate==null?L(`找不到 Tipper 按 load 的价钱。到 Master List → 价钱 新增 Service「Tipper Load」（例：$100 / load）。`,`No "Tipper Load" rate. Add it in Master List → Rates.`):"";
+  return f.hourly&&f.rate==null?L(`找不到 ${f.plate||f.service} 的每小时价钱。到 Master List → 价钱 新增（Service「${f.service}」，可以指定车牌）。`,`No hourly rate for ${f.plate||f.service}. Add it in Master List → Rates.`):""};
+function chgBox(f){const ls=f.charges||[];
+  return `<div class="att" id="chg" style="margin-top:10px" oninput="if(event.target.dataset.ci!=null)chgInput(event.target)"><h3>${L("其他收费（Transfer / Supply / Disposal / Internal Work）","Other charges")}</h3>
+  ${ls.length?`<div class="tw"><table class="chg"><thead><tr><th>${L("项目","Item")}</th><th>${L("材料","Material")}</th><th>${L("说明（空白自动）","Description (auto)")}</th><th class="num">Qty</th><th>UOM</th><th class="num">${L("单价","Rate")}</th><th class="num">${L("金额","Amount")}</th><th></th></tr></thead><tbody>
+    ${ls.map((l,i)=>`<tr${l._chg?` class="chgd"`:""}><td><select class="inp" data-ci="${i}" data-ck="item">${optList(L3_ITEMS.map(x=>[x[0],x[0]]),l.item)}</select></td>
+      <td><select class="inp" data-ci="${i}" data-ck="material">${optList(MATERIALS.map(m=>[m,m]),l.material,"—")}</select></td>
+      <td><input class="inp" data-ci="${i}" data-ck="desc" value="${esc(l.desc||"")}" placeholder="${esc(lineTitle({...l,desc:""}))}"></td>
+      <td style="width:80px"><input class="inp ${l._qt?"":"auto"}" type="number" step="0.01" data-ci="${i}" data-ck="qty" value="${l.qty??""}"></td>
+      <td style="width:70px"><input class="inp" data-ci="${i}" data-ck="uom" value="${esc(l.uom||"")}"></td>
+      <td style="width:100px"><input class="inp ${l._rt?"":"auto"}" type="number" step="0.01" data-ci="${i}" data-ck="rate" value="${l.rate??""}" title="${l._auto!=null?L("系统价 $","System $")+money(l._auto):L("Master List 没有这个价钱","No rate in Master List")}"></td>
+      <td class="num" data-amt="${i}">${money(l.amount)}</td><td><button class="btn del sm" onclick="chgDel(${i})">✕</button></td></tr>`).join("")}</tbody></table></div>`:""}
+  <div class="actions" style="margin-top:6px">${L3_ITEMS.slice(0,4).map(([it])=>`<button class="btn sec sm" onclick="chgAdd('${it}')">+ ${it}</button>`).join("")}</div>
+  <p class="mute" style="font-size:12px;margin:4px 0 0">${L("例：DO 24956 = Supply RCA 1 load + Internal Work 8 hr。单价从 Master List 价钱自动带出（客户 + 项目 + 材料），改了会标黄，要写改价原因。","Rates come from Master List; changed rates are marked and need a reason.")}</p></div>`}
+function chgAdd(it){const f=S.doForm;f.charges=f.charges||[];f.charges.push({item:it,material:null,qty:null,uom:itemUom(it)});S.dirty=true;recompute(f);render()}
+function chgDel(i){const f=S.doForm;f.charges.splice(i,1);S.dirty=true;recompute(f);render()}
+function chgInput(el){const f=S.doForm,i=+el.dataset.ci,k=el.dataset.ck,l=f.charges[i];if(!l)return;S.dirty=true;
+  const v=el.value;
+  if(k==="qty"){l.qty=v===""?null:Number(v);l._qt=v!==""}
+  else if(k==="rate"){l.rate=v===""?null:Number(v);l._rt=v!==""}
+  else if(k==="item"){l.item=v;l.uom=itemUom(v);l._rt=false;l._qt=false}
+  else if(k==="material"){l.material=v||null;l._rt=false}
+  else l[k]=v;
+  recompute(f);
+  if(k==="item"||k==="material"){render();return}
+  const a=document.querySelector(`[data-amt="${i}"]`);if(a)a.textContent=money(l.amount);
+  el.closest("tr")?.classList.toggle("chgd",!!l._chg);
+  $("#calc").innerHTML=calcView(f);$("#noRate").textContent=noRateMsg(f)}
+
+/* ---- 时间重叠 / 可能重复 / ETK-L3H 交叉（同一辆车） ---- */
+function spanOf(d,base){const s=mins(String(d.start_time||"").slice(0,5)),e=mins(String(d.end_time||"").slice(0,5));if(s==null||e==null)return null;
+  let dur=e-s;if(dur<=0)dur+=1440;const off=daysBetween(base,d.do_date)*1440;return[off+s,off+s+dur]}
+const overlap=(a,b)=>a&&b&&a[0]<b[1]&&b[0]<a[1];
+const sameTxt=(a,b)=>String(a||"").trim().toLowerCase()===String(b||"").trim().toLowerCase();
+const isDupPair=(a,b)=>a.do_date===b.do_date&&(a.start_time&&b.start_time?String(a.start_time).slice(0,5)===String(b.start_time).slice(0,5)&&String(a.end_time||"").slice(0,5)===String(b.end_time||"").slice(0,5)
+  :(!a.start_time&&!b.start_time&&sameTxt(a.from_loc,b.from_loc)&&sameTxt(a.to_loc,b.to_loc)&&sameTxt(a.description,b.description)));
+let ovlTimer=null;
+function checkOverlap(){clearTimeout(ovlTimer);ovlTimer=setTimeout(async()=>{const f=S.doForm,box=$("#ovl");if(!f||!box)return;
+  const out=[];
+  try{if(f.plate&&f.do_date){const{data}=await sb.from("delivery_orders").select("id,company,do_no,do_date,start_time,end_time,project,customer_id,plate,from_loc,to_loc,description,record_only").eq("plate",f.plate)
+      .gte("do_date",addDays(f.do_date,-1)).lte("do_date",addDays(f.do_date,1));
+    const me=spanOf(f,f.do_date);
+    for(const d of data||[]){if(d.id===f.id||d.record_only)continue;const dup=isDupPair(f,d),ov=!dup&&overlap(me,spanOf(d,f.do_date));if(dup||ov)out.push({d,dup})}}
+    if(String(f.do_no||"").trim()){const{data}=await sb.from("delivery_orders").select("id,company,do_no,do_date").eq("do_no",f.do_no.trim()).neq("company",S.company);
+      for(const d of data||[])out.push({d,xco:true})}}catch(e){}
+  if(S.doForm!==f)return;f._ovl=out;box.innerHTML=ovlMsg(f,out)},350)}
+const coTag=d=>d.company&&d.company!==S.company?` <b class="tag warn" style="display:inline-block;width:auto">${esc(d.company)}</b>`:"";
+const ovlMsg=(f,hit)=>(hit||[]).length?`<div class="note" style="border-color:#d9534f">${hit.map(({d,dup,xco})=>xco?`⚠ ${L(`${d.company} 也有 DO ${esc(d.do_no)}（${dmy(d.do_date)}），确认不是同一张。`,`${d.company} also has DO ${esc(d.do_no)} (${dmy(d.do_date)}).`)}`
+  :dup?`⚠ ${L("可能重复：","Possible duplicate: ")}DO ${esc(d.do_no)}${coTag(d)}（${dmy(d.do_date)} ${tShort(d.start_time)}${d.start_time?"–"+tShort(d.end_time):""}${d.project?" · "+esc(d.project):""}）${L("—— 同一辆车同一份工，是不是录了两次？","— same vehicle, same job. Keyed in twice?")}`
+  :`⚠ ${L("时间重叠：","Time overlap: ")}${esc(f.plate)} ${tShort(f.start_time)}–${tShort(f.end_time)} ${L("跟","overlaps")} DO ${esc(d.do_no)}${coTag(d)}（${dmy(d.do_date)} ${tShort(d.start_time)}–${tShort(d.end_time)}${d.project?" · "+esc(d.project):""} · ${esc(custName(d.customer_id)||"")}）${L("—— 同一辆车不能同时在两个地方。","— same vehicle can't be in two places.")}`).join("<br>")}<div class="mute" style="font-size:12px;margin-top:4px">${L("还是可以保存，但开单前要查清楚。","You can still save — check before billing.")}</div></div>`:"";
+function overlapPairs(list){const out=[],by={};for(const d of list)if(d.plate&&!d.record_only)(by[d.plate]=by[d.plate]||[]).push(d);
+  for(const ds of Object.values(by)){ds.sort((a,b)=>a.do_date.localeCompare(b.do_date));
+    for(let i=0;i<ds.length;i++)for(let j=i+1;j<ds.length;j++){if(daysBetween(ds[i].do_date,ds[j].do_date)>1)break;
+      const dup=isDupPair(ds[i],ds[j]);if(dup||overlap(spanOf(ds[i],ds[i].do_date),spanOf(ds[j],ds[i].do_date)))out.push([ds[i],ds[j],dup])}}
+  return out}
+function monthOverlapIds(){const s=new Set();for(const[a,b]of overlapPairs(S.d.delivery_orders)){s.add(a.id);s.add(b.id)}return s}
+/* 补单：这个月份的单已经开了，这张 DO 还没开 */
+function lateInvOf(d){if(d.invoice_id||d.record_only)return null;
+  return S.d.invoices.find(i=>i.status!=="Cancelled"&&i.customer_id===d.customer_id&&(i.project||"")===(d.project||"")&&i.period_from&&i.period_to&&i.period_from<=d.do_date&&i.period_to>=d.do_date)||null}
+
+/* ---- 每辆车的时间表 ---- */
+function vehicleTimeline(plate){const list=S.d.delivery_orders.filter(d=>d.plate&&!d.record_only),plates=[...new Set(list.map(d=>d.plate))].sort();
+  plate=plate??S.tlPlate??"";S.tlPlate=plate;const shown=plate?[plate]:plates,ids=monthOverlapIds(),days=+lastDayOf(S.month).slice(8),wd=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  let ov=$("#photoOv");if(ov)ov.remove();ov=document.createElement("div");ov.id="photoOv";ov.className="tlov";
+  const segs=(p,day)=>{const date=`${S.month}-${z2(day)}`,out=[];
+    for(const d of list.filter(x=>x.plate===p&&daysBetween(x.do_date,date)>=0&&daysBetween(x.do_date,date)<=1)){const sp=spanOf(d,date);
+      if(!sp){if(d.do_date===date)out.push(`<div class="seg ld" style="left:0;width:12%" data-id="${d.id}" title="DO ${esc(d.do_no)} · ${L("没写时间","no time")}">${esc(d.do_no)} ${L("无时间","no time")}</div>`);continue}
+      const a=Math.max(0,sp[0]),b=Math.min(1440,sp[1]);if(b<=a)continue;
+      out.push(`<div class="seg ${ids.has(d.id)?"bad":""} ${d.lifting_sup===false||d.shift==="Night"?"nt":""}" style="left:${a/14.4}%;width:${(b-a)/14.4}%" data-id="${d.id}" title="DO ${esc(d.do_no)} · ${tShort(d.start_time)}–${tShort(d.end_time)} · ${esc(d.project||custName(d.customer_id))}">${esc(d.do_no)} ${esc(d.project||"")}</div>`)}
+    return out.join("")};
+  ov.innerHTML=`<div class="pvbox"><div class="pvhead"><h3 style="margin:0">🚚 ${L("每车时间表","Vehicle timeline")} · ${monthLong(S.month+"-01")}</h3>
+    <select class="inp" id="tlSel" style="width:auto">${optList(plates.map(p=>[p,p]),plate,L("全部车","All vehicles"))}</select>
+    <span class="mute" style="font-size:12px"><span class="seg-k"></span>${L("白天","Day")} <span class="seg-k nt"></span>${L("晚上","Night")} <span class="seg-k bad"></span>${L("重叠","Overlap")}</span><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕ ${L("关闭","Close")}</button></div>
+    ${shown.length?shown.map(p=>{const n=list.filter(d=>d.plate===p).length;return `<h3 style="margin:14px 0 6px">${esc(p)} <span class="mute" style="font-size:13px;font-weight:400">${n} DO</span></h3>
+      <div class="tl"><div class="tlr hd"><span></span><div class="bar">${[0,6,12,18].map(h=>`<i style="left:${h/24*100}%">${z2(h)}:00</i>`).join("")}</div></div>
+      ${Array.from({length:days},(_,i)=>{const day=i+1,dt=new Date(+S.month.slice(0,4),+S.month.slice(5,7)-1,day),sg=segs(p,day);
+        return `<div class="tlr ${dt.getDay()===0?"sun":""}"><span>${day} ${wd[dt.getDay()]}</span><div class="bar ${sg?"":"none"}">${sg}</div></div>`}).join("")}</div>`}).join("")
+      :`<div class="pvnone">${L("这个月还没有有车牌的 DO","No DOs with a vehicle this month")}</div>`}
+    <p class="mute" style="font-size:12px">${L("红色 = 同一辆车时间重叠，要查清楚。空白的日子 = 那天这辆车没有 DO（如果车有出去，可能漏单）。点一下可以打开那张 DO。","Red = same vehicle overlapping. Blank days = no DO for that vehicle. Tap a bar to open the DO.")}</p></div>`;
+  document.body.appendChild(ov);
+  ov.onclick=e=>{if(e.target.closest("[data-a=x]")||e.target===ov){ov.remove();return}const s=e.target.closest(".seg[data-id]");if(s){ov.remove();editDO(s.dataset.id)}};
+  ov.querySelector("#tlSel").onchange=e=>vehicleTimeline(e.target.value)}
+
+/* ---- DO 断号 ---- */
+async function doGaps(){toast(L("检查中…","Checking…"));
+  let all;try{all=await fetchAll(()=>sb.from("delivery_orders").select("do_no,do_date,record_only").eq("company",S.company).gte("do_date",addDays(today(),-400)))}catch(e){return toast(e.message)}
+  const voids=new Set(S.d.do_voids.map(v=>String(v.do_no).trim())),seen=new Map();
+  for(const d of all){if(d.record_only)continue;const s=String(d.do_no||"").trim();if(/^\d{3,7}$/.test(s))seen.set(+s,{s,date:d.do_date})}
+  const nums=[...seen.keys()].sort((a,b)=>a-b),gaps=[];
+  for(let i=1;i<nums.length;i++){const a=nums[i-1],b=nums[i];if(b-a>1&&b-a<=30){const w=seen.get(a).s.length;
+    for(let n=a+1;n<b;n++){const s=String(n).padStart(w,"0");if(!voids.has(s)&&!voids.has(String(n)))gaps.push({s,prev:seen.get(a),next:seen.get(b)})}}}
+  gaps.reverse();
+  let ov=$("#photoOv");if(ov)ov.remove();ov=document.createElement("div");ov.id="photoOv";
+  ov.innerHTML=`<div class="pvbox" style="max-width:760px"><div class="pvhead"><h3 style="margin:0">🔢 ${L("DO 断号","Missing DO numbers")} <span class="tag ${gaps.length?"warn":"ok"}">${gaps.length}</span></h3><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕ ${L("关闭","Close")}</button></div>
+    <p class="mute" style="font-size:13px;margin-top:0">${L("DO 本子是连号的。下面这些号码前后都有，但系统里没有 —— 可能还没录、漏 bill，或者作废了。作废的按「作废」，以后不会再出现。（「只记录 NIL」的供应商 DO 不算在内）","DO books are numbered in sequence. These numbers are missing between existing ones.")}</p>
+    ${gaps.length?`<div class="tw"><table><thead><tr><th>DO No</th><th>${L("前一张","Before")}</th><th>${L("后一张","After")}</th><th></th></tr></thead><tbody>
+      ${gaps.slice(0,300).map(g=>`<tr><td><b>${esc(g.s)}</b></td><td>${esc(g.prev.s)} · ${dmy(g.prev.date)}</td><td>${esc(g.next.s)} · ${dmy(g.next.date)}</td>
+        <td style="white-space:nowrap"><button class="btn sm" data-new="${esc(g.s)}" data-date="${g.prev.date}">${L("去录","Key in")}</button> <button class="btn sec sm" data-void="${esc(g.s)}">${L("作废","Void")}</button></td></tr>`).join("")}</tbody></table></div>`
+      :`<div class="pvnone">✓ ${L("没有断号","No gaps")}</div>`}
+    ${S.d.do_voids.length?`<details style="margin-top:10px"><summary class="mute">${L("已作废","Voided")} (${S.d.do_voids.length})</summary><p style="font-size:13px">${S.d.do_voids.map(v=>`${esc(v.do_no)}${v.reason?" – "+esc(v.reason):""}`).join("、")}</p></details>`:""}</div>`;
+  document.body.appendChild(ov);
+  ov.onclick=async e=>{if(e.target.closest("[data-a=x]")||e.target===ov){ov.remove();return}
+    const nw=e.target.closest("[data-new]");if(nw){ov.remove();S.doForm=recompute({...blankDO(),do_no:nw.dataset.new,do_date:nw.dataset.date});S.dirty=true;S.tab="do";render();window.scrollTo({top:0,behavior:"smooth"});return}
+    const vd=e.target.closest("[data-void]");if(vd){const reason=prompt(L(`DO ${vd.dataset.void} 作废的原因（例：写错、取消）`,`Reason DO ${vd.dataset.void} is void`),"");if(reason==null)return;
+      const{data,error}=await sb.from("do_voids").insert({company:S.company,do_no:vd.dataset.void,reason:reason||null}).select().single();if(error)return toast(error.message);
+      S.d.do_voids.push(data);toast(L("已作废","Voided"));doGaps()}}}
+
+/* ---- 已开单 DO：改的话要写原因 ---- */
+const DO_LOG_FIELDS=["do_date","customer_id","project","service","plate","driver","do_no","start_time","end_time","from_loc","to_loc","billable_hours","rate","surcharge","amount","loads","record_only","lifting_sup"];
+function doChanges(old,row){const ch={};for(const k of DO_LOG_FIELDS){const a=old[k]??"",b=row[k]??"";const A=k.endsWith("_time")?String(a).slice(0,5):String(a),B=k.endsWith("_time")?String(b).slice(0,5):String(b);
+  if(A!==B&&!(typeof b==="number"&&Number(a)===b))ch[k]=[A,B]}
+  if(JSON.stringify((old.charges||[]).map(l=>[l.item,l.material,l.qty,l.rate]))!==JSON.stringify((row.charges||[]).map(l=>[l.item,l.material,l.qty,l.rate])))ch.charges=["…","…"];
+  return ch}
+
+/* ---- L3H 开单 ---- */
+const kindOf=d=>d.record_only?null:isTipLoad(d)?"tipper_load":d.hourly===false?null:d.service==="Lorry Crane"?(d.lifting_sup===false||(d.lifting_sup==null&&d.shift==="Night")?"crane_night":"crane_sup"):d.service==="Tipper"?"tipper":d.service==="Excavator"?"excavator":null;
+const KIND_DESC={tipper:"Provide Tipper Truck Transportation with diesel / driver (G.S.G)",tipper_load:"Provide Tipper Truck Transportation with diesel / driver (G.S.G)",
+  crane_sup:"Provide Lorry Crane with Lifting Supervisor (inclusive of transportation, diesel & driver – G.S.G)",crane_night:"Provide Lorry Crane Transportation with diesel / driver (G.S.G)",
+  excavator:"Provide Excavator Rental with operator"};
+const KIND_ORDER=["tipper","tipper_load","crane_sup","crane_night","excavator"];
+const SHEETS={crane_sup:"LORRY CRANE TRANSPORTATION WITH LIFTING SUPERVISOR CHARGES RECORD",crane_night:"LORRY CRANE TRANSPORTATION RECORD (G.S.G)",
+  tipper:"TIPPER TRUCK TRANSPORTATION RECORD (G.S.G)",tipper_load:"TIPPER TRUCK TRANSPORTATION RECORD (G.S.G) - BY LOAD",excavator:"EXCAVATOR RENTAL RECORD",load:"TRANSPORTATION RECORD"};
+const dRange=ds=>{const a=ds[0],b=ds.at(-1);return a===b?dmy(a):`${dmy(a)} to ${dmy(b)}`};
+const doListTxt=ns=>ns.length<=4?ns.join(", "):`${ns.slice(0,3).join(", ")} … (${ns.length} DO)`;
+function mainAmt(d){if(d.record_only)return 0;const ex=sum(d.charges||[],l=>l.amount);return r2((Number(d.amount)||0)-ex-(Number(d.surcharge)||0))}
+/* 没有价钱的 DO（不能开单） */
+function noPriceList(ds){const out=[];for(const d of ds){if(d.record_only)continue;const k=kindOf(d);
+  if(k==="tipper_load"&&d.rate==null)out.push([d,L("Tipper 按 load 没有价钱","no tipper load rate")]);
+  else if(k&&k!=="tipper_load"&&d.rate==null)out.push([d,L("每小时价钱","hourly rate")]);
+  for(const l of d.charges||[])if(l.rate==null)out.push([d,lineTitle(l)]);
+  if(!k&&!(d.charges||[]).length&&!Number(d.amount))out.push([d,L("没有任何收费","nothing charged")])}
+  return out}
+/* CHC：按 Project，每种一行，LS，金额包括 Diesel Surcharge */
+function l3LinesLS(chosen){const lines=[],g={};
+  for(const d of chosen){const k=kindOf(d);if(!k)continue;(g[k]=g[k]||[]).push(d)}
+  for(const k of KIND_ORDER){const ds=g[k];if(!ds)continue;
+    const load=k==="tipper_load";lines.push({description:KIND_DESC[k],qty:load?sum(ds,d=>d.loads):r2(sum(ds,d=>d.billable_hours)),unit:load?"load":"hrs",unit_price:null,amount:sum(ds,d=>mainAmt(d)+(Number(d.surcharge)||0))})}
+  const lg={};for(const d of chosen)for(const l of d.charges||[]){const key=[lineTitle(l),l.uom].join("|");(lg[key]=lg[key]||{t:lineTitle(l),u:l.uom==="hr"?"hrs":l.uom,qty:0,amt:0});lg[key].qty+=Number(l.qty)||0;lg[key].amt+=Number(l.amount)||0}
+  for(const x of Object.values(lg))lines.push({description:x.t,qty:r2(x.qty),unit:x.u,unit_price:null,amount:r2(x.amt)});
+  const sur=chosen.filter(d=>!kindOf(d)&&Number(d.surcharge));
+  if(sur.length)lines.push({description:"Diesel Surcharge",qty:sur.length,unit:"trip",unit_price:null,amount:sum(sur,d=>d.surcharge)});
+  return lines}
+/* AST / Reclaims / 外面顾客：每行写项目、DO、日期、From / To、单价 */
+function l3LinesDetail(chosen){const lines=[],grp={};
+  for(const d of chosen){const k=kindOf(d);if(!k||d.rate==null)continue;const key=`${k}|${d.rate}`;(grp[key]=grp[key]||{k,rate:Number(d.rate),ds:[]}).ds.push(d)}
+  for(const g of Object.values(grp)){const ds=g.ds,load=g.k==="tipper_load",amt=sum(ds,mainAmt);
+    const det=ds.length===1?`\nDO : ${ds[0].do_no}\nDate : ${dmy(ds[0].do_date)}${ds[0].from_loc||ds[0].to_loc?`\nFrom : ${ds[0].from_loc||""} To : ${ds[0].to_loc||""}`:""}`:`\nDate : ${dRange(ds.map(d=>d.do_date))}`;
+    lines.push({description:KIND_DESC[g.k]+det,qty:load?sum(ds,d=>d.loads):r2(sum(ds,d=>d.billable_hours)),unit:load?"load":"hr",unit_price:g.rate,amount:amt})}
+  const lg={};
+  for(const d of chosen)for(const l of d.charges||[]){const key=[l.item,l.material||"",l.desc||"",d.from_loc||"",d.to_loc||"",l.rate,l.uom].join("|");
+    (lg[key]=lg[key]||{l,from:d.from_loc,to:d.to_loc,ds:[],qty:0,amt:0});const x=lg[key];x.ds.push(d);x.qty+=Number(l.qty)||0;x.amt+=Number(l.amount)||0}
+  for(const x of Object.values(lg)){const ds=x.ds.sort((a,b)=>a.do_date.localeCompare(b.do_date));
+    lines.push({description:`${lineTitle(x.l)}\nDO : ${doListTxt(ds.map(d=>d.do_no))}\nDate : ${dRange(ds.map(d=>d.do_date))}${x.from||x.to?`\nFrom : ${x.from||""} To : ${x.to||""}`:""}`,
+      qty:r2(x.qty),unit:x.l.uom||"LS",unit_price:x.l.rate,amount:r2(x.amt)})}
+  const sg={};for(const d of chosen){const s=Number(d.surcharge)||0;if(s&&!d.record_only)(sg[s]=sg[s]||[]).push(d)}
+  for(const[s,ds]of Object.entries(sg))lines.push({description:`Diesel Surcharge\nDate : ${dRange(ds.map(d=>d.do_date).sort())}`,qty:ds.length,unit:"trip",unit_price:Number(s),amount:r2(s*ds.length)});
+  return lines}
+/* 开单前检查 */
+async function l3Checklist(f,chosen){const c={};
+  try{const plates=[...new Set(chosen.map(d=>d.plate).filter(Boolean))],ds=chosen.map(d=>d.do_date).sort();
+    if(plates.length){const all=await fetchAll(()=>sb.from("delivery_orders").select("id,company,do_no,do_date,start_time,end_time,plate,project,customer_id,from_loc,to_loc,description,record_only").in("plate",plates).gte("do_date",addDays(ds[0],-1)).lte("do_date",addDays(ds.at(-1),1)));
+      const ids=new Set(chosen.map(d=>d.id));c.pairs=overlapPairs(all).filter(([a,b])=>ids.has(a.id)||ids.has(b.id))}else c.pairs=[];
+    c.noPhoto=chosen.filter(d=>!doPhotos(d.id).length);
+    c.priceChg=chosen.filter(d=>d.price_note);
+    c.noPrice=noPriceList(chosen);
+    const from=f.period_from||ds[0],to=f.period_to||ds.at(-1);
+    if(f.project){c.noProj=await fetchAll(()=>sb.from("delivery_orders").select("id,do_no,do_date").eq("company",S.company).eq("customer_id",f.customer_id).is("project",null).is("invoice_id",null).gte("do_date",from).lte("do_date",to))}else c.noProj=[];
+    const have=new Set(f.dos.map(d=>d.id));
+    c.late=(await fetchAll(()=>{let q=sb.from("delivery_orders").select("*").eq("company",S.company).eq("customer_id",f.customer_id).is("invoice_id",null).lt("do_date",from);if(f.project)q=q.eq("project",f.project);return q})).filter(d=>!d.record_only&&!have.has(d.id));
+  }catch(e){c.err=e.message}
+  return c}
+function checklistHTML(c){if(!c)return"";const row=(ok,t,body="",lvl)=>`<div class="ck ${ok?"ok":lvl||"bad"}"><b>${ok?"✓":lvl==="warn"?"!":"✕"}</b><div>${t}${body?`<div class="mute" style="font-size:12px">${body}</div>`:""}</div></div>`;
+  const pairs=c.pairs||[],dups=pairs.filter(p=>p[2]);
+  return `<div class="panel ckl"><h3 style="margin-top:0">${L("开单前检查","Pre-billing checklist")}</h3>
+  ${row(!(c.noPrice||[]).length,!(c.noPrice||[]).length?L("全部 DO 都有价钱","Every DO has a price"):L("有 DO 没有价钱，不能开单","DOs without a price"),(c.noPrice||[]).map(([d,t])=>`DO ${esc(d.do_no)}：${esc(t)}`).join("、"))}
+  ${row(!dups.length,!dups.length?L("没有可能重复的 DO","No possible duplicates"):L("可能重复（同一辆车同一份工录了两次？）","Possible duplicates"),dups.map(([a,b])=>`DO ${esc(a.do_no)} ↔ ${esc(b.do_no)}${coTag(b)}（${dmy(a.do_date)}）`).join("、"))}
+  ${row(pairs.length===dups.length,pairs.length===dups.length?L("同一辆车没有时间重叠","No same-vehicle overlaps"):L("同一辆车时间重叠","Same-vehicle overlaps"),pairs.filter(p=>!p[2]).map(([a,b])=>`${esc(a.plate)} DO ${esc(a.do_no)} ${tShort(a.start_time)}–${tShort(a.end_time)}${a.project?" ("+esc(a.project)+")":""} ↔ DO ${esc(b.do_no)}${coTag(b)} ${tShort(b.start_time)}–${tShort(b.end_time)}${b.project?" ("+esc(b.project)+")":""}`).join("<br>"))}
+  ${row(!(c.noProj||[]).length,!(c.noProj||[]).length?L("这段期间没有漏填 Project 的 DO","No DOs missing a project"):L("有 DO 没填 Project","DOs missing a project"),(c.noProj||[]).length?L(`${c.noProj.length} 张没填 Project：`,`${c.noProj.length} missing: `)+c.noProj.map(d=>esc(d.do_no)).join(", "):"")}
+  ${row(!(c.late||[]).length,!(c.late||[]).length?L("没有之前月份漏开的 DO（补单）","No late DOs"):L("之前月份还有没开的 DO（补单）","Late DOs from earlier months"),(c.late||[]).length?`${c.late.map(d=>`DO ${esc(d.do_no)} ${dmy(d.do_date)}`).join("、")} <button class="btn sm" onclick="addLate()">${L("加进这张","Add to this invoice")}</button>`:"","warn")}
+  ${row(!(c.priceChg||[]).length,!(c.priceChg||[]).length?L("没有手动改价","No manual price changes"):L("有手动改价（看原因对不对）","Manual price changes"),(c.priceChg||[]).map(d=>`DO ${esc(d.do_no)}：${esc(d.price_note)}`).join("、"),"warn")}
+  ${row(!(c.noPhoto||[]).length,!(c.noPhoto||[]).length?L("DO 都有照片","All DOs have photos"):L("有 DO 还没照片","DOs without photos"),(c.noPhoto||[]).length?L(`缺 ${c.noPhoto.length} 张：`,`${c.noPhoto.length} missing: `)+c.noPhoto.slice(0,12).map(d=>esc(d.do_no)).join(", "):"","warn")}
+  ${c.err?`<p class="mute">${esc(c.err)}</p>`:""}</div>`}
+function addLate(){const f=S.modal.f,late=f._chk?.late||[];for(const d of late)if(!f.dos.some(x=>x.id===d.id)){f.dos.push(d);f.sel.add(d.id)}
+  f.dos.sort((a,b)=>a.do_date.localeCompare(b.do_date));toast(L(`已加 ${late.length} 张补单，再按「用已选 DO 生成明细」`,`Added ${late.length}`));render()}
+
+/* ---- Summary list + 记录表（照 CHC Excel） ---- */
+function l3SummaryHTML(inv){const lines=S.d.invoice_lines.filter(l=>l.invoice_id===inv.id).sort((a,b)=>(a.line_no||0)-(b.line_no||0));
+  const a=inv.period_from||inv.invoice_date,mon=`${MONL[+a.slice(5,7)-1].toUpperCase()} ${a.slice(0,4)}`;
+  return `<div class="doc pg sumlist"><div class="rech"><div><b>${esc(inv.project)}-SUMMARY</b><b>FOR MONTH ${mon}</b><b>TRANSPORT SERVICES</b></div><b class="no">${inv.summary_no?"No."+esc(inv.summary_no):""}</b></div>
+  <table class="sm rec"><colgroup><col style="width:7%"><col><col style="width:10%"><col style="width:8%"><col style="width:13%"><col style="width:16%"></colgroup>
+  <thead><tr><th>S/N</th><th>DESCRIPTION</th><th>QTY</th><th>UOM</th><th>UNIT PRICE $</th><th>TOTAL AMOUNT $</th></tr></thead><tbody>
+  ${lines.map((l,i)=>`<tr><td>${i+1}</td><td class="a">${esc(String(l.description||"").replace(/\n/g," "))}</td><td>${lineUnit(l)==="hrs"?Number(l.qty||0).toFixed(2):l.qty??""}</td><td>${esc(lineUnit(l))}</td><td>${l.unit_price==null?"L/S":money(l.unit_price)}</td><td class="a">${acc(l.amount)}</td></tr>`).join("")}
+  <tr class="tt"><td colspan="4"></td><td class="lb">TOTAL</td><td class="u a">${acc(inv.amount_before_gst)}</td></tr></tbody></table></div>`}
+function l3RecordsHTML(inv,dos){const c=custOf(inv.customer_id),no=inv.summary_no||"",per=13;
+  const ds=[...dos].sort((a,b)=>a.do_date.localeCompare(b.do_date)||String(a.start_time||"").localeCompare(String(b.start_time||"")));
+  const mon=(()=>{const a=inv.period_from||ds[0]?.do_date||inv.invoice_date;return `${MONL[+a.slice(5,7)-1].toUpperCase()} ${a.slice(0,4)}`})();
+  const head=k=>`<div class="rech"><div><b>${esc(inv.project||c.name||"")}</b><b>FOR MONTH ${mon}</b><b>${SHEETS[k]}</b></div><b class="no">${no?"No."+esc(no):""}</b></div>`;
+  const out=[];
+  if(inv.project)out.push(l3SummaryHTML(inv));
+  const hourlySheet=(k,rows)=>{
+    const T=f=>sum(rows,f);
+    out.push(chunkPages(rows,per,(rs,pi,last)=>`${head(k)}<table class="sm rec"><colgroup><col style="width:3.5%"><col style="width:5.5%"><col style="width:6.5%"><col style="width:9%"><col style="width:9%"><col style="width:6%"><col style="width:4.5%"><col style="width:4.5%"><col><col style="width:5.5%"><col style="width:4.5%"><col style="width:3.5%"><col style="width:4.5%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:6.5%"><col style="width:4%"></colgroup>
+      <thead><tr><th class="y">S/N</th><th class="y">D/N</th><th class="y">Date</th><th class="y">From</th><th class="y">To</th><th>Vehicle No</th><th>In</th><th>Out</th><th class="y">Description</th><th>Rate</th><th>Total Hr 1</th><th>UOM</th><th class="o">Total Hr 2</th><th class="o">Rate2</th><th class="o">Diesel Surcharge</th><th class="o">Amount</th><th>Remarks</th></tr></thead><tbody>
+      ${rs.map((d,i)=>{const amt=r2(mainAmt(d)+(Number(d.surcharge)||0)),h=Number(d.billable_hours||0).toFixed(2);return `<tr><td>${pi*per+i+1}</td><td>${esc(d.do_no)}</td><td>${dMonYY(d.do_date)}</td><td>${esc(d.from_loc||"")}</td><td>${esc(d.to_loc||"")}</td><td>${esc(d.plate||"")}</td>
+        <td>${tShort(d.start_time)}</td><td>${tShort(d.end_time)}</td><td>${esc(d.description||"")}</td><td class="a">${acc(d.rate)}</td><td>${h}</td><td>hr</td><td>${h}</td><td class="a">${acc(d.rate)}</td><td class="a">${acc(d.surcharge)}</td><td class="a">${acc(amt)}</td><td>${esc(d.remark||"")}</td></tr>`}).join("")}
+      ${last?`<tr class="tt"><td colspan="9"></td><td class="lb">HRS</td><td class="u">${T(d=>d.billable_hours).toFixed(2)}</td><td></td><td class="u">${T(d=>d.billable_hours).toFixed(2)}</td><td class="lb">TOTAL</td><td class="u a">${acc(T(d=>d.surcharge))}</td><td class="u a">${acc(T(d=>mainAmt(d)+(Number(d.surcharge)||0)))}</td><td></td></tr>`:""}</tbody></table>`))};
+  const loadSheet=(k,lr)=>{out.push(chunkPages(lr,per+2,(rs,pi,last)=>`${head(k)}<table class="sm rec"><colgroup><col style="width:4%"><col style="width:8%"><col style="width:7%"><col style="width:11%"><col style="width:11%"><col style="width:5%"><col style="width:6%"><col><col style="width:5%"><col style="width:5%"><col style="width:7%"><col style="width:8%"><col style="width:6%"></colgroup>
+    <thead><tr><th>S/N</th><th>D/N</th><th>Date</th><th>From</th><th>To</th><th>Company</th><th>Vehicle No</th><th>Descriptions</th><th>Qty</th><th>UOM</th><th>Rate</th><th>Amount</th><th>Remarks</th></tr></thead><tbody>
+    ${rs.map((x,i)=>`<tr><td>${pi*(per+2)+i+1}</td><td>${esc(x.d.do_no)}</td><td>${dMonYY(x.d.do_date)}</td><td>${esc(x.d.from_loc||"")}</td><td>${esc(x.d.to_loc||"")}</td><td>L3H</td><td>${esc(x.d.plate||"")}</td>
+      <td>${esc(x.t)}</td><td>${x.q.toFixed(2)}</td><td>${esc(x.u)}</td><td class="${x.rate!=null?"a":""}">${x.rate!=null?acc(x.rate):"NIL"}</td><td class="${x.amt?"a":""}">${x.amt?acc(x.amt):"NIL"}</td><td>${esc(x.d.remark||"")}</td></tr>`).join("")}
+    ${last?`<tr class="tt"><td colspan="10"></td><td class="lb">TOTAL</td><td class="u a">${acc(sum(lr,x=>x.amt))}</td><td></td></tr>`:""}</tbody></table>`));};
+  /* 跟 invoice 第一页同一个顺序 */
+  for(const k of ["tipper","tipper_load","crane_sup","crane_night","excavator"]){const rows=ds.filter(d=>kindOf(d)===k);if(!rows.length)continue;
+    if(k==="tipper_load")loadSheet(k,rows.map(d=>({d,t:d.description||"",q:Number(d.loads),u:"load",rate:d.rate,amt:r2(mainAmt(d)+(Number(d.surcharge)||0))})));else hourlySheet(k,rows)}
+  const lr=[];
+  for(const d of ds){if(d.record_only)lr.push({d,t:d.description||"",q:Number(d.loads)||1,u:"load",rate:null,amt:null});
+    for(const l of d.charges||[])lr.push({d,t:lineTitle(l),q:Number(l.qty)||0,u:l.uom||"",rate:l.rate,amt:l.amount})}
+  if(lr.length)loadSheet("load",lr);
+  return out.join("")}
+
+/* ---- 每月 Project 进度 ---- */
+async function projBoard(month){month=month||S.pbMonth||prevMonthRange()[0].slice(0,7);S.pbMonth=month;
+  let ov=$("#photoOv");if(ov)ov.remove();ov=document.createElement("div");ov.id="photoOv";
+  ov.innerHTML=`<div class="pvbox"><div class="pvhead"><h3 style="margin:0">📊 ${L("Project 进度","Project progress")}</h3><input type="month" class="inp" id="pbM" value="${month}" style="width:auto"><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕ ${L("关闭","Close")}</button></div><p class="mute">${L("载入中…","Loading…")}</p></div>`;
+  document.body.appendChild(ov);
+  ov.onclick=e=>{if(e.target.closest("[data-a=x]")||e.target===ov){ov.remove();return}const r=e.target.closest("[data-bill]");if(r){ov.remove();const[cid,proj]=JSON.parse(r.dataset.bill);
+    S.tab="inv";render();openInvForm();const f=S.modal.f;f.customer_id=cid;f.project=proj||"";f.period_from=`${month}-01`;f.period_to=lastDayOf(month);recalcDue(f);render();loadUnbilled()}};
+  ov.querySelector("#pbM").onchange=e=>projBoard(e.target.value);
+  let ds;try{ds=await fetchAll(()=>sb.from("delivery_orders").select("*").eq("company",S.company).gte("do_date",`${month}-01`).lte("do_date",lastDayOf(month)))}catch(e){return toast(e.message)}
+  const pairs=overlapPairs(ds),bad=new Set();for(const[a,b]of pairs){bad.add(a.id);bad.add(b.id)}
+  const g={};for(const d of ds){const k=JSON.stringify([d.customer_id,d.project||""]);(g[k]=g[k]||[]).push(d)}
+  const rows=Object.entries(g).map(([k,list])=>{const[cid,proj]=JSON.parse(k),bill=list.filter(d=>!d.record_only),un=bill.filter(d=>!d.invoice_id),p=projOf(proj);
+    return{cid,proj,no:p?.no||"",n:list.length,un:un.length,unAmt:sum(un,d=>d.amount),invs:[...new Set(bill.filter(d=>d.invoice_id).map(d=>invById(d.invoice_id)?.invoice_no||"✓"))],
+      ovl:list.filter(d=>bad.has(d.id)).length,noPic:list.filter(d=>!doPhotos(d.id).length).length,chg:list.filter(d=>d.price_note).length,np:noPriceList(un).length}})
+    .sort((a,b)=>(+a.no||999)-(+b.no||999)||String(custName(a.cid)).localeCompare(String(custName(b.cid))));
+  ov.querySelector(".pvbox").innerHTML=`<div class="pvhead"><h3 style="margin:0">📊 ${L("Project 进度","Project progress")} · ${monthLong(month+"-01")}</h3><input type="month" class="inp" id="pbM" value="${month}" style="width:auto"><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕ ${L("关闭","Close")}</button></div>
+    ${rows.length?`<div class="tw"><table><thead><tr><th>Project</th><th>No.</th><th>${L("客户","Customer")}</th><th class="num">DO</th><th>${L("已开单","Billed")}</th><th class="num">${L("未开单","Unbilled")}</th><th class="num">${L("未开金额","Unbilled $")}</th><th>${L("问题","Issues")}</th><th></th></tr></thead><tbody>
+      ${rows.map(r=>`<tr><td><b>${esc(r.proj||L("（没填 Project）","(no project)"))}</b></td><td>${esc(r.no)}</td><td>${esc(custName(r.cid))}</td><td class="num">${r.n}</td><td>${r.invs.map(esc).join("<br>")||"—"}</td>
+        <td class="num">${r.un?`<span class="tag warn">${r.un}</span>`:`<span class="tag ok">✓</span>`}</td><td class="num">${r.un?money(r.unAmt):""}</td>
+        <td style="font-size:12px">${[r.ovl&&`<span class="tag bad">${L("重叠","Overlap")} ${r.ovl}</span>`,r.np&&`<span class="tag bad">${L("没价钱","No price")} ${r.np}</span>`,!r.proj&&projRequired(r.cid)&&`<span class="tag bad">${L("要填 Project","Needs project")}</span>`,r.chg&&`<span class="tag warn">${L("改价","Price chg")} ${r.chg}</span>`,r.noPic&&`<span class="tag warn">${L("缺照片","No photo")} ${r.noPic}</span>`].filter(Boolean).join(" ")||"—"}</td>
+        <td>${r.un?`<button class="btn sm" data-bill='${esc(JSON.stringify([r.cid,r.proj]))}'>${L("开单","Bill")}</button>`:""}</td></tr>`).join("")}</tbody></table></div>`
+      :`<div class="pvnone">${L("这个月没有 DO","No DOs this month")}</div>`}`;
+  ov.querySelector("#pbM").onchange=e=>projBoard(e.target.value)}
 
 /* ================= Invoice ================= */
 function invView(){
@@ -537,7 +907,7 @@ function invView(){
     <label class="f">${L("客户","Customer")}<select onchange="S.invF.customer=this.value;render()">${optList(S.d.customers.map(c=>[c.id,c.name]),F.customer,L("全部","All"))}</select></label>
     <label class="f">${L("状态","Status")}<select onchange="S.invF.status=this.value;render()">${optList([["Unpaid",L("未付","Unpaid")],["Partial",L("部分付款","Partial")],["Paid",L("已付","Paid")],["Overdue",L("逾期","Overdue")]],F.status,L("全部","All"))}</select></label>
     <label class="f">${L("搜寻","Search")}<input value="${esc(F.q)}" placeholder="Invoice No / Project" onchange="S.invF.q=this.value;render()"></label>
-    <button class="btn" onclick="openInvForm()">${L("新增 Invoice","New invoice")}</button><button class="btn sec" onclick="exportInv()">⬇ Excel</button></div>
+    <button class="btn" onclick="openInvForm()">${L("新增 Invoice","New invoice")}</button>${isL3()?`<button class="btn sec" onclick="projBoard()">📊 ${L("Project 进度","Project progress")}</button>`:""}<button class="btn sec" onclick="exportInv()">⬇ Excel</button></div>
   ${rows.length?`<div class="tw"><table><thead><tr><th>No</th><th>Invoice Date</th><th>Invoice No</th><th>${L("客户","Customer")}</th><th>Description</th>
     <th class="num">Amt before GST</th><th class="num">GST</th><th class="num">Total</th><th class="num">${L("已付","Paid")}</th><th class="num">${L("余额","Balance")}</th>
     <th>Due</th><th>${L("状态","Status")}</th><th>Checked</th><th>${L("签名","Signed")}</th><th>${L("发送","Sent")}</th><th>${L("最新付款","Last paid")}</th></tr></thead><tbody>
@@ -576,7 +946,7 @@ function invFormView(f){
   <div oninput="invIn(event.target)" onchange="invIn(event.target,true)">
   <h3>1. ${L("选客户和期间，带出未开单 DO","Pick customer and period to load unbilled DOs")}</h3>
   <div class="grid"><label class="f">${L("客户","Customer")} *<select data-k="customer_id">${custOpts(f.customer_id)}</select></label>
-    <label class="f">Project<input data-k="project" list="projList2" value="${esc(f.project)}"><datalist id="projList2">${projects.map(p=>`<option value="${esc(p)}">`).join("")}</datalist></label>
+    ${isL3()?`<label class="f">Project${projRequired(f.customer_id)?" *":""}<select data-k="project">${projOpts(f.project,f.customer_id)}</select></label>`:""}<label class="f" ${isL3()?'style="display:none"':""}>Project<input data-k="project" list="projList2" value="${esc(f.project)}"><datalist id="projList2">${projects.map(p=>`<option value="${esc(p)}">`).join("")}</datalist></label>
     <label class="f">${L("期间从","Period from")}<input type="date" data-k="period_from" value="${f.period_from||""}"></label>
     <label class="f">${L("到","to")}<input type="date" data-k="period_to" value="${f.period_to||""}"></label></div>
   <div class="actions"><button class="btn sec" onclick="loadUnbilled()">${L("载入未开单 DO","Load unbilled DOs")}</button>
@@ -595,14 +965,18 @@ function invFormView(f){
     <label class="f">GST %<input type="number" step="0.01" data-k="gst_rate" value="${f.gst_rate??9}"></label>
     <label class="f wide">${L("标题（印在明细上面）","Heading (printed above lines)")}<textarea data-k="description">${esc(f.description||"")}</textarea></label></div>
   <h3>3. ${L("明细","Lines")}</h3>
-  <div class="tw lines"><table><thead><tr><th>No</th><th>Description</th><th class="num">Qty</th><th>UOM</th><th class="num">${L("金额","Amount")}</th><th></th></tr></thead><tbody>
+  <div class="tw lines"><table><thead><tr><th>No</th><th>Description</th><th class="num">Qty</th><th>UOM</th>${isL3()?`<th class="num">${L("单价","Unit price")}</th>`:""}<th class="num">${L("金额","Amount")}</th><th></th></tr></thead><tbody>
     ${f.lines.map((l,i)=>`<tr><td>${i+1})</td><td style="min-width:280px"><textarea class="inp" data-li="${i}" data-lk="description">${esc(l.description||"")}</textarea></td>
       <td style="width:90px"><input class="inp" type="number" step="0.01" data-li="${i}" data-lk="qty" value="${l.qty??""}"></td>
       <td style="width:80px"><input class="inp" data-li="${i}" data-lk="unit" value="${esc(l.unit||"")}"></td>
+      ${isL3()?`<td style="width:110px"><input class="inp" type="number" step="0.01" data-li="${i}" data-lk="unit_price" value="${l.unit_price??""}"></td>`:""}
       <td style="width:130px"><input class="inp" type="number" step="0.01" data-li="${i}" data-lk="amount" value="${l.amount??""}"></td>
-      <td><button class="btn del sm" onclick="invDelLine(${i})">✕</button></td></tr>`).join("")||`<tr><td colspan="6" class="empty">${L("按「用已选 DO 生成明细」，或手动加一行。","Build from selected DOs, or add a line manually.")}</td></tr>`}</tbody></table></div>
+      <td><button class="btn del sm" onclick="invDelLine(${i})">✕</button></td></tr>`).join("")||`<tr><td colspan="${isL3()?7:6}" class="empty">${L("按「用已选 DO 生成明细」，或手动加一行。","Build from selected DOs, or add a line manually.")}</td></tr>`}</tbody></table></div>
   <button class="btn sec sm" onclick="invAddLine()">+ ${L("加一行","Add line")}</button>
   <div class="calc" id="invTot">${invTotHTML(f)}</div>
+  ${isL3()?checklistHTML(f._chk):""}
+  ${isL3()&&f.project?`<div class="grid" style="margin-top:10px"><label class="f">Refer to summary list No.<input data-k="summary_no" value="${esc(f.summary_no||"")}"></label></div>`:""}
+  ${false?`<h3>${L("记录表 No.（右上角）","Record sheet No.")}</h3><div class="grid">${Object.keys(f.record_nos).map(k=>`<label class="f">${esc(SHEETS[k]||k)}<input data-rn="${k}" value="${esc(f.record_nos[k]??"")}" placeholder="No."></label>`).join("")}</div>`:""}
   <div class="grid" style="margin-top:14px"><label class="f wide">Remark<textarea data-k="remark">${esc(f.remark||"")}</textarea></label>
     <label class="chk"><input type="checkbox" data-k="interest_enabled" ${f.interest_enabled?"checked":""}>${L("逾期收 interest（1.5% / 月）","Charge overdue interest (1.5% / month)")}</label></div>
   </div><div class="warn" id="invWarn"></div>
@@ -613,7 +987,10 @@ function invIn(el,isChange){const f=S.modal?.f;if(!f)return;const k=el.dataset.k
     if(k==="invoice_no")f._noTouched=true;if(k==="due_date")f._dueTouched=true;if(k==="gst_rate")f.gst_rate=Number(el.value)||0;
     if(k==="invoice_date"||k==="customer_id"){recalcDue(f);const dd=$('[data-k="due_date"]');if(dd)dd.value=f.due_date||""}
     if(k==="invoice_date"&&!f.id&&!f._noTouched&&f.invoice_date){f.invoice_no=nextInvNo(f.invoice_date);const n=$('[data-k="invoice_no"]');if(n)n.value=f.invoice_no}}
-  else if(li!=null){const ln=f.lines[li];ln[lk]=["qty","amount"].includes(lk)?(el.value===""?null:Number(el.value)):el.value;if(lk==="amount"&&ln.unit!=="hrs")ln.unit_price=ln.amount}
+  else if(li!=null){const ln=f.lines[li];ln[lk]=["qty","amount","unit_price"].includes(lk)?(el.value===""?null:Number(el.value)):el.value;
+    if(isL3()&&ln.unit!=="hrs"&&ln.unit!=="LS"){if((lk==="qty"||lk==="unit_price")&&ln.qty!=null&&ln.unit_price!=null){ln.amount=r2(ln.qty*ln.unit_price);const a=document.querySelector(`[data-li="${li}"][data-lk="amount"]`);if(a)a.value=ln.amount}
+      else if(lk==="amount"&&Number(ln.qty)){ln.unit_price=r2(ln.amount/ln.qty);const u=document.querySelector(`[data-li="${li}"][data-lk="unit_price"]`);if(u)u.value=ln.unit_price}}
+    else if(lk==="amount"&&ln.unit!=="hrs")ln.unit_price=ln.amount}
   const tt=$("#invTot");if(tt)tt.innerHTML=invTotHTML(f);
 }
 function invSel(id,on){const f=S.modal.f;on?f.sel.add(id):f.sel.delete(id);$("#invTot").innerHTML=invTotHTML(f)}
@@ -626,7 +1003,14 @@ async function loadUnbilled(){const f=S.modal.f;if(!f.customer_id)return toast(L
     const have=new Set(f.dos.map(d=>d.id));for(const d of data)if(!have.has(d.id)){f.dos.push(d);f.sel.add(d.id)}
     f.dos.sort((a,b)=>a.do_date.localeCompare(b.do_date)||(a.start_time||"").localeCompare(b.start_time||""));
     if(!data.length)toast(L("没有找到未开单的 DO","No unbilled DOs found"));render()}catch(e){toast(e.message)}}
-function buildLines(){const f=S.modal.f,chosen=f.dos.filter(d=>f.sel.has(d.id));if(!chosen.length)return toast(L("还没选 DO","No DOs selected"));
+async function buildLines(){const f=S.modal.f,chosen=f.dos.filter(d=>f.sel.has(d.id));if(!chosen.length)return toast(L("还没选 DO","No DOs selected"));
+  if(isL3()){chosen.sort((a,b)=>a.do_date.localeCompare(b.do_date));const np=noPriceList(chosen);
+    if(np.length){f._chk={noPrice:np};render();toast(L(`有 ${np.length} 张 DO 没有价钱，先到 Master List 设好价钱，或打开那张 DO 填价钱。`,`${np.length} DO(s) have no price.`));return}
+    const from=f.period_from||chosen[0].do_date;
+    if(f.project){f.description=`PROJECT: ${f.project}\nPROVIDE TRANSPORT SERVICES FOR ${monthUpper(from)}`;f.lines=l3LinesLS(chosen);if(!f.summary_no)f.summary_no=projOf(f.project)?.no||""}
+    else{f.description="";f.lines=l3LinesDetail(chosen)}
+    const pos=[...new Set(chosen.map(d=>d.customer_po).filter(Boolean))];if(!f.customer_po&&pos.length===1)f.customer_po=pos[0];
+    f._chk=null;render();f._chk=await l3Checklist(f,chosen);if(S.modal?.f===f)render();return}
   const from=f.period_from||chosen[0].do_date,to=f.period_to||chosen.at(-1).do_date;const groups={};for(const d of chosen)(groups[d.service]=groups[d.service]||[]).push(d);
   if(S.company==="ETK"){f.description=f.project?`Project : ${f.project}`:"";
     f.lines=Object.entries(groups).map(([svc,l])=>{const a=sum(l,d=>d.amount);return{description:`${svc==="TMA"?"TMA Transport Charges":svc+" Charges"}\n${longDate(from)} to ${longDate(to)}`,qty:1,unit:"LS",unit_price:a,amount:a}})}
@@ -643,6 +1027,7 @@ async function saveInv(){
   const row={company:S.company,customer_id:f.customer_id,invoice_no:f.invoice_no.trim(),invoice_date:f.invoice_date,due_date:f.due_date||null,customer_po:f.customer_po||null,
     our_ref:f.our_ref||null,description:f.description||null,project:f.project||null,period_from:f.period_from||null,period_to:f.period_to||null,
     amount_before_gst:t.sub,gst_rate:Number(f.gst_rate)||0,gst_amount:t.gst,total:t.total,remark:f.remark||null,interest_enabled:!!f.interest_enabled,monthly_fix_id:f.monthly_fix_id||null};
+  if(isL3())row.summary_no=f.project?(f.summary_no||null):null;
   let id=f.id;
   if(id){const old=invById(id);
     if(old.checked||old.sent_at){const reason=prompt(L("这张 invoice 已检查或已发送，请输入修改原因：","This invoice is checked or sent. Reason for the change:"));if(!reason)return;
@@ -653,7 +1038,7 @@ async function saveInv(){
     const{error}=await sb.from("invoices").update(row).eq("id",id);if(error)return w.textContent=error.message;
     await sb.from("invoice_lines").delete().eq("invoice_id",id);
   }else{const{data,error}=await sb.from("invoices").insert(row).select().single();if(error)return w.textContent=error.message;id=data.id}
-  const e2=await sb.from("invoice_lines").insert(f.lines.map((l,i)=>({invoice_id:id,line_no:i+1,description:l.description||"",qty:l.qty,unit:l.unit||null,unit_price:l.unit==="hrs"?null:(l.unit_price??l.amount),amount:Number(l.amount)||0})));if(e2.error)return w.textContent=e2.error.message;
+  const e2=await sb.from("invoice_lines").insert(f.lines.map((l,i)=>({invoice_id:id,line_no:i+1,description:l.description||"",qty:l.qty,unit:l.unit||null,unit_price:l.unit==="hrs"||(isL3()&&l.unit_price==null)?null:(l.unit_price??l.amount),amount:Number(l.amount)||0})));if(e2.error)return w.textContent=e2.error.message;
   const add=[...f.sel].filter(x=>!f.origDos.includes(x)),rem=f.origDos.filter(x=>!f.sel.has(x));
   if(add.length)await sb.from("delivery_orders").update({invoice_id:id}).in("id",add);
   if(rem.length)await sb.from("delivery_orders").update({invoice_id:null}).in("id",rem);
@@ -901,13 +1286,24 @@ function mfInvoice(cid){const c=S.d.monthly_fix.find(x=>x.id===cid),m=S.mfMonth+
 const F=(k,type,req,label,def)=>({k,type,req,label,def});
 const ENT={
   customers:{scoped:1,label:["客户","Customers"],fields:[F("name","text",1,["名称","Name"]),F("payment_terms_days","terms",1,["付款期限","Payment terms"],30),F("attention","text",0,["Attn","Attn"]),
-    F("email","text",0,["Email（多个用逗号分开）","Email (separate with commas)"]),F("whatsapp","text",0,["WhatsApp","WhatsApp"]),F("tel","text",0,["电话","Tel"]),F("fax","text",0,["Fax","Fax"]),F("address","textarea",0,["地址","Address"]),F("remark","text",0,["Remark","Remark"])],
-    cols:["name","payment_terms_days","attention","email","whatsapp","_att"],att:["Quotation","Agreement / PO","Other"]},
+    F("email","text",0,["Email（多个用逗号分开）","Email (separate with commas)"]),F("whatsapp","text",0,["WhatsApp","WhatsApp"]),F("tel","text",0,["电话","Tel"]),F("fax","text",0,["Fax","Fax"]),F("address","textarea",0,["地址","Address"]),F("remark","text",0,["Remark","Remark"]),
+    {...F("min_hours_crane","number",0,["Lorry Crane 最少小时（空白 = 按实际时间）","Lorry crane min hrs (blank = actual)"]),only:"L3H"}],
+    cols:["name","payment_terms_days","min_hours_crane","attention","email","whatsapp","_att"],att:["Quotation","Agreement / PO","Other"]},
   vehicles:{scoped:1,label:["车牌","Vehicles"],fields:[F("plate","text",1,["车牌","Vehicle No"]),F("vehicle_type","text",0,["车型","Type"]),F("remark","text",0,["Remark","Remark"])],cols:["plate","vehicle_type","remark"]},
-  rates:{scoped:1,label:["价钱","Rates"],fields:[F("customer_id","customer",1,["客户","Customer"]),F("service","rateService",1,["Service","Service"]),F("unit","rateUnit",0,["计价方式","Unit"],"per hr"),
-    F("price","money",1,["价钱（按小时 = 每小时；8 小时价 = 8 小时的价钱）","Price (per hr, or price for 8 hrs)"]),F("ot_rate","money",0,["OT 每小时（8 小时价才用）","OT per hr (for 8-hr rate)"]),F("effective_from","date",1,["生效日期","Effective from"]),F("effective_to","date",0,["结束日期","Effective to"]),
+  projects:{scoped:1,label:["Project","Projects"],fields:[F("code","text",1,["Project Code","Project code"]),F("no","text",0,["No.（Summary list，空白自动接下一个）","No. (blank = next)"]),
+    F("description","text",0,["说明","Description"]),F("aliases","text",0,["别名（工地怎么叫，用逗号分开，例：TR370, TPY）","Aliases (comma separated)"]),F("customer_id","customer",0,["客户","Customer"]),
+    F("active","yesno",0,["还在做","Active"],true),F("remark","text",0,["Remark","Remark"])],cols:["no","code","description","aliases","customer_id","active"],
+    before(row,old){row.code=String(row.code||"").trim().toUpperCase();if(S.d.projects.some(p=>p.code===row.code&&p.id!==old?.id))return L("这个 Project Code 已经有了","Project code exists");
+      if(!row.no){const mx=Math.max(0,...S.d.projects.map(p=>parseInt(p.no,10)).filter(n=>!isNaN(n)));row.no=String(mx+1)}if(row.active==null)row.active=true},
+    note:["CHC 按 Project 开单。No. 就是 Summary list No.（例：LTATR370BW = 24）。做完的 project 把「还在做」改成否，就不会出现在选单，但旧资料还在。","Projects for CHC billing. Inactive projects are hidden from pickers."]},
+  drivers:{scoped:1,label:["司机","Drivers"],fields:[F("name","text",1,["名字","Name"]),F("usual_sup","yesno",0,["通常有 Lifting Supervisor（例：Ah Yew）","Usually with lifting supervisor"],false),
+    F("phone","text",0,["电话","Phone"]),F("remark","text",0,["Remark","Remark"])],cols:["name","usual_sup","phone","remark"],
+    note:["打勾「通常有 Lifting Supervisor」的司机，录 Lorry Crane DO 时会自动勾 supervisor、用白天价。","Drivers marked here auto-tick lifting supervisor on lorry crane DOs."]},
+  rates:{scoped:1,label:["价钱","Rates"],before(row){if(S.company!=="L3H"&&!row.customer_id)return L("请选客户","Choose a customer")},fields:[F("customer_id","customer",0,["客户（L3H 空白 = 所有客户）","Customer (L3H: blank = all)"]),F("service","rateService",1,["Service","Service"]),
+    {...F("plate","plateOpt",0,["车牌（空白 = 所有车）","Vehicle (blank = all)"]),only:"L3H"},{...F("material","materialOpt",0,["材料（Supply / Disposal 用）","Material"]),only:"L3H"},F("unit","rateUnit",0,["计价方式","Unit"],"per hr"),
+    F("price","money",1,["价钱（按小时 = 每小时；8 小时价 = 8 小时的价钱）","Price (per hr, or price for 8 hrs)"]),{...F("price_night","money",0,["晚上价 / 没 Lifting Supervisor（Lorry Crane）","Night / no supervisor (lorry crane)"]),only:"L3H"},F("ot_rate","money",0,["OT 每小时（8 小时价才用）","OT per hr (for 8-hr rate)"]),F("effective_from","date",1,["生效日期","Effective from"]),F("effective_to","date",0,["结束日期","Effective to"]),
     F("break_after_hours","number",0,["超过几小时扣吃饭","Meal break if over (hrs)"]),F("break_hours","number",0,["扣几小时","Deduct (hrs)"]),F("min_hours","number",0,["最少小时","Min hrs"]),F("remark","text",0,["Remark","Remark"])],
-    cols:["customer_id","service","price","unit","ot_rate","effective_from","effective_to","break_after_hours","break_hours","min_hours","remark","_att"],att:["Quotation","Other"],
+    cols:["customer_id","service","plate","material","price","price_night","unit","ot_rate","effective_from","effective_to","break_after_hours","break_hours","min_hours","remark","_att"],att:["Quotation","Other"],
     note:["改价钱：旧的那条填「结束日期」，再新增一条新价钱和生效日期。这样旧的单还是用旧价钱，也能查到几时改了什么价钱。","To change a price: set an end date on the old rate, then add a new rate with its effective date. Old DOs keep the old price and the history stays visible."]},
   customer_surcharges:{scoped:1,label:["Diesel Surcharge（客户）","Diesel surcharge (customer)"],fields:[F("customer_id","customer",1,["客户","Customer"]),F("service","serviceOpt",0,["Service","Service"]),
     F("amount_per_do","money",1,["每张 DO 金额","Amount per DO"]),F("start_date","date",1,["开始日期","Start date"]),F("end_date","date",0,["结束日期","End date"]),F("remark","text",0,["Remark","Remark"])],
@@ -935,6 +1331,8 @@ const ENT={
     before(row){if(row.active===false&&!row.remark)return L("停止合约必须填 Remark 说明原因","A remark is required to stop a contract")}}
 };
 const SPECIAL={_apstatus:["状态","Status"],_check:["Surcharge 检查","Surcharge check"],_att:["附件","Files"]};
+const fieldsOf=cfg=>cfg.fields.filter(f=>!f.only||f.only===S.company);
+const colsOf=cfg=>cfg.cols.filter(c=>SPECIAL[c]||fieldsOf(cfg).some(f=>f.k===c));
 function genView(keys,sk){
   const ent=S.sub[sk],cfg=ENT[ent],rows=S.d[ent],e=S.gEdit;
   const tabs=keys.length>1?`<div class="sub">${keys.map(k=>`<button class="${k===ent?"on":""}" onclick="S.sub['${sk}']='${k}';S.gEdit=null;S.dirty=false;render()">${L(...ENT[k].label)}</button>`).join("")}</div>`:"";
@@ -942,9 +1340,9 @@ function genView(keys,sk){
   const isNum=c=>["money","number","terms"].includes(cfg.fields.find(f=>f.k===c)?.type);
   return tabs+(cfg.note?`<p class="mute" style="font-size:13px">${L(...cfg.note)}</p>`:"")+
     (e?genForm(ent,cfg,e,sk):`<div class="actions" style="margin:0 0 12px"><button class="btn" onclick="S.gEdit={};S.dirty=true;render()">${L("新增","Add")}</button><button class="btn sec" onclick="exportEnt('${ent}')">⬇ Excel</button></div>`)+
-    (rows.length?`<div class="tw"><table><thead><tr>${cfg.cols.map(c=>`<th class="${isNum(c)?"num":""}">${head(c)}</th>`).join("")}</tr></thead><tbody>
+    (rows.length?`<div class="tw"><table><thead><tr>${colsOf(cfg).map(c=>`<th class="${isNum(c)?"num":""}">${head(c)}</th>`).join("")}</tr></thead><tbody>
       ${rows.map(r=>{const bad=ent==="supplier_invoices"&&(!surchargeCheck(r).ok||(!r.payment_date&&r.due_date&&r.due_date<today()));
-        return `<tr class="click ${bad?"red":""}" onclick="gEdit('${ent}','${r.id}')">${cfg.cols.map(c=>`<td class="${isNum(c)?"num":""}">${genCell(cfg,c,r)}</td>`).join("")}</tr>`}).join("")}</tbody></table></div>`
+        return `<tr class="click ${bad?"red":""}" onclick="gEdit('${ent}','${r.id}')">${colsOf(cfg).map(c=>`<td class="${isNum(c)?"num":""}">${genCell(cfg,c,r)}</td>`).join("")}</tr>`}).join("")}</tbody></table></div>`
     :`<div class="panel empty">${L("还没有资料，按「新增」开始。","Nothing here yet. Press Add to start.")}</div>`);
 }
 function genCell(cfg,c,r){
@@ -952,7 +1350,7 @@ function genCell(cfg,c,r){
   if(c==="_check"){const x=surchargeCheck(r);return x.ok?esc(x.t):`<span class="tag bad">${esc(x.t)}</span>`}
   if(c==="_att"){const n=S.d.attachments.filter(a=>a.entity_id===r.id).length;return n?`📎 ${n}`:""}
   const f=cfg.fields.find(x=>x.k===c),v=r[c];
-  switch(f.type){case"customer":return esc(custName(v));case"supplier":return esc(supName(v));case"terms":return esc(termLabel(v));case"money":return money(v);
+  switch(f.type){case"customer":return v?esc(custName(v)):(cfg===ENT.rates?`<span class="mute">${L("所有客户","All")}</span>`:"");case"yesno":return v?`<span class="tag ok">✓</span>`:"";case"plateOpt":return v?esc(v):(cfg===ENT.rates&&S.company==="L3H"?`<span class="mute">${L("所有车","All")}</span>`:"");case"supplier":return esc(supName(v));case"terms":return esc(termLabel(v));case"money":return money(v);
     case"bool":return v?`<span class="tag ok">${L("是","Yes")}</span>`:`<span class="tag mute">${L("停止","Stopped")}</span>`;case"month":return esc((v||"").slice(0,7));
     case"date":return dmy(v);case"serviceOpt":return v?esc(v):L("所有 service","All services");default:return esc(v)}
 }
@@ -962,9 +1360,12 @@ function genInput(f,v){const lab=L(...f.label)+(f.req?" *":"");v=v??f.def??"";
     case"supplier":return `<label class="f">${lab}<select name="${f.k}">${optList(S.d.suppliers.map(s=>[s.id,s.name]),v,"")}</select></label>`;
     case"rateService":return `<label class="f">${lab}<select name="${f.k}">${optList(RATE_SERVICES[S.company].map(s=>[s,s]),v)}</select></label>`;
     case"serviceOpt":return `<label class="f">${lab}<select name="${f.k}">${optList(SERVICES[S.company].map(s=>[s,s]),v,L("所有 service","All services"))}</select></label>`;
-    case"rateUnit":return `<label class="f">${lab}<select name="${f.k}">${optList([["per hr",L("按小时（per hr）","per hr")],["per 8 hrs",L("8 小时一个价 + OT（per 8 hrs）","per 8 hrs + OT")]],v)}</select></label>`;
+    case"rateUnit":return `<label class="f">${lab}<select name="${f.k}">${optList([["per hr",L("按小时（per hr）","per hr")],["per 8 hrs",L("8 小时一个价 + OT（per 8 hrs）","per 8 hrs + OT")],["per trip",L("每趟（per trip）","per trip")],["per load",L("每车（per load）","per load")]],v)}</select></label>`;
     case"terms":return `<label class="f">${lab}<select name="${f.k}">${optList(TERMS.map(d=>[d,termLabel(d)]),v)}</select></label>`;
     case"chargedTo":return `<label class="f">${lab}<input name="${f.k}" list="chargedList" value="${esc(v)}"><datalist id="chargedList"><option value="CHC"><option value="ETK"><option value="L3H"></datalist></label>`;
+    case"yesno":return `<label class="f">${lab}<select name="${f.k}">${optList([["false",L("否","No")],["true",L("是","Yes")]],String(v))}</select></label>`;
+    case"plateOpt":return `<label class="f">${lab}<select name="${f.k}">${optList(S.d.vehicles.map(x=>[x.plate,x.plate]),v,L("所有车","All vehicles"))}</select></label>`;
+    case"materialOpt":return `<label class="f">${lab}<select name="${f.k}">${optList(MATERIALS.map(m=>[m,m]),v,L("所有材料","Any"))}</select></label>`;
     case"bool":return `<label class="f">${lab}<select name="${f.k}">${optList([["true",L("是","Yes")],["false",L("停止","Stopped")]],String(v))}</select></label>`;
     case"month":return `<label class="f">${lab}<input type="month" name="${f.k}" value="${esc(String(v).slice(0,7))}"></label>`;
     case"textarea":return `<label class="f wide">${lab}<textarea name="${f.k}">${esc(v)}</textarea></label>`;
@@ -972,7 +1373,7 @@ function genInput(f,v){const lab=L(...f.label)+(f.req?" *":"");v=v??f.def??"";
     default:return `<label class="f">${lab}<input type="${f.type}" name="${f.k}" value="${esc(v)}"></label>`}}
 function genForm(ent,cfg,e,sk){
   return `<section class="panel"><h2>${e.id?L("修改","Edit"):L("新增","Add")} · ${L(...cfg.label)}</h2>
-  <form id="gForm" class="grid" oninput="S.dirty=true" onsubmit="event.preventDefault();saveGen('${ent}')">${cfg.fields.map(f=>genInput(f,e[f.k])).join("")}</form>
+  <form id="gForm" class="grid" oninput="S.dirty=true" onsubmit="event.preventDefault();saveGen('${ent}')">${fieldsOf(cfg).map(f=>genInput(f,e[f.k])).join("")}</form>
   ${ent==="supplier_invoices"&&e.id?`<p>${L("Surcharge 检查","Surcharge check")}：${genCell(cfg,"_check",e)}</p>`:""}
   ${cfg.att&&e.id?attBox(ent,e.id,cfg.att):cfg.att?`<p class="mute">${L("保存后可以上传附件。","Upload attachments after saving.")}</p>`:""}
   <div class="warn" id="gWarn"></div>
@@ -980,7 +1381,7 @@ function genForm(ent,cfg,e,sk){
   ${e.id&&!cfg.noDelete?`<button class="btn del" onclick="delGen('${ent}','${e.id}')">${L("删除","Delete")}</button>`:""}</div></section>`}
 function gEdit(ent,id){S.gEdit={...S.d[ent].find(r=>r.id===id)};S.dirty=true;render();window.scrollTo({top:0,behavior:"smooth"})}
 async function saveGen(ent){const cfg=ENT[ent],fd=new FormData($("#gForm")),row={},miss=[];if(cfg.scoped)row.company=S.company;
-  for(const f of cfg.fields){let v=fd.get(f.k);if(v===""||v==null)v=null;else if(["number","money","terms"].includes(f.type))v=Number(v);else if(f.type==="bool")v=v==="true";else if(f.type==="month")v=v+"-01";
+  for(const f of fieldsOf(cfg)){let v=fd.get(f.k);if(v===""||v==null)v=null;else if(["number","money","terms"].includes(f.type))v=Number(v);else if(f.type==="bool"||f.type==="yesno")v=v==="true";else if(f.type==="month")v=v+"-01";
     row[f.k]=v;if(f.req&&v==null)miss.push(L(...f.label))}
   if(miss.length)return $("#gWarn").textContent=L("请填写：","Please fill in: ")+miss.join(", ");
   const err=cfg.before?.(row,S.gEdit);if(typeof err==="string")return $("#gWarn").textContent=err;
@@ -1016,7 +1417,7 @@ function masterView(){return `<div class="panel"><h2>${L("导入现有资料","I
   <p class="mute" style="font-size:14px;margin-top:0">${L("先下载模板，在 Excel 填好（每个 sheet 第一行是标题不要改），再上传。资料会导入到目前选的公司（","Download the template, fill it in Excel (keep the header row), then upload. Data goes into the selected company (")}<b>${S.company}</b>${L("）。已经存在的客户、车牌、Invoice No 会自动跳过。","). Existing customers, vehicles and invoice numbers are skipped.")}</p>
   <div class="actions"><button class="btn sec" onclick="downloadTemplate()">⬇ ${L("下载导入模板","Download template")}</button>
   <label class="btn file">⬆ ${L("上传 Excel 导入","Upload Excel")}<input type="file" accept=".xlsx,.xls,.csv" hidden onchange="importExcel(this)"></label></div></div>
-  ${genView(["customers","vehicles","rates","customer_surcharges"],"master")}`}
+  ${genView(S.company==="L3H"?["customers","projects","vehicles","drivers","rates","customer_surcharges"]:["customers","projects","vehicles","rates","customer_surcharges"],"master")}`}
 const TPL={Customers:["Name","Payment Terms (0=COD,7,14,30,60)","Attn","Email","WhatsApp","Tel","Fax","Address"],Vehicles:["Vehicle No","Type"],
   Rates:["Customer","Service","Unit","Price","Effective From","Effective To","Meal break if over (hrs)","Deduct (hrs)","Min hrs","OT per hr"],
   Invoices:["Invoice No","Invoice Date","Customer","Project","Description","Amt before GST","GST","Total","Paid so far","Customer PO"]};
@@ -1126,9 +1527,10 @@ const LEG_INV=[["red","Overdue"],["amber","Not checked / not sent"]];
 function exportDO(){const rows=doFiltered();
   exportXlsx(`${S.company}_DO_${S.month}.xlsx`,[{name:`DO ${S.month}`,freezeCols:2,
     cols:[{h:"Date",t:"date"},{h:"DO No"},{h:"Customer"},{h:"Project"},{h:"Service"},{h:"Vehicle No"},{h:"In"},{h:"Out"},{h:"Day/Night"},{h:"From"},{h:"To"},
-      {h:"Description"},{h:"Actual Hr",t:"num"},{h:"Billable Hr",t:"num"},{h:"Rate",t:"money"},{h:"Surcharge",t:"money"},{h:"Amount",t:"money"},{h:"Invoice No"},{h:"Customer PO"},{h:"Remark"}],
+      {h:"Description"},{h:"Actual Hr",t:"num"},{h:"Billable Hr",t:"num"},{h:"Rate",t:"money"},{h:"Surcharge",t:"money"},{h:"Amount",t:"money"},{h:"Invoice No"},{h:"Customer PO"},{h:"Remark"},{h:"Driver"},{h:"Lifting Sup"},{h:"Other charges"}],
     rows:rows.map(d=>[d.do_date,d.do_no,custName(d.customer_id),d.project,d.service,d.plate,d.start_time?.slice(0,5),d.end_time?.slice(0,5),d.shift,d.from_loc,d.to_loc,
-      d.description,d.actual_hours,d.billable_hours,d.rate,Number(d.surcharge)||null,d.amount,invById(d.invoice_id)?.invoice_no||"",d.customer_po,d.remark]),
+      d.description,d.actual_hours,d.billable_hours,d.rate,Number(d.surcharge)||null,d.amount,invById(d.invoice_id)?.invoice_no||"",d.customer_po,d.remark,
+      d.driver||"",d.lifting_sup==null?"":d.lifting_sup?"Yes":"No",(d.charges||[]).map(l=>`${lineTitle(l)} ${l.qty} ${l.uom} × ${l.rate}`).join("; ")]),
     fill:i=>rows[i].invoice_id?null:"amber",
     total:["Total",`${rows.length} DO`,"","","","","","","","","","",sum(rows,d=>d.actual_hours),sum(rows,d=>d.billable_hours),"",sum(rows,d=>d.surcharge),sum(rows,d=>d.amount),"","",""],
     legend:[["amber","Unbilled"]]}])}
@@ -1434,9 +1836,15 @@ function quoteDocs(cid,invId){const A=S.d.attachments,out=[],seen=new Set(),add=
 function quoteBtn(cid,invId){if(!cid)return "";const n=quoteDocs(cid,invId).length;
   return `<button class="btn sec" onclick="quoteCompare('${invId||""}')">📄 ${L("对照报价单","Compare with quotation")} ${n?`<b class="tag ok" style="display:inline-block;width:auto">${n}</b>`:`<b class="tag warn" style="display:inline-block;width:auto">${L("没上传","none")}</b>`}</button>`}
 const qCache={};
-function qRow(g){const ok=!!g.m&&Number(g.used)===Number(g.m.price);
+function qRow(g){const ex=g.exp!==undefined?g.exp:g.m?.price,ok=ex!=null&&Number(g.used)===Number(ex);
   const why=ok?"":"<br><em class=\"mute\" style=\"font-size:12px;font-style:normal\">"+(g.m?L("⚠ 跟系统价钱不一样","⚠ differs from system"):L("⚠ 系统没有这个价钱","⚠ no rate in system"))+" · DO "+esc(g.list.slice(0,5).join(", "))+(g.list.length>5?" …":"")+"</em>";
-  return `<tr${ok?"":" style=\"background:rgba(220,80,60,.12)\""}><td>${esc(g.svc)}${why}</td><td class="num">${g.n}</td><td class="num">${g.used!=null?money(g.used):"—"}</td><td class="num">${g.m?money(g.m.price):"—"}</td><td class="num">${money(g.amt)}</td></tr>`}
+  return `<tr${ok?"":" style=\"background:rgba(220,80,60,.12)\""}><td>${esc(g.svc)}${why}</td><td class="num">${g.n}</td><td class="num">${g.used!=null?money(g.used):"—"}</td><td class="num">${ex!=null?money(ex):"—"}</td><td class="num">${money(g.amt)}</td></tr>`}
+function l3QuoteGroups(dos){const grp={},add=(key,o,amt,no)=>{(grp[key]=grp[key]||{...o,n:0,amt:0,list:[]});grp[key].n++;grp[key].amt+=amt;grp[key].list.push(no)};
+  for(const d of dos){if(d.record_only)continue;const k=kindOf(d),crane=d.service==="Lorry Crane";
+    if(k){const svc=k==="tipper_load"?"Tipper Load":d.service,m=findL3Rate(d.customer_id,svc,d.plate,d.do_date,null),exp=rateFor(m,crane,d.lifting_sup!==false);
+      add(`${svc}|${d.plate}|${k}|${d.rate}`,{svc:`${svc} ${d.plate||""}${crane?(d.lifting_sup===false?L("（晚上）"," (night)"):L("（白天）"," (day)")):""}`,used:d.rate,m,exp},mainAmt(d),d.do_no)}
+    for(const l of d.charges||[]){const m=findL3Rate(d.customer_id,l.item,d.plate,d.do_date,l.material||null);add(`${l.item}|${l.material}|${l.rate}`,{svc:lineTitle(l),used:l.rate,m,exp:m?Number(m.price):null},Number(l.amount)||0,d.do_no)}}
+  return Object.values(grp)}
 
 async function quoteCompare(invId){
   let cid,dos,lines,period,title;
@@ -1446,10 +1854,10 @@ async function quoteCompare(invId){
   else{const f=S.modal?.f;if(!f)return;cid=f.customer_id;if(!cid)return toast(L("先选客户","Choose a customer first"));title=f.invoice_no||L("新 Invoice","New invoice");
     period=[f.period_from,f.period_to];lines=f.lines;dos=f.dos.filter(d=>f.sel.has(d.id))}
   const docs=quoteDocs(cid,invId),from=period[0]||dos[0]?.do_date,to=period[1]||dos.at(-1)?.do_date;
-  const rates=S.d.rates.filter(r=>r.customer_id===cid&&(!from||!r.effective_to||r.effective_to>=from)&&(!to||!r.effective_from||r.effective_from<=to)).sort((a,b)=>a.service.localeCompare(b.service)||String(a.effective_from).localeCompare(String(b.effective_from)));
+  const rates=S.d.rates.filter(r=>(r.customer_id===cid||(isL3()&&!r.customer_id))&&(!from||!r.effective_to||r.effective_to>=from)&&(!to||!r.effective_from||r.effective_from<=to)).sort((a,b)=>a.service.localeCompare(b.service)||String(a.effective_from).localeCompare(String(b.effective_from)));
   const grp={};for(const d of dos){const rs=rateSvc(d),m=rs?findRate(d.customer_id,rs,d.do_date):null,k=`${rs||d.service}|${d.rate??""}|${m?.id||""}`;
     (grp[k]=grp[k]||{svc:rs||d.service,used:d.rate,m,n:0,amt:0,list:[]});grp[k].n++;grp[k].amt+=Number(d.amount)||0;grp[k].list.push(d.do_no)}
-  const G=Object.values(grp),bad=G.filter(g=>!g.m||Number(g.used)!==Number(g.m.price)).length;
+  const G=isL3()?l3QuoteGroups(dos):Object.values(grp),bad=G.filter(g=>{const ex=g.exp!==undefined?g.exp:g.m?.price;return ex==null||Number(g.used)!==Number(ex)}).length;
   const ov=document.createElement("div");ov.id="photoOv";ov.className="qov";
   ov.innerHTML=`<div class="pvbox"><div class="pvhead"><h3 style="margin:0">📄 ${L("报价单对照","Quotation check")} · ${esc(title)} · ${esc(custName(cid))}</h3><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕ ${L("关闭","Close")}</button></div>
     <div class="pvbody"><div class="qleft">${docs.length?`<select class="inp" id="qSel" style="margin-bottom:8px;width:100%">${docs.map((d,n)=>`<option value="${n}">${esc(d.label)} — ${esc(d.a.file_name||"")}</option>`).join("")}</select>
@@ -1458,7 +1866,7 @@ async function quoteCompare(invId){
     <div class="qright">
       <h3 style="margin-top:0">${L("系统里的价钱（Master List）","Rates in the system")}</h3>
       <div class="tw"><table><thead><tr><th>Service</th><th class="num">${L("价钱","Price")}</th><th>${L("计价","Unit")}</th><th class="num">OT</th><th class="num">${L("最少","Min")}</th><th>${L("生效","From")}</th></tr></thead><tbody>
-        ${rates.map(r=>`<tr><td>${esc(r.service)}</td><td class="num">${money(r.price)}</td><td>${esc(r.unit||"")}</td><td class="num">${r.ot_rate!=null?money(r.ot_rate):""}</td><td class="num">${r.min_hours??""}</td><td>${dmy(r.effective_from)}${r.effective_to?" – "+dmy(r.effective_to):""}</td></tr>`).join("")||`<tr><td colspan="6" class="empty">${L("没有这段期间的价钱","No rates for this period")}</td></tr>`}</tbody></table></div>
+        ${rates.map(r=>`<tr><td>${esc(r.service)}${r.plate?" "+esc(r.plate):""}${r.material?" "+esc(r.material):""}${r.customer_id?"":` <span class="mute">${L("所有客户","all")}</span>`}</td><td class="num">${money(r.price)}${r.price_night!=null?` / ${money(r.price_night)} ${L("晚","night")}`:""}</td><td>${esc(r.unit||"")}</td><td class="num">${r.ot_rate!=null?money(r.ot_rate):""}</td><td class="num">${r.min_hours??""}</td><td>${dmy(r.effective_from)}${r.effective_to?" – "+dmy(r.effective_to):""}</td></tr>`).join("")||`<tr><td colspan="6" class="empty">${L("没有这段期间的价钱","No rates for this period")}</td></tr>`}</tbody></table></div>
       <h3>${L("这张 invoice 的 DO 用了什么价钱","Rates used on the DOs")} ${dos.length?(bad?`<b class="tag bad" style="display:inline-block;width:auto">⚠ ${bad}</b>`:`<b class="tag ok" style="display:inline-block;width:auto">✓ ${L("全部跟系统一样","all match")}</b>`):""}</h3>
       ${dos.length?`<div class="tw"><table><thead><tr><th>Service</th><th class="num">DO</th><th class="num">${L("DO 用的","Used")}</th><th class="num">${L("系统价","System")}</th><th class="num">${L("金额","Amount")}</th></tr></thead><tbody>
         ${G.map(qRow).join("")}</tbody></table></div>`:`<p class="mute">${L("没有 DO（手动明细）","No DOs (manual lines)")}</p>`}
@@ -1528,14 +1936,16 @@ function payFoot(s){return `<div class="foot"><div><p>Payment should be made by 
 function invoiceHTML(inv,hasBd){const s=settingsOf(inv.company),c=custOf(inv.customer_id),l3=coOf(s)==="L3H",lines=S.d.invoice_lines.filter(l=>l.invoice_id===inv.id).sort((a,b)=>(a.line_no||0)-(b.line_no||0));
   const td=Number(c.payment_terms_days),terms=td===0?(l3?"COD":"C.O.D"):`${c.payment_terms_days??30} ${l3?"Days":"days"}`;
   const meta=[["Invoice No.",inv.invoice_no],["Our Ref No.",inv.our_ref||""],["Terms",terms],["Date",dmy(inv.invoice_date)],["Your PO",inv.customer_po||""]];
-  const desc=t=>String(t||"").split("\n").filter(x=>x.trim()!=="").map((x,i)=>l3?`<div class="d2">${esc(x)}</div>`:`<div class="d1"><span class="ul">${esc(x)}</span></div>`).join("");
+  const desc=t=>{const xs=String(t||"").split("\n").filter(x=>x.trim()!=="");return xs.map((x,i)=>l3?(i===0&&xs.length>1?`<div class="d1"><span class="ul">${esc(x)}</span></div>`:`<div class="d2">${esc(x)}</div>`):`<div class="d1"><span class="ul">${esc(x)}</span></div>`).join("")};
   return `<div class="doc pg inv">${coHeader(s)}<div class="ttl">Tax Invoice</div>
   <div class="hdr">${toBlock(c)}<table class="meta">${meta.map(([k,v])=>`<tr><td>${k}</td><td>:</td><td>${esc(v)}</td></tr>`).join("")}</table></div>
   <div class="body"><table class="lines"><colgroup><col style="width:10mm"><col><col style="width:13mm"><col style="width:13mm"><col style="width:28mm"><col style="width:31mm"></colgroup>
   <thead><tr><th>No.</th><th class="c">Description</th><th class="c">Qty</th><th class="c">UOM</th><th class="r">Unit Price $</th><th class="r">Total Amount $</th></tr></thead><tbody>
-  ${inv.description?`<tr><td></td><td>${String(inv.description).split("\n").filter(Boolean).map(x=>`<div class="d1"><span class="ul">${esc(x)}</span></div>`).join("")}</td><td colspan="4"></td></tr>`:""}
-  ${lines.map((l,i)=>{const u=lineUnit(l);return `<tr><td>${i+1})</td><td>${desc(l.description)}</td><td class="c">${u==="hrs"?Number(l.qty||0).toFixed(2):(l.qty??1)}</td><td class="c">${u==="hrs"?"hrs":"LS"}</td>
+  ${inv.description?`<tr><td></td><td ${l3?'colspan="5" style="white-space:nowrap"':""}>${String(inv.description).split("\n").filter(Boolean).map(x=>`<div class="d1"><span class="ul">${esc(x)}</span></div>`).join("")}</td>${l3?"":`<td colspan="4"></td>`}</tr>`:""}
+  ${lines.map((l,i)=>{const u=lineUnit(l),nu=l3&&u!=="hrs"&&u!=="LS"&&l.unit_price!=null;if(l3&&l.unit_price==null&&u!=="hrs"&&u!=="LS")return `<tr><td>${i+1})</td><td>${desc(l.description)}</td><td class="c">${Number(l.qty)%1?Number(l.qty).toFixed(2):l.qty}</td><td class="c">${esc(u)}</td><td><div class="r">LS</div></td><td>${acc(l.amount)}</td></tr>`;return nu?`<tr><td>${i+1})</td><td>${desc(l.description)}</td><td class="c">${Number(l.qty)%1?Number(l.qty).toFixed(2):l.qty}</td><td class="c">${esc(u)}</td>
+    <td>${acc(l.unit_price)}</td><td>${acc(l.amount)}</td></tr>`:`<tr><td>${i+1})</td><td>${desc(l.description)}</td><td class="c">${u==="hrs"?Number(l.qty||0).toFixed(2):(l.qty??1)}</td><td class="c">${u==="hrs"?"hrs":"LS"}</td>
     <td>${u==="hrs"?`<div class="r">LS</div>`:acc(l.unit_price??l.amount)}</td><td>${acc(l.amount)}</td></tr>`}).join("")}</tbody></table>
+  ${l3&&inv.summary_no?`<div class="attx">Refer to summary list No: ${esc(inv.summary_no)}</div>`:""}
   ${hasBd?`<div class="attx">${l3?"(Please refer to attach for all detailed breakdown)":"(Please see the attachment)"}</div>`:""}</div>
   <table class="tot"><tr><td class="lab">Sub Total</td><td class="col">:</td><td class="dol">$</td><td class="amt">${money(inv.amount_before_gst)}</td></tr>
   <tr><td class="lab">Add GST ${Number(inv.gst_rate)}%</td><td class="col">:</td><td class="dol">$</td><td class="amt">${money(inv.gst_amount)}</td></tr>
@@ -1547,7 +1957,7 @@ function sumMonth(inv,list){const a=inv.period_from||list[0].do_date,b=inv.perio
 function sumHead(lines){return `<div class="sumh">${lines.map((t,i)=>i===0?`<div class="t"><span class="ul">${esc(t)}</span></div>`:`<div>${esc(t)}</div>`).join("")}</div>`}
 function chunkPages(rows,per,make){const ch=[];for(let i=0;i<rows.length;i+=per)ch.push(rows.slice(i,i+per));
   return ch.map((r,pi)=>`<div class="doc pg land">${make(r,pi,pi===ch.length-1)}${ch.length>1?`<div class="pno">Page ${pi+1} of ${ch.length}</div>`:""}</div>`).join("")}
-function breakdownHTML(inv,dos){const g={};for(const d of dos)(g[d.service]=g[d.service]||[]).push(d);const c=custOf(inv.customer_id);
+function breakdownHTML(inv,dos){if(coOf(settingsOf(inv.company))==="L3H")return l3RecordsHTML(inv,dos);const g={};for(const d of dos)(g[d.service]=g[d.service]||[]).push(d);const c=custOf(inv.customer_id);
   return Object.entries(g).map(([svc,list])=>{const month=sumMonth(inv,list);
     if(svc==="TMA"&&!inv.project){
       const rows=list.map(d=>{const rr=findRate(d.customer_id,`TMA ${d.shift||"Day"}`,d.do_date),mx=baseHrsOf(rr),bh=Number(d.billable_hours)||0,sur=Number(d.surcharge)||0,tot=r2(Number(d.amount)||0),ot=r2(Math.max(0,bh-mx));
