@@ -154,6 +154,7 @@ label.file{cursor:pointer}
 #photoOv .seg{position:absolute;top:2px;bottom:2px;background:#2e7d32;color:#fff;border-radius:4px;font-size:11px;line-height:18px;padding:0 4px;overflow:hidden;white-space:nowrap;cursor:pointer}
 #photoOv .seg.nt{background:#3949ab}#photoOv .seg.bad{background:#d32f2f;box-shadow:0 0 0 2px #ffcdd2}
 .seg-k{display:inline-block;width:10px;height:10px;border-radius:2px;background:#2e7d32;margin:0 3px 0 8px;vertical-align:middle}.seg-k.nt{background:#3949ab}.seg-k.bad{background:#d32f2f}
+td.isscell{white-space:normal!important;min-width:200px;max-width:300px}td.isscell .tag{display:inline-block;margin:2px 3px 2px 0;white-space:nowrap}
 table.chg .inp{min-width:0;width:100%}table.chg tr.chgd td{background:rgba(245,166,35,.14)}
 .calc .why{flex-basis:100%;width:100%;grid-column:1/-1;display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12.5px;color:var(--mute);border-top:1px dashed var(--line);padding-top:6px;margin-top:2px}.calc .why .w{color:#f5a623}
 label.f.need input{border-color:#f5a623!important;box-shadow:0 0 0 2px rgba(245,166,35,.25)}
@@ -319,8 +320,8 @@ const S={poInc:{},doPerPage:pref("doPerPage","6"),lang:pref("lang","zh"),theme:p
   tab:"do",month:today().slice(0,7),unbilledOnly:false,doF:{q:"",customer:"",service:"",plate:"",shift:"",billed:"",photo:""},user:null,live:false,lastSync:null,dirty:false,pending:false,
   d:{customers:[],vehicles:[],rates:[],customer_surcharges:[],delivery_orders:[],invoices:[],invoice_lines:[],payments:[],
      payment_allocations:[],reminders:[],soa_sends:[],monthly_fix:[],monthly_fix_log:[],suppliers:[],supplier_invoices:[],
-     diesel_surcharges:[],attachments:[],company_settings:[],drivers:[],do_voids:[],projects:[]},tlPlate:"",pbMonth:"",
-  doForm:null,sub:{master:"customers",sup:"supplier_invoices",mf:"monthly_fix"},gEdit:null,modal:null,
+     diesel_surcharges:[],attachments:[],company_settings:[],drivers:[],do_voids:[],projects:[],machines:[],mlogs:[],mbills:[]},tlPlate:"",pbMonth:"",
+  doForm:null,sub:{master:"customers",sup:"supplier_invoices",mf:"monthly_fix",excm:"machines"},gEdit:null,modal:null,
   invF:{status:"",customer:"",q:""},soaCust:"",soaAsOf:today(),mfMonth:today().slice(0,7),payF:{customer:""}};
 const L=(zh,en)=>S.lang==="zh"?zh:en;
 document.documentElement.dataset.theme=S.theme;
@@ -407,6 +408,7 @@ async function loadAll(){
     ["customers","vehicles","rates","customer_surcharges","invoices","invoice_lines","payments","payment_allocations","reminders","soa_sends",
      "monthly_fix","monthly_fix_log","suppliers","supplier_invoices","diesel_surcharges","attachments","company_settings"].forEach((k,i)=>S.d[k]=r[i]);
     for(const t of["drivers","do_voids","projects"]){try{S.d[t]=await fetchAll(()=>sb.from(t).select("*").eq("company",co))}catch(e){S.d[t]=[]}}
+    for(const[k,t]of[["machines","machines"],["mlogs","machine_logs"],["mbills","machine_bills"]]){try{S.d[k]=co==="L3H"?await fetchAll(()=>sb.from(t).select("*").eq("company",co)):[]}catch(e){S.d[k]=[]}}
     await loadDO(); S.lastSync=new Date();
   }catch(e){toast(e.message)}
 }
@@ -423,13 +425,13 @@ document.addEventListener("visibilitychange",()=>{if(!document.hidden&&S.user&&!
 function done(){S.dirty=false;S.gEdit=null;if(S.pending){S.pending=false}}
 
 /* ================= 主画面 ================= */
-const TABS=[["do","Key in DO","Key in DO"],["inv","Invoice","Invoice"],["pay","收款","Payments"],["soa","SOA","SOA"],["sum","AR / AP 总表","AR / AP"],
+const TABS=[["do","Key in DO","Key in DO"],["inv","Invoice","Invoice"],["exc","Excavator","Excavator"],["pay","收款","Payments"],["soa","SOA","SOA"],["sum","AR / AP 总表","AR / AP"],
   ["mf","Monthly Fix","Monthly Fix"],["sup","Supplier","Supplier"],["master","Master List","Master List"],["set","设定","Settings"]];
 function render(){
   const app=$("#app");
   if(!S.user){app.innerHTML=loginView();return}
   const urgent=urgentCount();
-  const V={do:doView,inv:invView,pay:payView,soa:soaView,sum:sumView,mf:mfView,sup:()=>genView(["supplier_invoices","diesel_surcharges","suppliers"],"sup"),master:masterView,set:setView};
+  const V={exc:excView,do:doView,inv:invView,pay:payView,soa:soaView,sum:sumView,mf:mfView,sup:()=>genView(["supplier_invoices","diesel_surcharges","suppliers"],"sup"),master:masterView,set:setView};
   app.innerHTML=`<header class="top"><div class="brand"><span class="stripe"></span>${S.company} ${L("开单系统","Billing")}</div>
     <div class="seg">${["ETK","L3H"].map(c=>`<button class="${c===S.company?"on":""}" onclick="setCompany('${c}')">${c}</button>`).join("")}</div>
     <span class="sync"><i></i><span></span></span>
@@ -437,7 +439,7 @@ function render(){
     <button class="ghost" onclick="toggleLang()">${L("EN","中文")}</button>
     <button class="ghost" onclick="toggleTheme()">${S.theme==="dark"?L("☀️ 浅色","☀️ Light"):L("🌙 深色","🌙 Dark")}</button>
     <button class="ghost" onclick="logout()">${L("登出","Log out")}</button></header>
-  <nav class="tabs">${TABS.map(([k,zh,en])=>`<button class="${S.tab===k?"on":""}" onclick="setTab('${k}')">${L(zh,en)}${k==="sum"&&urgent?`<span class="badge">${urgent}</span>`:""}</button>`).join("")}</nav>
+  <nav class="tabs">${TABS.filter(([k])=>k!=="exc"||isL3()).map(([k,zh,en])=>`<button class="${S.tab===k?"on":""}" onclick="setTab('${k}')">${L(zh,en)}${k==="sum"&&urgent?`<span class="badge">${urgent}</span>`:""}</button>`).join("")}</nav>
   <main>${V[S.tab]()}</main>${S.modal?modalView():""}`;
   updSync();
 }
@@ -853,13 +855,22 @@ function checklistHTML(c){if(!c)return"";const row=(ok,t,body="",lvl)=>`<div cla
   ${row(!(c.supW||[]).length,!(c.supW||[]).length?L("Lifting Supervisor 跟开工时间都对得上","Supervisor matches start time"):L("Lifting Supervisor 要确认","Check lifting supervisor"),(c.supW||[]).map(d=>`DO ${esc(d.do_no)}：${esc(supWarn(d))}`).join("<br>"),"warn")}
   ${row(!(c.noPhoto||[]).length,!(c.noPhoto||[]).length?L("DO 都有照片","All DOs have photos"):L("有 DO 还没照片","DOs without photos"),(c.noPhoto||[]).length?L(`缺 ${c.noPhoto.length} 张：`,`${c.noPhoto.length} missing: `)+c.noPhoto.slice(0,12).map(d=>esc(d.do_no)).join(", "):"","warn")}
   ${c.err?`<p class="mute">${esc(c.err)}</p>`:""}</div>`}
+function machRowsHTML(f){if(!f._m)return `<p class="mute" style="font-size:13px">${L("选 Project 和期间，按「载入这个 Project 的 Excavator」。","Pick project and period, then load.")}</p>`;
+  const iss=mIssues(),ids=new Set(f._m.rows.map(r=>r.l.id)),bad=[...ids].flatMap(id=>(iss[id]||[]).filter(x=>x.k==="clash"||x.k==="dup"||x.k==="standby").map(x=>({l:S.d.mlogs.find(l=>l.id===id),x})));
+  return `${f._m.rows.length?`<div class="tw" style="margin-top:10px"><table><thead><tr><th></th><th>${L("机器","Machine")}</th><th>${L("地点","Location")}</th><th>${L("期间","Period")}</th><th class="num">${L("天","Days")}</th><th>${L("计价","Type")}</th><th class="num">${L("价钱","Rate")}</th><th class="num">${L("金额","Amount")}</th><th>${L("谁要的","Person")}</th></tr></thead><tbody>
+    ${f._m.rows.map((r,i)=>`<tr><td><input type="checkbox" ${f.msel.has(i)?"checked":""} onchange="this.checked?S.modal.f.msel.add(${i}):S.modal.f.msel.delete(${i})"></td><td>${esc(mName(r.l.machine_code,r.l.breaker))}</td><td>${esc(r.l.loc_to||r.l.loc_from||"")}</td>
+      <td>${dmy(r.from)} – ${dmy(r.to)}</td><td class="num">${r.days}</td><td>${typeZh(r.type)}</td><td class="num">${r.rate!=null?money(r.rate):`<span class="tag bad">${L("没价钱","no rate")}</span>`}</td><td class="num">${money(r.amount)}</td><td>${esc(r.l.person||"")}</td></tr>`).join("")}</tbody></table></div>`:""}
+  <div class="panel ckl"><h3 style="margin-top:0">${L("开单前检查（Excavator）","Pre-billing checklist (excavator)")}</h3>
+    <div class="ck ${bad.length?"bad":"ok"}"><b>${bad.length?"✕":"✓"}</b><div>${bad.length?L("有撞期 / 重复，先查清楚","Clashes / duplicates"):L("没有撞期","No clashes")}${bad.length?`<div class="mute" style="font-size:12px">${bad.map(({l,x})=>`${esc(l.machine_code)} ${esc(l.project||"")} ${dmy(l.start_date)}–${l.end_date?dmy(l.end_date):"…"}：${x.k==="clash"?L(`跟 ${esc(x.o.project||"?")} 撞期`,"clash"):x.k==="dup"?L("同 project 重复","duplicate"):L("Standby 期间又有记录","standby overlap")} ${ovTxt(x.ov)}`).join("<br>")}</div>`:""}</div></div>
+    <div class="ck ${f._m.skipped.length?"warn":"ok"}"><b>${f._m.skipped.length?"!":"✓"}</b><div>${f._m.skipped.length?L("这些日子不会 bill（已 bill / 包在月租 / NA）","Not billed (already billed / in monthly / NA)"):L("没有被跳过的日子","Nothing skipped")}${f._m.skipped.length?`<div class="mute" style="font-size:12px">${f._m.skipped.map(x=>`${esc(x.l.machine_code)} ${dmy(x.l.start_date)}：${esc(x.why)}`).join("<br>")}</div>`:""}</div></div>
+    ${(()=>{const open=f._m.rows.filter(r=>!r.l.end_date);return `<div class="ck ${open.length?"warn":"ok"}"><b>${open.length?"!":"✓"}</b><div>${open.length?L("还没结束的月租 —— 要跟工地确认还有继续吗","Open rentals — confirm still in use"):L("没有还没结束的","No open rentals")}${open.length?`<div class="mute" style="font-size:12px">${open.map(r=>`${esc(r.l.machine_code)} ${esc(r.l.person||"")}${r.l.confirmed_at?` ✓ ${dmy(r.l.confirmed_at)}`:""}`).join("、")}</div>`:""}</div></div>`})()}</div>`}
 function addLate(){const f=S.modal.f,late=f._chk?.late||[];for(const d of late)if(!f.dos.some(x=>x.id===d.id)){f.dos.push(d);f.sel.add(d.id)}
   f.dos.sort((a,b)=>a.do_date.localeCompare(b.do_date));toast(L(`已加 ${late.length} 张补单，再按「用已选 DO 生成明细」`,`Added ${late.length}`));render()}
 
 /* ---- Summary list + 记录表（照 CHC Excel） ---- */
-function l3SummaryHTML(inv){const lines=S.d.invoice_lines.filter(l=>l.invoice_id===inv.id).sort((a,b)=>(a.line_no||0)-(b.line_no||0));
+function l3SummaryHTML(inv,title){const lines=S.d.invoice_lines.filter(l=>l.invoice_id===inv.id).sort((a,b)=>(a.line_no||0)-(b.line_no||0));
   const a=inv.period_from||inv.invoice_date,mon=`${MONL[+a.slice(5,7)-1].toUpperCase()} ${a.slice(0,4)}`;
-  return `<div class="doc pg sumlist"><div class="rech"><div><b>${esc(inv.project)}-SUMMARY</b><b>FOR MONTH ${mon}</b><b>TRANSPORT SERVICES</b></div><b class="no">${inv.summary_no?"No."+esc(inv.summary_no):""}</b></div>
+  return `<div class="doc pg sumlist"><div class="rech"><div><b>${esc(inv.project)}-SUMMARY</b><b>FOR MONTH ${mon}</b><b>${esc(title||"TRANSPORT SERVICES")}</b></div><b class="no">${inv.summary_no?"No."+esc(inv.summary_no):""}</b></div>
   <table class="sm rec"><colgroup><col style="width:7%"><col><col style="width:10%"><col style="width:8%"><col style="width:13%"><col style="width:16%"></colgroup>
   <thead><tr><th>S/N</th><th>DESCRIPTION</th><th>QTY</th><th>UOM</th><th>UNIT PRICE $</th><th>TOTAL AMOUNT $</th></tr></thead><tbody>
   ${lines.map((l,i)=>`<tr><td>${i+1}</td><td class="a">${esc(String(l.description||"").replace(/\n/g," "))}</td><td>${lineUnit(l)==="hrs"?Number(l.qty||0).toFixed(2):l.qty??""}</td><td>${esc(lineUnit(l))}</td><td>${l.unit_price==null?"L/S":money(l.unit_price)}</td><td class="a">${acc(l.amount)}</td></tr>`).join("")}
@@ -915,6 +926,213 @@ async function projBoard(month){month=month||S.pbMonth||prevMonthRange()[0].slic
       :`<div class="pvnone">${L("这个月没有 DO","No DOs this month")}</div>`}`;
   ov.querySelector("#pbM").onchange=e=>projBoard(e.target.value)}
 
+/* ================= L3H 第二批：Excavator / 机械 ================= */
+const FAR="9999-12-31";
+const mOf=code=>S.d.machines.find(m=>m.code===code);
+const mName=(code,b)=>{const m=mOf(code);return `${m?.model||code}${b?" with breaker":""} (${code})`};
+const mRates=(code,b)=>{const m=mOf(code)||{};return b?{d:m.rate_day_b,w:m.rate_week_b,m:m.rate_month_b}:{d:m.rate_day,w:m.rate_week,m:m.rate_month}};
+const dCount=(a,b)=>daysBetween(a,b)+1;
+const oneMonthEnd=s=>{const d=parseD(s);return ymd(new Date(d.getFullYear(),d.getMonth()+1,d.getDate()-1))};
+const dmyDash=s=>{const[y,m,d]=s.split("-");return `${d}-${m}-${y.slice(2)}`};
+const isBilledRef=l=>/^L3H\s*\//i.test(String(l.invoice_ref||"").trim());
+const isNARef=l=>/^n\/?a$/i.test(String(l.invoice_ref||"").trim());
+const logEnd=l=>l.end_date||FAR;
+const activeLog=l=>!l.cancelled&&(l.status==="Rental"||l.status==="Standby");
+/* 计价方式：不到 7 天按日；不到 1 个月按周；满 1 个月按月（看整笔租期） */
+function rateTypeOf(l,asOf){if(l.rate_type)return l.rate_type;const e=l.end_date||asOf||today(),n=dCount(l.start_date,e);
+  if(n<7)return"Daily";if(e<oneMonthEnd(l.start_date))return"Weekly";return"Monthly"}
+function rateOf(l,type){if(l.rate!=null&&l.rate!=="")return Number(l.rate);const r=mRates(l.machine_code,l.breaker);const v=type==="Daily"?r.d:type==="Weekly"?r.w:r.m;return v==null||v===""?null:Number(v)}
+const fullMonth=(a,b)=>a.slice(8)==="01"&&b===lastDayOf(a.slice(0,7));
+function amtFor(type,rate,a,b){const n=dCount(a,b);if(rate==null)return null;
+  if(type==="Daily")return r2(rate*n);if(type==="Weekly")return r2(rate/7*n);return fullMonth(a,b)?r2(rate):r2(rate/30*n)}
+const typeZh=t=>({Daily:L("按日","Daily"),Weekly:L("按周","Weekly"),Monthly:L("按月","Monthly")}[t]||t);
+
+/* ---- 检查：撞期 / 同 project 月租已包 / Standby ---- */
+function mIssues(){const out={},add=(id,x)=>(out[id]=out[id]||[]).push(x),by={};
+  for(const l of S.d.mlogs){if(activeLog(l))(by[l.machine_code]=by[l.machine_code]||[]).push(l);if(activeLog(l)&&l.status==="Rental"&&isBilledRef(l)&&!l.end_date)add(l.id,{k:"openref"})}
+  for(const ls of Object.values(by))for(let i=0;i<ls.length;i++)for(let j=i+1;j<ls.length;j++){const a=ls[i],b=ls[j];
+    if(!(a.start_date<=logEnd(b)&&b.start_date<=logEnd(a)))continue;
+    const ov=[a.start_date>b.start_date?a.start_date:b.start_date,logEnd(a)<logEnd(b)?logEnd(a):logEnd(b)];
+    if(a.status==="Rental"&&b.status==="Rental"){
+      if((a.project||"")===(b.project||"")){const ma=rateTypeOf(a)==="Monthly",mb=rateTypeOf(b)==="Monthly";
+        if(ma!==mb){const mon=ma?a:b,oth=ma?b:a;add(oth.id,{k:"cover",o:mon,ov});add(mon.id,{k:"covers",o:oth,ov})}
+        else{add(a.id,{k:"dup",o:b,ov});add(b.id,{k:"dup",o:a,ov})}}
+      else{add(a.id,{k:"clash",o:b,ov});add(b.id,{k:"clash",o:a,ov})}}
+    else{add(a.id,{k:"standby",o:b,ov});add(b.id,{k:"standby",o:a,ov})}}
+  return out}
+const ovTxt=ov=>`${dmy(ov[0])}–${ov[1]===FAR?L("现在","now"):dmy(ov[1])}`;
+function issueTags(list,max){const all=list||[],more=max&&all.length>max?all.length-max:0;return(max?all.slice(0,max):all).map(x=>x.k==="clash"?`<span class="tag bad" title="${esc(L(`跟 ${x.o.project||"?"} 撞期`,`Clash with ${x.o.project}`))}">${L("撞期","Clash")} ${esc(x.o.project||"")} ${ovTxt(x.ov)}</span>`
+  :x.k==="dup"?`<span class="tag bad">${L("同 project 重复","Duplicate")} ${ovTxt(x.ov)}</span>`
+  :x.k==="cover"?`<span class="tag mute">${L("已包括在月租","In monthly")} ${ovTxt(x.ov)}</span>`
+  :x.k==="standby"?`<span class="tag warn">${L("Standby 期间又有记录","Standby overlap")} ${ovTxt(x.ov)}</span>`
+  :x.k==="openref"?`<span class="tag warn" title="${esc(L("有旧 Invoice No. 但没有结束日期：请把结束日期填成已经 bill 到的那天，之后继续用的另外新增一笔","Old invoice no. but no end date"))}">${L("有 Invoice 但没结束日期","Invoice but open")}</span>`:"").join(" ")+(more?` <span class="tag mute" title="${esc(all.slice(max).map(x=>x.k).join(", "))}">+${more}</span>`:"")}
+/* 同一台机、同一个 project 的月租盖住的日子 */
+function monthlyCover(l){if(rateTypeOf(l)==="Monthly")return[];
+  return S.d.mlogs.filter(o=>o.id!==l.id&&activeLog(o)&&o.status==="Rental"&&o.machine_code===l.machine_code&&(o.project||"")===(l.project||"")&&rateTypeOf(o)==="Monthly"&&o.start_date<=logEnd(l)&&l.start_date<=logEnd(o)).map(o=>[o.start_date,logEnd(o)])}
+const inRanges=(d,rs)=>rs.some(([a,b])=>a<=d&&d<=b);
+function dayRanges(days){const out=[];for(const d of days){const last=out.at(-1);if(last&&addDays(last[1],1)===d)last[1]=d;else out.push([d,d])}return out}
+
+/* ---- 开单：这个 project 这段期间可以 bill 的机械 ---- */
+function machineBillRows(project,from,to,invId){const rows=[],skipped=[];
+  for(const l of S.d.mlogs){if(!activeLog(l)||l.status!=="Rental"||(l.project||"")!==(project||""))continue;
+    if(!(l.start_date<=to&&logEnd(l)>=from))continue;
+    if(isBilledRef(l)){skipped.push({l,why:l.end_date?L(`已 bill（${l.invoice_ref}）`,`Billed (${l.invoice_ref})`):L(`有旧 Invoice No.（${l.invoice_ref}）但没有结束日期 —— 请填已 bill 到哪天，之后的另外新增一笔，才可以开单`,`Old invoice ${l.invoice_ref} but no end date — set billed-through date first`)});continue}
+    if(isNARef(l)){skipped.push({l,why:L("Invoice 写 NA，不收钱","NA — not billed")});continue}
+    const a=l.start_date>from?l.start_date:from,b=logEnd(l)<to?logEnd(l):to;
+    const billed=S.d.mbills.filter(x=>x.log_id===l.id&&x.invoice_id!==invId).map(x=>[x.period_from,x.period_to]),cover=monthlyCover(l);
+    const days=[],cov=[],dup=[];for(let d=a;d<=b;d=addDays(d,1)){if(inRanges(d,billed))dup.push(d);else if(inRanges(d,cover))cov.push(d);else days.push(d)}
+    if(dup.length)skipped.push({l,why:L(`${dayRanges(dup).map(([x,y])=>dmy(x)+"–"+dmy(y)).join(", ")} 已经 bill 过`,`Already billed`)});
+    if(cov.length)skipped.push({l,why:L(`${dayRanges(cov).map(([x,y])=>dmy(x)+"–"+dmy(y)).join(", ")} 已包括在同 project 月租`,`In monthly rental`)});
+    const type=rateTypeOf(l,to),rate=rateOf(l,type);
+    for(const[x,y]of dayRanges(days))rows.push({l,from:x,to:y,days:dCount(x,y),type,rate,amount:amtFor(type,rate,x,y)})}
+  rows.sort((p,q)=>p.l.machine_code.localeCompare(q.l.machine_code)||p.from.localeCompare(q.from));
+  return{rows,skipped}}
+function machineLines(rows){return rows.map(r=>{const l=r.l,loc=l.loc_to||l.loc_from||"",fm=fullMonth(r.from,r.to)&&r.type==="Monthly";
+  const head=`${mName(l.machine_code,l.breaker)}${loc?` (${loc})`:""}`,per=`Period rental : ${dmyDash(r.from)} to ${dmyDash(r.to)}`;
+  if(fm)return{description:`${head}\n${per}`,qty:1,unit:"mth",unit_price:r.rate,amount:r.amount};
+  if(r.type==="Daily")return{description:`${head}\n${per}`,qty:r.days,unit:"day",unit_price:r.rate,amount:r.amount};
+  return{description:`${head}\n${per}\n(${r.type==="Weekly"?L("Weekly","Weekly"):"Monthly"} $${money(r.rate)} ÷ ${r.type==="Weekly"?7:30} × ${r.days} days)`,qty:r.days,unit:"days",unit_price:null,amount:r.amount}})}
+const isMachInv=i=>i?.kind==="machine";
+function machineRecordsHTML(inv){const bills=S.d.mbills.filter(b=>b.invoice_id===inv.id).map(b=>({...b,l:S.d.mlogs.find(l=>l.id===b.log_id)||{}})).sort((a,b)=>String(a.l.machine_code).localeCompare(String(b.l.machine_code))||a.period_from.localeCompare(b.period_from));
+  const a=inv.period_from||inv.invoice_date,mon=`${MONL[+a.slice(5,7)-1].toUpperCase()} ${a.slice(0,4)}`;
+  const out=[];if(inv.project)out.push(l3SummaryHTML(inv,"PROVIDE MACHINERY / EQUIPMENT"));
+  if(bills.length)out.push(chunkPages(bills,16,(rs,pi,last)=>`<div class="rech"><div><b>${esc(inv.project||custName(inv.customer_id))}</b><b>FOR MONTH ${mon}</b><b>MACHINERY / EQUIPMENT RENTAL RECORD</b></div><b class="no">${inv.summary_no?"No."+esc(inv.summary_no):""}</b></div>
+    <table class="sm rec"><thead><tr><th>S/N</th><th>Machine Code</th><th>Description</th><th>Person Request</th><th>Location</th><th>Start Date</th><th>End Date</th><th>Days</th><th>Rate Type</th><th>Rate</th><th>Total</th><th>Remarks</th></tr></thead><tbody>
+    ${rs.map((b,i)=>`<tr><td>${pi*16+i+1}</td><td>${esc(b.l.machine_code||"")}</td><td>${esc(mName(b.l.machine_code,b.l.breaker))}</td><td>${esc(b.l.person||"")}</td><td>${esc(b.l.loc_to||b.l.loc_from||"")}</td>
+      <td>${dMonYY(b.period_from)}</td><td>${dMonYY(b.period_to)}</td><td>${b.days}</td><td>${esc(b.rate_type||"")}</td><td class="a">${acc(b.rate)}</td><td class="a">${acc(b.amount)}</td><td>${esc(b.l.remark||"")}</td></tr>`).join("")}
+    ${last?`<tr class="tt"><td colspan="9"></td><td class="lb">TOTAL</td><td class="u a">${acc(sum(bills,b=>b.amount))}</td><td></td></tr>`:""}</tbody></table>`));
+  return out.join("")}
+
+/* ---- 画面 ---- */
+S.exc=S.exc||{sub:"status",month:today().slice(0,7),machine:"",project:"",status:"",issues:false,edit:null};
+function excView(){const E=S.exc,tab=(k,zh,en)=>`<button class="${E.sub===k?"on":""}" onclick="S.exc.sub='${k}';S.exc.edit=null;render()">${L(zh,en)}</button>`;
+  if(!S.d.machines.length&&!S.d.mlogs.length&&E.sub!=="import")return `<div class="panel"><h2>Excavator</h2><p>${L("还没有机器资料。请先在 Supabase 跑「L3H-第二批-Excavator-Supabase.sql」，再按 ⟳ 重新同步。","No machines yet. Run the batch-2 SQL in Supabase, then refresh.")}</p></div>`;
+  const body={status:excStatus,logs:excLogs,confirm:excConfirm,machines:()=>genView(["machines"],"excm"),import:excImport}[E.sub]();
+  return `<div class="sub">${tab("status","机器现况","Status")}${tab("logs","租用记录","Records")}${tab("confirm","月底确认","Confirm")}${tab("machines","机器 & 价钱","Machines & rates")}${tab("import","导入 Excel","Import Excel")}</div>${body}`}
+function machineNow(code){const t=today(),ls=S.d.mlogs.filter(l=>l.machine_code===code&&!l.cancelled).sort((a,b)=>b.start_date.localeCompare(a.start_date));
+  const cur=ls.filter(l=>(l.status==="Rental"||l.status==="Standby")&&l.start_date<=t&&logEnd(l)>=t);
+  const r=cur.find(l=>l.status==="Rental")||cur[0];const last=ls[0];
+  return{st:r?r.status:"Idle",l:r||last,last,updated:last?(last.confirmed_at&&last.confirmed_at>last.start_date?last.confirmed_at:last.start_date):null}}
+function excStatus(){const ms=[...S.d.machines].sort((a,b)=>a.code.localeCompare(b.code,undefined,{numeric:true})),iss=mIssues();
+  const rows=ms.map(m=>({m,...machineNow(m.code)})),cnt=k=>rows.filter(r=>r.st===k).length;
+  return `<div class="kv" style="margin-bottom:12px"><div><span>${L("在用","In use")}</span><b class="tag ok" style="display:inline-block;width:auto">${cnt("Rental")}</b></div><div><span>${L("Standby / 停放（不收钱）","Standby / parked")}</span><b class="tag warn" style="display:inline-block;width:auto">${cnt("Standby")}</b></div><div><span>${L("空闲（可以租出去）","Idle — available")}</span><b class="tag mute" style="display:inline-block;width:auto">${cnt("Idle")}</b></div></div>
+  <div class="tw"><table><thead><tr><th>${L("机器","Machine")}</th><th>Model</th><th>${L("现在","Now")}</th><th>Project</th><th>${L("地点","Location")}</th><th>${L("从","Since")}</th><th>${L("到","Until")}</th><th>${L("谁要的","Person")}</th><th>${L("多久没更新","Last update")}</th><th>${L("问题","Issues")}</th></tr></thead><tbody>
+  ${rows.map(r=>{const l=r.l||{},ago=r.updated?daysBetween(r.updated,today()):null,stale=r.st!=="Idle"&&ago!=null&&ago>30;
+    return `<tr class="${stale?"red":""} ${l.id?"click":""}" ${l.id?`onclick="excEdit('${l.id}')"`:""}><td><b>${esc(r.m.code)}</b></td><td>${esc(r.m.model||"")}</td>
+    <td>${r.st==="Rental"?`<span class="tag ok">${L("在用","In use")}</span>`:r.st==="Standby"?`<span class="tag warn">${L("Standby 停放","Standby")}</span>`:`<span class="tag mute">${L("空闲","Idle")}</span>`}</td>
+    <td>${esc(r.st==="Idle"?"":l.project||"")}</td><td>${esc(l.loc_to||l.loc_from||"")}${r.st==="Idle"&&l.id?` <span class="mute" style="font-size:12px">(${L("最后在这里","last seen")})</span>`:""}</td>
+    <td>${r.st==="Idle"?"":dmy(l.start_date)}</td><td>${r.st==="Idle"?"":l.end_date?dmy(l.end_date):`<span class="tag warn">${L("还没结束","open")}</span>`}</td><td>${esc(r.st==="Idle"?"":l.person||"")}</td>
+    <td>${ago==null?"":`${ago} ${L("天","d")}${stale?" ⚠":""}`}</td><td class="isscell">${r.st!=="Idle"&&l.id?issueTags((iss[l.id]||[]).filter(x=>x.k!=="covers"),2):""}</td></tr>`}).join("")}</tbody></table></div>
+  <p class="mute" style="font-size:12px">${L("红色 = 超过 30 天没更新，请 WhatsApp 问工地。空闲的机器可以租出去。","Red = no update for 30+ days.")}</p>`}
+function excFiltered(){const E=S.exc,a=E.month?`${E.month}-01`:"",b=E.month?lastDayOf(E.month):"",iss=mIssues();
+  return S.d.mlogs.filter(l=>(!E.month||(l.start_date<=b&&logEnd(l)>=a))&&(!E.machine||l.machine_code===E.machine)&&(!E.project||l.project===E.project)&&(!E.status||l.status===E.status)&&(!E.issues||(iss[l.id]||[]).some(x=>x.k==="clash"||x.k==="dup"||x.k==="standby"||x.k==="openref")))
+    .sort((p,q)=>p.machine_code.localeCompare(q.machine_code,undefined,{numeric:true})||p.start_date.localeCompare(q.start_date))}
+let excDOcache={key:"",list:[]};
+async function excLoadDOs(logs){const tr=logs.filter(l=>l.status==="Transfer");if(!tr.length)return;const ds=tr.map(l=>l.start_date).sort(),key=ds[0]+ds.at(-1);if(excDOcache.key===key)return;
+  try{const list=await fetchAll(()=>sb.from("delivery_orders").select("id,do_no,do_date,description,charges,from_loc,to_loc").eq("company",S.company).gte("do_date",addDays(ds[0],-1)).lte("do_date",addDays(ds.at(-1),1)));excDOcache={key,list};if(S.tab==="exc"&&S.exc.sub==="logs")render()}catch(e){}}
+function transferDO(l){const code=l.machine_code.toLowerCase();return excDOcache.list.find(d=>Math.abs(daysBetween(l.start_date,d.do_date))<=1&&[d.description,...(d.charges||[]).map(x=>x.desc)].join(" ").toLowerCase().includes(code))}
+function excLogs(){const E=S.exc,rows=excFiltered(),iss=mIssues();setTimeout(()=>excLoadDOs(rows),0);
+  const projs=[...new Set(S.d.mlogs.map(l=>l.project).filter(Boolean))].sort();
+  return `${E.edit?excForm(E.edit):`<div class="actions" style="margin:0 0 10px"><button class="btn" onclick="excEdit()">${L("新增记录","Add record")}</button></div>`}
+  <div class="filters"><label class="f">${L("月份","Month")}<input type="month" value="${E.month}" onchange="S.exc.month=this.value;render()"></label>
+    <label class="f">${L("机器","Machine")}<select onchange="S.exc.machine=this.value;render()">${optList(S.d.machines.map(m=>[m.code,m.code]),E.machine,L("全部","All"))}</select></label>
+    <label class="f">Project<select onchange="S.exc.project=this.value;render()">${optList(projs.map(p=>[p,p]),E.project,L("全部","All"))}</select></label>
+    <label class="f">${L("状态","Status")}<select onchange="S.exc.status=this.value;render()">${optList([["Rental","Rental"],["Transfer","Transfer"],["Standby","Standby"],["Off Hire","Off Hire"]],E.status,L("全部","All"))}</select></label>
+    <label class="chk"><input type="checkbox" ${E.issues?"checked":""} onchange="S.exc.issues=this.checked;render()">${L("只看有问题的","Issues only")}</label></div>
+  ${rows.length?`<div class="tw"><table><thead><tr><th>${L("机器","Machine")}</th><th>${L("状态","Status")}</th><th>${L("问题","Issues")}</th><th>Project</th><th>From → To</th><th>${L("开始","Start")}</th><th>${L("结束","End")}</th><th class="num">${L("天","Days")}</th><th>${L("计价","Type")}</th><th class="num">${L("价钱","Rate")}</th><th>${L("谁要的","Person")}</th><th>Invoice</th></tr></thead><tbody>
+  ${rows.map(l=>{const t=l.status==="Rental"?rateTypeOf(l):"",r=t?rateOf(l,t):null,bills=S.d.mbills.filter(b=>b.log_id===l.id),td=l.status==="Transfer"?transferDO(l):null;
+    return `<tr class="click ${l.cancelled?"mute":""}" onclick="excEdit('${l.id}')"><td><b>${esc(l.machine_code)}</b>${l.breaker?` <span class="mute" style="font-size:12px">w breaker</span>`:""}</td>
+    <td>${l.cancelled?`<span class="tag mute">${L("取消","Cancelled")}</span>`:l.status==="Rental"?`<span class="tag ok">Rental</span>`:l.status==="Standby"?`<span class="tag warn">Standby</span>`:`<span class="tag mute">${esc(l.status)}</span>`}</td>
+    <td class="isscell">${issueTags((iss[l.id]||[]).filter(x=>x.k!=="covers"),2)}${l.status==="Transfer"?(td?` <span class="tag ok">${L("运输 DO","DO")} ${esc(td.do_no)}</span>`:excDOcache.key?` <span class="tag warn">${L("找不到运输 DO，可能漏收运输费","No transport DO")}</span>`:""):""}</td>
+    <td>${esc(l.project||"")}</td><td>${esc(l.loc_from||"")}${l.loc_to&&l.loc_to!==l.loc_from?" → "+esc(l.loc_to):""}</td><td>${dmy(l.start_date)}</td><td>${l.end_date?dmy(l.end_date):l.status==="Transfer"?"":`<span class="tag warn">${L("还在用","open")}</span>`}</td>
+    <td class="num">${l.status==="Transfer"?"":dCount(l.start_date,l.end_date||today())}</td><td>${t?typeZh(t)+(l.rate_type?" ✎":""):""}</td><td class="num">${r!=null?money(r):t?`<span class="tag bad">${L("没价钱","no rate")}</span>`:""}</td><td>${esc(l.person||"")}</td>
+    <td style="font-size:12px">${isBilledRef(l)?esc(l.invoice_ref):isNARef(l)?"NA":bills.map(b=>`${esc(invById(b.invoice_id)?.invoice_no||"✓")} ${dmy(b.period_from)}–${dmy(b.period_to)}`).join("<br>")}</td>
+</tr>`}).join("")}</tbody></table></div>`
+  :`<div class="panel empty">${L("这个月没有记录","No records this month")}</div>`}`}
+function excEdit(id){S.tab="exc";S.exc.sub="logs";const l=id?S.d.mlogs.find(x=>x.id===id):null;S.exc.edit=l?{...l}:{status:"Rental",start_date:today(),breaker:true};if(l)S.exc.month=l.start_date.slice(0,7);S.dirty=true;render();window.scrollTo({top:0,behavior:"smooth"})}
+function excForm(e){const bills=e.id?S.d.mbills.filter(b=>b.log_id===e.id):[];
+  return `<section class="panel"><h2>${e.id?L("修改记录","Edit record"):L("新增记录","New record")}</h2>
+  <form id="excForm" class="grid" oninput="S.dirty=true" onsubmit="event.preventDefault();excSave()">
+    <label class="f">${L("机器","Machine")} *<select name="machine_code">${optList(S.d.machines.map(m=>[m.code,`${m.code} · ${m.model||""}`]),e.machine_code,"")}</select></label>
+    <label class="f">${L("有 breaker","With breaker")}<select name="breaker">${optList([["true",L("有","Yes")],["false",L("没有","No")]],String(!!e.breaker))}</select></label>
+    <label class="f">${L("状态","Status")}<select name="status">${optList([["Rental","Rental（出租）"],["Transfer","Transfer（搬机器）"],["Standby","Standby（停放，不收钱）"],["Off Hire","Off Hire（还机）"]],e.status)}</select></label>
+    <label class="f">Project<select name="project">${projOpts(e.project||"")}</select></label>
+    ${fld("person",L("谁要的","Person request"),e.person||"")}${fld("phone",L("电话（WhatsApp 用）","Phone"),e.phone||"")}
+    ${fld("loc_from","From",e.loc_from||"")}${fld("loc_to","To / "+L("地点","Location"),e.loc_to||"")}
+    ${fld("start_date",L("开始","Start")+" *",e.start_date||"","date")}${fld("end_date",L("结束（还在用就空白）","End (blank if still using)"),e.end_date||"","date")}
+    <label class="f">${L("计价方式（空白 = 自动）","Rate type (blank = auto)")}<select name="rate_type">${optList([["Daily",L("按日","Daily")],["Weekly",L("按周","Weekly")],["Monthly",L("按月","Monthly")]],e.rate_type||"",L("自动","Auto"))}</select></label>
+    ${fld("rate",L("价钱（空白 = 照价钱表）","Rate (blank = rate table)"),e.rate??"","number",'step="0.01"')}
+    ${fld("invoice_ref",L("旧 Invoice No.（导入的；写 NA = 不收）","Old invoice no. (NA = no charge)"),e.invoice_ref||"")}
+    ${fld("remark","Remark",e.remark||"","text","","wide")}
+    <label class="chk"><input type="checkbox" name="cancelled" ${e.cancelled?"checked":""}>${L("取消（不算）","Cancelled")}</label></form>
+  ${bills.length?`<p class="mute" style="font-size:13px">${L("已开单：","Billed: ")}${bills.map(b=>`${esc(invById(b.invoice_id)?.invoice_no||"")} ${dmy(b.period_from)}–${dmy(b.period_to)}`).join("、")}</p>`:""}
+  <div class="warn" id="excWarn"></div>
+  <div class="actions"><button class="btn" onclick="excSave()">${L("保存","Save")}</button><button class="btn sec" onclick="S.exc.edit=null;done();render()">${L("取消","Cancel")}</button>
+  ${e.id?`<button class="btn sec" onclick="excConfirmOne('${e.id}')">✓ ${L("已确认还在用","Confirmed still in use")}</button><button class="btn del" onclick="excDel('${e.id}')">${L("删除","Delete")}</button>`:""}</div></section>`}
+async function excSave(){const e=S.exc.edit,fd=new FormData($("#excForm")),w=$("#excWarn"),g=k=>{const v=fd.get(k);return v===""||v==null?null:String(v).trim()};
+  const row={company:S.company,machine_code:g("machine_code"),breaker:fd.get("breaker")==="true",status:g("status")||"Rental",project:g("project"),person:g("person"),phone:g("phone"),
+    loc_from:g("loc_from"),loc_to:g("loc_to"),start_date:g("start_date"),end_date:g("end_date"),rate_type:g("rate_type"),rate:g("rate")==null?null:Number(g("rate")),invoice_ref:g("invoice_ref"),remark:g("remark"),cancelled:fd.get("cancelled")==="on"};
+  if(!row.machine_code||!row.start_date){w.textContent=L("请选机器、填开始日期","Machine and start date are required");return}
+  if(row.end_date&&row.end_date<row.start_date){w.textContent=L("结束日期不能早过开始日期","End date is before start");return}
+  if(row.status==="Rental"&&!row.project&&!confirm(L("没有填 Project，开单时会找不到。还是要保存？","No project — it won't be billed. Save anyway?")))return;
+  if(e.id){const bills=S.d.mbills.filter(b=>b.log_id===e.id);
+    if(bills.length&&(row.start_date!==e.start_date||row.end_date!==(e.end_date||null)||row.project!==(e.project||null)||row.machine_code!==e.machine_code)){
+      const minB=bills.map(b=>b.period_from).sort()[0],maxB=bills.map(b=>b.period_to).sort().at(-1);
+      if(row.start_date>minB||(row.end_date&&row.end_date<maxB)||row.project!==(e.project||null)||row.machine_code!==e.machine_code){w.textContent=L(`这笔已经开单（${dmy(minB)}–${dmy(maxB)}），不能改掉已开单的日子、Project 或机器。要改请先删除那张 invoice。`,"Billed dates/project/machine can't be changed.");return}}}
+  const res=e.id?await sb.from("machine_logs").update(row).eq("id",e.id).select().single():await sb.from("machine_logs").insert(row).select().single();
+  if(res.error){w.textContent=res.error.message;return}
+  toast(L("已保存","Saved"));S.exc.edit=null;done();await loadAll();
+  const iss=(mIssues()[res.data.id]||[]).filter(x=>x.k==="clash"||x.k==="dup");if(iss.length)toast(L(`⚠ 撞期：${res.data.machine_code} 跟 ${iss.map(x=>x.o.project||"?").join(", ")} 日期重叠，请确认`,"⚠ Date clash — please check"));
+  render()}
+async function excDel(id){if(S.d.mbills.some(b=>b.log_id===id))return toast(L("这笔已经开单，要先删除那张 invoice 才可以删除。","Billed — delete the invoice first."));
+  if(!confirm(L("确定删除这笔记录？","Delete this record?")))return;const{error}=await sb.from("machine_logs").delete().eq("id",id);if(error)return toast(error.message);
+  toast(L("已删除","Deleted"));S.exc.edit=null;done();await loadAll();render()}
+async function excConfirmOne(id){const{error}=await sb.from("machine_logs").update({confirmed_at:today()}).eq("id",id);if(error)return toast(error.message);toast(L("已记录今天确认","Confirmed today"));S.exc.edit=null;done();await loadAll();render()}
+/* ---- 月底确认：按人分 ---- */
+function excConfirm(){const t=today(),open=S.d.mlogs.filter(l=>activeLog(l)&&l.start_date<=t&&(!l.end_date||l.end_date>=addDays(t,-7)));
+  const by={};for(const l of open){const k=(l.person||L("（没写谁）","(no person)")).trim();(by[k]=by[k]||[]).push(l)}
+  const phoneOf=ls=>{const p=ls.map(l=>l.phone).find(Boolean)||ls.map(l=>(String(l.person||"").match(/(\d[\d\s]{6,}\d)/)||[])[1]).find(Boolean);return p?String(p).replace(/\D/g,""):""};
+  const msg=(p,ls)=>`Hi ${p.replace(/[\d\s]+$/,"").trim()}, please help to confirm the machine(s) below:\n\n${ls.map((l,i)=>`${i+1}) ${l.machine_code}${l.breaker?" w breaker":""} – ${l.project||""} – ${l.loc_to||l.loc_from||""} – since ${dmy(l.start_date)}${l.end_date?` (end ${dmy(l.end_date)})`:""}\n   Still using? Continue monthly rental? If finished, end date?`).join("\n")}\n\nThank you!`;
+  const keys=Object.keys(by).sort();
+  return `<p class="mute" style="font-size:13px">${L("还没结束（或这个星期刚结束）的机器，按负责的人分开。按 WhatsApp 会带好信息，确认后回来按「✓ 已确认」。","Open rentals grouped by person. Tap WhatsApp to ask; then mark confirmed.")}</p>
+  ${keys.length?keys.map(p=>{const ls=by[p],ph=phoneOf(ls),text=msg(p,ls);return `<div class="panel" style="padding:12px 14px;margin-bottom:10px"><h3 style="margin:0 0 6px">${esc(p)} <span class="mute" style="font-size:13px;font-weight:400">${ls.length} ${L("台","machine(s)")}</span>
+    <a class="btn sm" style="float:right" target="_blank" href="${ph?waLink(ph,text):`https://wa.me/?text=${encodeURIComponent(text)}`}">WhatsApp</a></h3>
+    <div class="tw"><table><tbody>${ls.map(l=>{const ago=daysBetween(l.confirmed_at&&l.confirmed_at>l.start_date?l.confirmed_at:l.start_date,t);return `<tr><td><b>${esc(l.machine_code)}</b></td><td>${l.status==="Standby"?`<span class="tag warn">Standby</span>`:`<span class="tag ok">Rental</span>`}</td><td>${esc(l.project||"")}</td><td>${esc(l.loc_to||l.loc_from||"")}</td><td>${L("从","since")} ${dmy(l.start_date)}${l.end_date?` – ${dmy(l.end_date)}`:""}</td>
+      <td>${l.confirmed_at?`<span class="tag ok">✓ ${dmy(l.confirmed_at)}</span>`:""}${ago>30?` <span class="tag bad">${ago} ${L("天没确认","d unconfirmed")}</span>`:""}</td>
+      <td style="white-space:nowrap"><button class="btn sm sec" onclick="excConfirmOne('${l.id}')">✓ ${L("还在用","Still using")}</button> <button class="btn sm sec" onclick="excEdit('${l.id}')">${L("填结束日期","Set end")}</button></td></tr>`}).join("")}</tbody></table></div></div>`}).join("")
+  :`<div class="panel empty">✓ ${L("没有要确认的机器","Nothing to confirm")}</div>`}`}
+/* ---- 导入现在的 Excel（Tracking + Roller sheets） ---- */
+function excImport(){return `<div class="panel"><h2>${L("导入 Excavator Excel","Import excavator Excel")}</h2>
+  <p class="mute" style="font-size:14px">${L("上传你现在的「Excavator_Rental_For_Project.xlsx」。系统会读「Tracking」和 Roller 的 sheet：机器、谁要的、状态、Project、From / To、开始、结束、Remark、Invoice No.。已经存在的同一笔（同机器、同开始日期、同 Project、同状态）会跳过。有 Invoice No.（L3H/…）的当作已经 bill，写 NA 的当作不收钱。","Upload your current workbook; Tracking and roller sheets are read. Duplicates are skipped.")}</p>
+  <label class="btn file">⬆ ${L("选 Excel 文件","Choose Excel file")}<input type="file" accept=".xlsx" hidden onchange="excImportFile(this)"></label><div id="excImpOut" style="margin-top:12px"></div></div>`}
+function excParseRows(wb){const out=[],toY=v=>{if(v instanceof Date&&!isNaN(v))return ymd(new Date(v.getTime()+v.getTimezoneOffset()*60000+12*3600000));const s=String(v||"").trim();let m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);if(m)return `${m[3].length===2?"20"+m[3]:m[3]}-${z2(m[2])}-${z2(m[1])}`;m=s.match(/^(\d{4})-(\d{2})-(\d{2})/);return m?m[0]:null};
+  const names=wb.SheetNames.filter(n=>/^tracking\s*$/i.test(n.trim())&&!/\(\d+\)/.test(n)||/roller/i.test(n));
+  for(const n of names){const rows=XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,defval:""});const hi=rows.findIndex(r=>r.some(c=>/machine code/i.test(String(c))));if(hi<0)continue;
+    const H=rows[hi].map(c=>String(c).trim().toLowerCase()),col=re=>H.findIndex(h=>re.test(h));
+    const cl=col(/current location/);
+    const ci={code:col(/machine code/),person:col(/person/),status:col(/^status/),proj:col(/^project/),from:col(/location from/),to:col(/location to/),start:col(/start/),end:col(/end/),type:col(/rate type/),remark:col(/remark/),inv:col(/invoice/)};
+    for(const r of rows.slice(hi+1)){const raw=String(r[ci.code]||"").trim();if(!raw)continue;const start=toY(r[ci.start]);if(!start)continue;
+      const endRaw=r[ci.end],cancelled=r.some(x=>/^\s*cancel/i.test(String(x)));let code=raw.replace(/\s*w\/?\s*breaker\s*/i,"").trim();if(/^[a-z]\d/i.test(code))code=code.toUpperCase();const breaker=/breaker/i.test(raw);
+      let remark=ci.remark>=0?String(r[ci.remark]||"").trim():"",inv=ci.inv>=0?String(r[ci.inv]||"").trim():"";
+      if(!inv){const c=r.map(x=>String(x).trim()).find(x=>/^L3H\s*\//i.test(x)||/^n\/?a$/i.test(x));if(c)inv=c}
+      if(!remark&&cl>=0){const c=r.slice(cl+1).map(x=>String(x).trim()).find(x=>x&&!/^L3H\s*\//i.test(x)&&!/^n\/?a$/i.test(x));if(c)remark=c}
+      const st=String(r[ci.status]||"Rental").trim();const p=String(r[ci.proj]||"").trim(),pj=projByText(p)?.code||p;
+      out.push({company:S.company,machine_code:code,breaker,person:String(r[ci.person]||"").trim()||null,status:/transfer/i.test(st)?"Transfer":/standby|park/i.test(st)?"Standby":/off\s*hire/i.test(st)?"Off Hire":"Rental",project:pj||null,
+        loc_from:String(r[ci.from]||"").trim()||null,loc_to:String(r[ci.to]||"").trim()||null,start_date:start,end_date:cancelled?null:toY(endRaw),cancelled,invoice_ref:inv||null,remark:remark||null,_raw:p})}}
+  return out}
+async function excImportFile(input){const file=input.files[0];input.value="";if(!file)return;const box=$("#excImpOut");
+  try{const wb=XLSX.read(await file.arrayBuffer(),{cellDates:true});const rows=excParseRows(wb);
+    const key=l=>[l.machine_code,l.start_date,l.project||"",l.status,l.loc_to||""].join("|").toLowerCase(),have=new Set(S.d.mlogs.map(key)),seen=new Set();
+    const ins=rows.filter(r=>{const k=key(r);if(have.has(k)||seen.has(k))return false;seen.add(k);return true});
+    const unknownM=[...new Set(ins.map(r=>r.machine_code).filter(c=>!mOf(c)))],unknownP=[...new Set(ins.filter(r=>r._raw&&!projOf(r.project)).map(r=>r._raw))];
+    box.innerHTML=`<p>${L(`读到 ${rows.length} 笔，新的 ${ins.length} 笔（已存在 / 重复 ${rows.length-ins.length} 笔会跳过）。`,`${rows.length} rows, ${ins.length} new.`)}</p>
+      ${unknownM.length?`<p class="mute">${L("机器名单没有的（会照样导入，请到「机器 & 价钱」加）：","Machines not in list: ")}${unknownM.map(esc).join(", ")}</p>`:""}
+      ${unknownP.length?`<p class="mute">${L("Project 名单对不到的（会照原本写的导入，请到 Master List → Project 加别名）：","Projects not matched: ")}${unknownP.map(esc).join(", ")}</p>`:""}
+      ${ins.length?`<button class="btn" id="excImpGo">${L(`导入 ${ins.length} 笔`,`Import ${ins.length}`)}</button>`:""}`;
+    const go=$("#excImpGo");if(go)go.onclick=async()=>{go.disabled=true;for(let i=0;i<ins.length;i+=200){const{error}=await sb.from("machine_logs").insert(ins.slice(i,i+200).map(({_raw,...x})=>x));if(error){toast(error.message);go.disabled=false;return}}
+      toast(L(`已导入 ${ins.length} 笔`,`Imported ${ins.length}`));await loadAll();S.exc.sub="logs";S.exc.issues=true;S.exc.month="";render()}}
+  catch(e){box.textContent=e.message||String(e)}}
+
 /* ================= Invoice ================= */
 function invView(){
   const F=S.invF,rows=invRows(),desc=invDesc;
@@ -927,7 +1145,7 @@ function invView(){
     <th class="num">Amt before GST</th><th class="num">GST</th><th class="num">Total</th><th class="num">${L("已付","Paid")}</th><th class="num">${L("余额","Balance")}</th>
     <th>Due</th><th>${L("状态","Status")}</th><th>Checked</th><th>${L("签名","Signed")}</th><th>${L("发送","Sent")}</th><th>${L("最新付款","Last paid")}</th></tr></thead><tbody>
   ${rows.map((i,n)=>`<tr class="click" onclick="openInv('${i.id}')"><td>${n+1}</td><td>${dmy(i.invoice_date)}</td><td>${esc(i.invoice_no)}</td><td>${esc(custName(i.customer_id))}</td>
-    <td class="wrap">${esc(desc(i).slice(0,80))}</td><td class="num">${money(i.amount_before_gst)}</td><td class="num">${money(i.gst_amount)}</td><td class="num">${money(i.total)}</td>
+    <td class="wrap">${isMachInv(i)?`<span class="tag mute">${L("机械","Machinery")}</span> `:""}${esc(desc(i).slice(0,80))}</td><td class="num">${money(i.amount_before_gst)}</td><td class="num">${money(i.gst_amount)}</td><td class="num">${money(i.total)}</td>
     <td class="num">${money(paidOf(i))}</td><td class="num">${money(balOf(i))}</td><td>${dmy(i.due_date)}</td><td>${statusTag(i)}</td>
     <td>${i.checked?`<span class="tag ok">✓</span>`:`<span class="tag warn">${L("未检查","Not checked")}</span>`}</td>
     <td>${signedOf(i)?`<span class="tag ok">✓</span>`:i.sent_at?"":`<span class="tag warn">${L("未签","Unsigned")}</span>`}</td>
@@ -960,17 +1178,19 @@ function invFormView(f){
   ${locked?`<div class="note">${L("这张 invoice 已检查或已发送，保存时要填修改原因，系统会留记录。","This invoice is checked or sent. Saving asks for a reason, which is logged.")}</div>`:""}
   <div oninput="invIn(event.target)" onchange="invIn(event.target,true)">
   <h3>1. ${L("选客户和期间，带出未开单 DO","Pick customer and period to load unbilled DOs")}</h3>
-  <div class="grid"><label class="f">${L("客户","Customer")} *<select data-k="customer_id">${custOpts(f.customer_id)}</select></label>
+  <div class="grid">${isL3()?`<label class="f">${L("类型","Type")}<select data-k="kind">${optList([["",L("运输（DO）","Transport (DOs)")],["machine",L("Excavator / 机械月租","Excavator / machinery")]],f.kind||"")}</select></label>`:""}<label class="f">${L("客户","Customer")} *<select data-k="customer_id">${custOpts(f.customer_id)}</select></label>
     ${isL3()?`<label class="f">Project${projRequired(f.customer_id)?" *":""}<select data-k="project">${projOpts(f.project,f.customer_id)}</select></label>`:""}<label class="f" ${isL3()?'style="display:none"':""}>Project<input data-k="project" list="projList2" value="${esc(f.project)}"><datalist id="projList2">${projects.map(p=>`<option value="${esc(p)}">`).join("")}</datalist></label>
     <label class="f">${L("期间从","Period from")}<input type="date" data-k="period_from" value="${f.period_from||""}"></label>
     <label class="f">${L("到","to")}<input type="date" data-k="period_to" value="${f.period_to||""}"></label></div>
-  <div class="actions"><button class="btn sec" onclick="loadUnbilled()">${L("载入未开单 DO","Load unbilled DOs")}</button>
+  <div class="actions"><button class="btn sec" onclick="loadUnbilled()">${isL3()&&f.kind==="machine"?L("载入这个 Project 的 Excavator","Load excavator rentals"):L("载入未开单 DO","Load unbilled DOs")}</button>
+    ${isL3()&&f.kind==="machine"&&f._m?`<button class="btn sec" onclick="buildLines()">${L("用已选机械生成明细","Build lines")}</button>`:""}
     ${f.dos.length?`<button class="btn sec" onclick="buildLines()">${L("用已选 DO 生成明细","Build lines from selected DOs")}</button>`:""}${quoteBtn(f.customer_id,f.id)}</div>
   ${f.dos.length?`<div class="tw" style="max-height:300px;overflow:auto;margin-top:10px"><table><thead><tr><th><input type="checkbox" ${f.sel.size===f.dos.length?"checked":""} onchange="invSelAll(this.checked)"></th>
     <th>${L("日期","Date")}</th><th>DO No</th><th>Project</th><th>Service</th><th>${L("车牌","Vehicle")}</th><th>In</th><th>Out</th><th class="num">${L("小时","Hrs")}</th><th class="num">${L("金额","Amount")}</th></tr></thead><tbody>
     ${f.dos.map(d=>`<tr><td><input type="checkbox" ${f.sel.has(d.id)?"checked":""} onchange="invSel('${d.id}',this.checked)"></td><td>${dmy(d.do_date)}</td><td>${esc(d.do_no)}</td><td>${esc(d.project)}</td>
       <td>${esc(d.service)} ${d.shift?`<span class="tag ${d.shift}">${d.shift}</span>`:""}</td><td>${esc(d.plate)}</td><td>${d.start_time?.slice(0,5)||""}</td><td>${d.end_time?.slice(0,5)||""}</td>
       <td class="num">${d.billable_hours??""}</td><td class="num">${money(d.amount)}</td></tr>`).join("")}</tbody></table></div>`:""}
+  ${isL3()&&f.kind==="machine"?machRowsHTML(f):""}
   <h3>2. Invoice ${L("资料","details")}</h3>
   <div class="grid"><label class="f">Invoice Date *<input type="date" data-k="invoice_date" value="${f.invoice_date||""}"></label>
     <label class="f">Invoice No *<input data-k="invoice_no" value="${esc(f.invoice_no)}"></label>
@@ -998,6 +1218,7 @@ function invFormView(f){
   <div class="actions"><button class="btn" onclick="saveInv()">${L("保存 Invoice","Save invoice")}</button><button class="btn sec" onclick="closeModal()">${L("取消","Cancel")}</button></div>`;
 }
 function invIn(el,isChange){const f=S.modal?.f;if(!f)return;const k=el.dataset.k,li=el.dataset.li,lk=el.dataset.lk;
+  if(k==="kind"){f.kind=el.value||null;f.dos=[];f.sel=new Set();f._m=null;f._mchosen=undefined;f.lines=[];f._chk=null;render();return}
   if(k){f[k]=el.type==="checkbox"?el.checked:el.value;
     if(k==="invoice_no")f._noTouched=true;if(k==="due_date")f._dueTouched=true;if(k==="gst_rate")f.gst_rate=Number(el.value)||0;
     if(k==="invoice_date"||k==="customer_id"){recalcDue(f);const dd=$('[data-k="due_date"]');if(dd)dd.value=f.due_date||""}
@@ -1013,12 +1234,18 @@ function invSelAll(on){const f=S.modal.f;f.sel=on?new Set(f.dos.map(d=>d.id)):ne
 function invAddLine(){S.modal.f.lines.push({description:"",qty:1,unit:"LS",amount:null});render()}
 function invDelLine(i){S.modal.f.lines.splice(i,1);render()}
 async function loadUnbilled(){const f=S.modal.f;if(!f.customer_id)return toast(L("先选客户","Choose a customer first"));
+  if(isL3()&&f.kind==="machine"){if(!f.project)return toast(L("先选 Project","Choose a project first"));if(!f.period_from||!f.period_to)return toast(L("先填期间","Fill in the period"));
+    f._m=machineBillRows(f.project,f.period_from,f.period_to,f.id);f.msel=new Set(f._m.rows.map((_,i)=>i));if(!f._m.rows.length)toast(L("这个 Project 这段期间没有要 bill 的机械","Nothing to bill"));render();return}
   try{const data=await fetchAll(()=>{let q=sb.from("delivery_orders").select("*").eq("company",S.company).eq("customer_id",f.customer_id).is("invoice_id",null);
       if(f.period_from)q=q.gte("do_date",f.period_from);if(f.period_to)q=q.lte("do_date",f.period_to);if(f.project)q=q.eq("project",f.project);return q.order("do_date").order("start_time")});
     const have=new Set(f.dos.map(d=>d.id));for(const d of data)if(!have.has(d.id)){f.dos.push(d);f.sel.add(d.id)}
     f.dos.sort((a,b)=>a.do_date.localeCompare(b.do_date)||(a.start_time||"").localeCompare(b.start_time||""));
     if(!data.length)toast(L("没有找到未开单的 DO","No unbilled DOs found"));render()}catch(e){toast(e.message)}}
-async function buildLines(){const f=S.modal.f,chosen=f.dos.filter(d=>f.sel.has(d.id));if(!chosen.length)return toast(L("还没选 DO","No DOs selected"));
+async function buildLines(){const f=S.modal.f;
+  if(isL3()&&f.kind==="machine"){const rows=(f._m?.rows||[]).filter((_,i)=>f.msel.has(i));if(!rows.length)return toast(L("还没选机械","Nothing selected"));
+    const np=rows.filter(r=>r.rate==null);if(np.length)return toast(L(`${np.map(r=>r.l.machine_code).join(", ")} 没有价钱，先到 Excavator → 机器 & 价钱 填好`,`No rate for ${np.map(r=>r.l.machine_code).join(", ")}`));
+    f.description=`PROJECT: ${f.project}\nPROVIDE MACHINERY / EQUIPMENT RENTAL FOR ${monthUpper(f.period_from)}`;f.lines=machineLines(rows);f._mchosen=rows;if(!f.summary_no)f.summary_no=projOf(f.project)?.no||"";render();return}
+  const chosen=f.dos.filter(d=>f.sel.has(d.id));if(!chosen.length)return toast(L("还没选 DO","No DOs selected"));
   if(isL3()){chosen.sort((a,b)=>a.do_date.localeCompare(b.do_date));const np=noPriceList(chosen);
     if(np.length){f._chk={noPrice:np};render();toast(L(`有 ${np.length} 张 DO 没有价钱，先到 Master List 设好价钱，或打开那张 DO 填价钱。`,`${np.length} DO(s) have no price.`));return}
     const from=f.period_from||chosen[0].do_date;
@@ -1042,7 +1269,7 @@ async function saveInv(){
   const row={company:S.company,customer_id:f.customer_id,invoice_no:f.invoice_no.trim(),invoice_date:f.invoice_date,due_date:f.due_date||null,customer_po:f.customer_po||null,
     our_ref:f.our_ref||null,description:f.description||null,project:f.project||null,period_from:f.period_from||null,period_to:f.period_to||null,
     amount_before_gst:t.sub,gst_rate:Number(f.gst_rate)||0,gst_amount:t.gst,total:t.total,remark:f.remark||null,interest_enabled:!!f.interest_enabled,monthly_fix_id:f.monthly_fix_id||null};
-  if(isL3())row.summary_no=f.project?(f.summary_no||null):null;
+  if(isL3()){row.summary_no=f.project?(f.summary_no||null):null;row.kind=f.kind||null}
   let id=f.id;
   if(id){const old=invById(id);
     if(old.checked||old.sent_at){const reason=prompt(L("这张 invoice 已检查或已发送，请输入修改原因：","This invoice is checked or sent. Reason for the change:"));if(!reason)return;
@@ -1054,6 +1281,9 @@ async function saveInv(){
     await sb.from("invoice_lines").delete().eq("invoice_id",id);
   }else{const{data,error}=await sb.from("invoices").insert(row).select().single();if(error)return w.textContent=error.message;id=data.id}
   const e2=await sb.from("invoice_lines").insert(f.lines.map((l,i)=>({invoice_id:id,line_no:i+1,description:l.description||"",qty:l.qty,unit:l.unit||null,unit_price:l.unit==="hrs"||(isL3()&&l.unit_price==null)?null:(l.unit_price??l.amount),amount:Number(l.amount)||0})));if(e2.error)return w.textContent=e2.error.message;
+  if(isL3()&&f.kind==="machine"&&f._mchosen){await sb.from("machine_bills").delete().eq("invoice_id",id);
+    const mb=f._mchosen.map(r=>({company:S.company,log_id:r.l.id,invoice_id:id,period_from:r.from,period_to:r.to,days:r.days,rate_type:r.type,rate:r.rate,amount:r.amount}));
+    if(mb.length){const e3=await sb.from("machine_bills").insert(mb);if(e3.error)return w.textContent=e3.error.message}}
   const add=[...f.sel].filter(x=>!f.origDos.includes(x)),rem=f.origDos.filter(x=>!f.sel.has(x));
   if(add.length)await sb.from("delivery_orders").update({invoice_id:id}).in("id",add);
   if(rem.length)await sb.from("delivery_orders").update({invoice_id:null}).in("id",rem);
@@ -1123,6 +1353,7 @@ async function delInv(id){const i=invById(id);
   if(!confirm(L(`确定删除 ${i.invoice_no}？里面的 DO 会变回未开单。`,`Delete ${i.invoice_no}? Its DOs return to unbilled.`)))return;
   await sb.from("delivery_orders").update({invoice_id:null}).eq("invoice_id",id);
   await sb.from("monthly_fix_log").update({invoice_id:null,status:"Confirmed"}).eq("invoice_id",id);
+  if(isMachInv(i))await sb.from("machine_bills").delete().eq("invoice_id",id);
   const{error}=await sb.from("invoices").delete().eq("id",id);if(error)return toast(error.message);
   toast(L("已删除","Deleted"));closeModal()}
 
@@ -1311,6 +1542,12 @@ const ENT={
     before(row,old){row.code=String(row.code||"").trim().toUpperCase();if(S.d.projects.some(p=>p.code===row.code&&p.id!==old?.id))return L("这个 Project Code 已经有了","Project code exists");
       if(!row.no){const mx=Math.max(0,...S.d.projects.map(p=>parseInt(p.no,10)).filter(n=>!isNaN(n)));row.no=String(mx+1)}if(row.active==null)row.active=true},
     note:["CHC 按 Project 开单。No. 就是 Summary list No.（例：LTATR370BW = 24）。做完的 project 把「还在做」改成否，就不会出现在选单，但旧资料还在。","Projects for CHC billing. Inactive projects are hidden from pickers."]},
+  machines:{scoped:1,label:["机器 & 价钱","Machines & rates"],fields:[F("code","text",1,["机器号码（例：E057）","Machine code"]),F("model","text",0,["型号（例：Kubota U50）","Model"]),F("ton","text",0,["吨","Ton"]),
+    F("rate_day_b","money",0,["有 breaker：日租","With breaker: daily"]),F("rate_week_b","money",0,["有 breaker：周租","With breaker: weekly"]),F("rate_month_b","money",0,["有 breaker：月租","With breaker: monthly"]),
+    F("rate_day","money",0,["没 breaker：日租","No breaker: daily"]),F("rate_week","money",0,["没 breaker：周租","No breaker: weekly"]),F("rate_month","money",0,["没 breaker：月租","No breaker: monthly"]),
+    F("active","yesno",0,["还在用","Active"],true),F("remark","text",0,["Remark","Remark"])],cols:["code","model","ton","rate_day_b","rate_week_b","rate_month_b","rate_day","rate_week","rate_month","active"],
+    before(row,old){row.code=String(row.code||"").trim().toUpperCase().replace(/ TON ROLLER$/," Ton Roller");if(S.d.machines.some(m=>m.code===row.code&&m.id!==old?.id))return L("这个机器号码已经有了","Machine exists");if(row.active==null)row.active=true},
+    note:["价钱填 CHC 的 7 折价。不到 7 天按日、不到 1 个月按周（周价 ÷ 7 × 天）、满 1 个月按月（整个月 = 月租；不满 = 月租 ÷ 30 × 天）。","CHC (70%) rates. <7 days daily, <1 month weekly (÷7 × days), full month monthly (÷30 × days for part months)."]},
   drivers:{scoped:1,label:["司机","Drivers"],fields:[F("name","text",1,["名字","Name"]),F("usual_sup","yesno",0,["通常有 Lifting Supervisor（例：Ah Yew）","Usually with lifting supervisor"],false),
     F("phone","text",0,["电话","Phone"]),F("remark","text",0,["Remark","Remark"])],cols:["name","usual_sup","phone","remark"],
     note:["打勾「通常有 Lifting Supervisor」的司机，录 Lorry Crane DO 时会自动勾 supervisor、用白天价。","Drivers marked here auto-tick lifting supervisor on lorry crane DOs."]},
@@ -1786,8 +2023,8 @@ async function buildCustomerPdf(inv,doOnly){
   await loadPdfLibs();const{jsPDF}=window.jspdf,pdf=new jsPDF({orientation:"portrait",unit:"mm",format:"a4",compress:true}),box=$("#print"),warn=[];
   const sg=doOnly?null:signedOf(inv);
   if(doOnly){}else if(sg)await addImagePage(pdf,true,await attDataURL(sg),0);
-  else{warn.push(L("还没上传签名页，第一页用没签名的 invoice","No signed page — unsigned invoice used"));box.innerHTML=invoiceHTML(inv,dos.length>0)}
-  if(!doOnly&&(!sg||dos.length)){if(sg)box.innerHTML="";box.innerHTML+=breakdownHTML(inv,dos);box.classList.add("cap");
+  else{warn.push(L("还没上传签名页，第一页用没签名的 invoice","No signed page — unsigned invoice used"));box.innerHTML=invoiceHTML(inv,dos.length>0||isMachInv(inv))}
+  if(!doOnly&&(!sg||dos.length||isMachInv(inv))){if(sg)box.innerHTML="";box.innerHTML+=breakdownHTML(inv,dos);box.classList.add("cap");
     try{if(document.fonts?.ready)await document.fonts.ready;await new Promise(r=>setTimeout(r,60));let first=!sg;
       for(const pg of box.querySelectorAll(".pg")){const land=pg.classList.contains("land"),W=land?297:210,H=land?210:297,cv=await html2canvas(pg,{scale:2,backgroundColor:"#ffffff",logging:false});
         if(!first)pdf.addPage("a4",land?"landscape":"portrait");first=false;let w=W,h=cv.height*W/cv.width;if(h>H){h=H;w=cv.width*H/cv.height}
@@ -1973,7 +2210,7 @@ function sumMonth(inv,list){const a=inv.period_from||list[0].do_date,b=inv.perio
 function sumHead(lines){return `<div class="sumh">${lines.map((t,i)=>i===0?`<div class="t"><span class="ul">${esc(t)}</span></div>`:`<div>${esc(t)}</div>`).join("")}</div>`}
 function chunkPages(rows,per,make){const ch=[];for(let i=0;i<rows.length;i+=per)ch.push(rows.slice(i,i+per));
   return ch.map((r,pi)=>`<div class="doc pg land">${make(r,pi,pi===ch.length-1)}${ch.length>1?`<div class="pno">Page ${pi+1} of ${ch.length}</div>`:""}</div>`).join("")}
-function breakdownHTML(inv,dos){if(coOf(settingsOf(inv.company))==="L3H")return l3RecordsHTML(inv,dos);const g={};for(const d of dos)(g[d.service]=g[d.service]||[]).push(d);const c=custOf(inv.customer_id);
+function breakdownHTML(inv,dos){if(coOf(settingsOf(inv.company))==="L3H")return isMachInv(inv)?machineRecordsHTML(inv):l3RecordsHTML(inv,dos);const g={};for(const d of dos)(g[d.service]=g[d.service]||[]).push(d);const c=custOf(inv.customer_id);
   return Object.entries(g).map(([svc,list])=>{const month=sumMonth(inv,list);
     if(svc==="TMA"&&!inv.project){
       const rows=list.map(d=>{const rr=findRate(d.customer_id,`TMA ${d.shift||"Day"}`,d.do_date),mx=baseHrsOf(rr),bh=Number(d.billable_hours)||0,sur=Number(d.surcharge)||0,tot=r2(Number(d.amount)||0),ot=r2(Math.max(0,bh-mx));
@@ -2011,7 +2248,7 @@ async function makePdf(filename){
     pdf.save(filename.replace(/[\\/:*?"<>|]+/g,"-")+".pdf");toast(L("PDF 已下载","PDF downloaded"))
   }catch(e){toast(e.message||String(e))}finally{box.classList.remove("cap")}}
 async function printInv(id,mode){const inv=invById(id);try{const dos=await fetchAll(()=>sb.from("delivery_orders").select("*").eq("invoice_id",id).order("do_date").order("start_time"));
-  $("#print").innerHTML=invoiceHTML(inv,dos.length>0)+breakdownHTML(inv,dos);const fn=inv.invoice_no.replace(/\//g,"-");
+  $("#print").innerHTML=invoiceHTML(inv,dos.length>0||isMachInv(inv))+breakdownHTML(inv,dos);const fn=inv.invoice_no.replace(/\//g,"-");
   if(mode==="print"){document.title=fn;setTimeout(()=>{window.print();document.title="ETK · L3H 开单系统"},100)}else await makePdf(fn)}catch(e){toast(e.message)}}
 
 /* ---- SOA：照 ETK SOA template，一页 ---- */
@@ -2065,7 +2302,7 @@ async function doLogin(e){e.preventDefault();const fd=new FormData(e.target);con
 async function logout(){await sb.auth.signOut()}
 function confirmLeave(){return !S.dirty||confirm(L("还没保存，确定离开？","You have unsaved changes. Leave anyway?"))}
 function setTab(x){if(!confirmLeave())return;S.tab=x;S.doForm=null;done();if(S.pending){S.pending=false;reload()}else render()}
-async function setCompany(c){if(!confirmLeave())return;S.company=c;setPref("company",c);S.doForm=null;S.modal=null;done();await reload()}
+async function setCompany(c){if(!confirmLeave())return;S.company=c;if(c!=="L3H"&&S.tab==="exc")S.tab="do";setPref("company",c);S.doForm=null;S.modal=null;done();await reload()}
 async function setMonth(m){S.month=m;await loadDO();render()}
 function toggleLang(){S.lang=S.lang==="zh"?"en":"zh";setPref("lang",S.lang);document.documentElement.lang=S.lang;render()}
 function toggleTheme(){S.theme=S.theme==="dark"?"light":"dark";setPref("theme",S.theme);document.documentElement.dataset.theme=S.theme;render()}
