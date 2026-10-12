@@ -284,9 +284,9 @@ const L3H_DESC={"Tipper":"Provide Tipper Truck Transportation with diesel / driv
   "Excavator":"Provide Excavator Rental with operator"};
 const DEFAULTS={
   ETK:{name:"ETK RESOURCES PTE LTD",address:"437, Choa Chu Kang Ave 4, #15-493, Singapore 680437",tel:"92981811",fax:"",
-       email:"etkresources@gmail.com",reg_no:"202033232C",gst_no:"202033232C",bank:"DBS 0720292421",inv_prefix:"ETK/INV/"},
+       email:"etkresources@gmail.com",reg_no:"202033232C",gst_no:"202033232C",bank:"DBS 0720292421",inv_prefix:"ETK/INV/",sign_name:"Jia Xun"},
   L3H:{name:"L3H RESOURCES PTE LTD",address:"35 Woodgrove Avenue Singapore 738231",tel:"+65 67520272",fax:"+65 67526308",
-       email:"l3hresourcespl@gmail.com",reg_no:"201628060H",gst_no:"201628060H",bank:"OCBC 7125 6768 4001",inv_prefix:"L3H/"}};
+       email:"l3hresourcespl@gmail.com",reg_no:"201628060H",gst_no:"201628060H",bank:"OCBC 7125 6768 4001",inv_prefix:"L3H/",sign_name:"Jia Xun"}};
 const TERMS=[0,7,14,30,60];
 const PAY_METHODS=["Bank Transfer","Cheque","PayNow","Cash","Contra"];
 const MON=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -1333,19 +1333,21 @@ async function toggleChecked(id){const i=invById(id);const{error}=await sb.from(
 async function setInterest(id,on){const{error}=await sb.from("invoices").update({interest_enabled:on}).eq("id",id);if(error)return toast(error.message);await loadAll();render()}
 function waLink(num,text){let n=String(num||"").replace(/\D/g,"");if(n.length===8)n="65"+n;return `https://wa.me/${n}?text=${encodeURIComponent(text)}`}
 const emailList=v=>String(v||"").split(/[\s,;]+/).map(x=>x.trim()).filter(x=>x.includes("@"));
-function mailLink(to,subj,body){return `mailto:${emailList(to).join(",")}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`}
+function mailLink(to,subj,body,cc){const c=emailList(cc);return `mailto:${emailList(to).join(",")}?${c.length?`cc=${c.join(",")}&`:""}subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`}
+const signName=s=>s.sign_name||"Jia Xun";
+/* PDF 文件名：ETK-INV-2609-17-EPM */
+const fileBase=inv=>{const c=custOf(inv.customer_id),sn=String(c.short_name||"").trim().replace(/[\\/:*?"<>|\s]+/g,"");return inv.invoice_no.replace(/[\\/:*?"<>|]+/g,"-")+(sn?"-"+sn:"")};
 function openOut(via,c,subj,text){if(via==="WhatsApp"){if(!c.whatsapp)toast(L("客户没有 WhatsApp 号码，请在 Master List 加","No WhatsApp number for this customer"));window.open(waLink(c.whatsapp,text),"_blank")}
-  else{if(!c.email)toast(L("客户没有 email，请在 Master List 加","No email for this customer"));location.href=mailLink(c.email,subj,text)}}
+  else{if(!c.email)toast(L("客户没有 email，请在 Master List 加","No email for this customer"));location.href=mailLink(c.email,subj,text,c.email_cc)}}
 async function sendInv(id,via){const i=invById(id),c=custOf(i.customer_id),s=settingsOf(i.company);
   if(!signedOf(i)&&!confirm(L("这张 invoice 还没上传 Chris 签名的第一页。确定现在就发？","No signed page uploaded for this invoice yet. Send anyway?")))return;
-  const first=(i.description||"").split("\n")[0];
-  const text=`Dear ${c.attention||c.name||"Sir/Madam"},\n\nPlease find attached our invoice ${i.invoice_no} dated ${dmy(i.invoice_date)}${first?` (${first})`:""}, total $${money(i.total)}.\nPayment due on ${dmy(i.due_date)}.\n\nThank you.\n${s.name}`;
-  openOut(via,c,`Invoice ${i.invoice_no} - ${s.name}`,text);
+  const text=`Dear Team,\n\nPlease find the attached invoice for your reference.\n\n\nThank you.\n\nBest regards,\n${signName(s)}`;
+  openOut(via,c,`Tax Invoice For ${i.invoice_no}`,text);
   setTimeout(async()=>{if(confirm(L(`已经用 ${via} 发送了吗？按确定记录今天的发送日期。\n（PDF 请自己附上）`,`Sent by ${via}? Press OK to record today's date.\n(Attach the PDF yourself)`))){
     const{error}=await sb.from("invoices").update({sent_at:today(),sent_via:via}).eq("id",id);if(error)return toast(error.message);await loadAll();render()}},900)}
 async function remind(id,via){const i=invById(id),c=custOf(i.customer_id),s=settingsOf(i.company),od=overdueDays(i),intr=interestOf(i);
-  const text=`Dear ${c.attention||c.name||"Sir/Madam"},\n\nThis is a friendly reminder that invoice ${i.invoice_no} dated ${dmy(i.invoice_date)} has an outstanding balance of $${money(balOf(i))}${od?`, overdue by ${od} days (due ${dmy(i.due_date)})`:`, due on ${dmy(i.due_date)}`}.${intr?`\nInterest at 1.5% per month applies: $${money(intr)} to date.`:""}\n\nKindly arrange payment at your earliest convenience. Please ignore this message if payment has been made.\n\nThank you.\n${s.name}`;
-  openOut(via,c,`Payment reminder: ${i.invoice_no}`,text);
+  const text=`Dear Team,\n\nThis is a friendly reminder that invoice ${i.invoice_no} dated ${dmy(i.invoice_date)} has an outstanding balance of $${money(balOf(i))}${od?`, overdue by ${od} days (due ${dmy(i.due_date)})`:`, due on ${dmy(i.due_date)}`}.${intr?`\nInterest at 1.5% per month applies: $${money(intr)} to date.`:""}\n\nKindly arrange payment at your earliest convenience. Please ignore this message if payment has been made.\n\nThank you.\n\nBest regards,\n${signName(s)}`;
+  openOut(via,c,`Payment Reminder For ${i.invoice_no}`,text);
   setTimeout(async()=>{if(confirm(L("已经发送提醒了吗？按确定记录。","Reminder sent? Press OK to record it."))){
     const{error}=await sb.from("reminders").insert({invoice_id:id,sent_at:today(),sent_via:via});if(error)return toast(error.message);await loadAll();render()}},900)}
 async function delInv(id){const i=invById(id);
@@ -1532,9 +1534,10 @@ function mfInvoice(cid){const c=S.d.monthly_fix.find(x=>x.id===cid),m=S.mfMonth+
 const F=(k,type,req,label,def)=>({k,type,req,label,def});
 const ENT={
   customers:{scoped:1,label:["客户","Customers"],fields:[F("name","text",1,["名称","Name"]),F("payment_terms_days","terms",1,["付款期限","Payment terms"],30),F("attention","text",0,["Attn","Attn"]),
-    F("email","text",0,["Email（多个用逗号分开）","Email (separate with commas)"]),F("whatsapp","text",0,["WhatsApp","WhatsApp"]),F("tel","text",0,["电话","Tel"]),F("fax","text",0,["Fax","Fax"]),F("address","textarea",0,["地址","Address"]),F("remark","text",0,["Remark","Remark"]),
+    F("short_name","text",0,["简称（PDF 文件名用，例：EPM）","Short name (for PDF file name)"]),
+    F("email","text",0,["Email To（多个用 ; 或逗号分开）","Email To (separate with ; or commas)"]),F("email_cc","text",0,["Email CC（多个用 ; 或逗号分开）","Email CC"]),F("whatsapp","text",0,["WhatsApp","WhatsApp"]),F("tel","text",0,["电话","Tel"]),F("fax","text",0,["Fax","Fax"]),F("address","textarea",0,["地址","Address"]),F("remark","text",0,["Remark","Remark"]),
     {...F("min_hours_crane","number",0,["Lorry Crane 最少小时（空白 = 按实际时间）","Lorry crane min hrs (blank = actual)"]),only:"L3H"}],
-    cols:["name","payment_terms_days","min_hours_crane","attention","email","whatsapp","_att"],att:["Quotation","Agreement / PO","Other"]},
+    cols:["name","short_name","payment_terms_days","min_hours_crane","attention","email","email_cc","whatsapp","_att"],att:["Quotation","Agreement / PO","Other"]},
   vehicles:{scoped:1,label:["车牌","Vehicles"],fields:[F("plate","text",1,["车牌","Vehicle No"]),F("vehicle_type","text",0,["车型","Type"]),F("remark","text",0,["Remark","Remark"])],cols:["plate","vehicle_type","remark"]},
   projects:{scoped:1,label:["Project","Projects"],fields:[F("code","text",1,["Project Code","Project code"]),F("no","text",0,["No.（Summary list，空白自动接下一个）","No. (blank = next)"]),
     F("description","text",0,["说明","Description"]),F("aliases","text",0,["别名（工地怎么叫，用逗号分开，例：TR370, TPY）","Aliases (comma separated)"]),F("customer_id","customer",0,["客户","Customer"]),
@@ -1869,7 +1872,7 @@ function exportEnt(ent){const cfg=ENT[ent],rows=S.d[ent];
       legend:si?[["red","Overdue or surcharge mismatch"]]:ent==="monthly_fix"?[["amber","Stopped"]]:null}])}
 
 const SET_FIELDS=[["name",["公司名称","Company name"]],["address",["地址","Address"]],["tel",["电话","Tel"]],["fax",["Fax","Fax"]],["email",["Email","Email"]],
-  ["reg_no",["Co. Reg No","Co. Reg No"]],["gst_no",["GST Reg No","GST Reg No"]],["bank",["银行户口（印在 invoice）","Bank (printed on invoice)"]],["inv_prefix",["Invoice 号码开头","Invoice number prefix"]]];
+  ["reg_no",["Co. Reg No","Co. Reg No"]],["gst_no",["GST Reg No","GST Reg No"]],["bank",["银行户口（印在 invoice）","Bank (printed on invoice)"]],["inv_prefix",["Invoice 号码开头","Invoice number prefix"]],["sign_name",["Email 署名（Best regards 下面的名字）","Email signature name"]]];
 function setView(){const s=settingsOf(S.company);
   return `<section class="panel"><h2>${S.company} · ${L("公司资料（Invoice / SOA 抬头）","Company details (invoice / statement header)")}</h2>
   <form id="setForm" class="grid" oninput="S.dirty=true">${SET_FIELDS.map(([k,l])=>k==="address"?`<label class="f wide">${L(...l)}<textarea name="${k}">${esc(s[k]||"")}</textarea></label>`:fld(k,L(...l),s[k]||"")).join("")}</form>
@@ -2039,11 +2042,11 @@ async function buildCustomerPdf(inv,doOnly){
   if(doOnly){if(!pics.length)throw new Error(L("这张 invoice 的 DO 还没有照片","No DO photos for this invoice"));pdf.deletePage(1)}
   if(missing)warn.push(L(`${missing} 张 DO 没有照片`,`${missing} DO(s) without photo`));
   return{blob:pdf.output("blob"),warn}}
-async function doOnlyPdf(id){const inv=invById(id),name=inv.invoice_no.replace(/[\\/:*?"<>|]+/g,"-")+"_DO.pdf";
+async function doOnlyPdf(id){const inv=invById(id),name=fileBase(inv)+"_DO.pdf";
   try{toast(L("正在合成 DO PDF…","Building DO PDF…"));const{blob,warn}=await buildCustomerPdf(inv,true);
     const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},2000);
     toast(`${name} · ${kb(blob.size)}${warn.length?" · ⚠️ "+warn.join("；"):""}`)}catch(e){toast(e.message||String(e))}}
-async function custCopy(id,share){const inv=invById(id),name=inv.invoice_no.replace(/[\\/:*?"<>|]+/g,"-")+".pdf";
+async function custCopy(id,share){const inv=invById(id),name=fileBase(inv)+".pdf";
   if(!signedOf(inv)&&!confirm(L("这张还没上传 Chris 签名的第一页。还是要下载没签名的版本吗？","No signed page uploaded yet. Download the unsigned version anyway?")))return;
   if(inv.customer_po&&!poDocsOf(inv).list.length&&!confirm(L(`这张有 PO 号码（${inv.customer_po}），但还没上传 PO 文件。还是要继续吗？`,`PO ${inv.customer_po} has no file uploaded. Continue anyway?`)))return;
   try{toast(L("正在合成 PDF…","Building PDF…"));const{blob,warn}=await buildCustomerPdf(inv),file=new File([blob],name,{type:"application/pdf"});
@@ -2248,7 +2251,7 @@ async function makePdf(filename){
     pdf.save(filename.replace(/[\\/:*?"<>|]+/g,"-")+".pdf");toast(L("PDF 已下载","PDF downloaded"))
   }catch(e){toast(e.message||String(e))}finally{box.classList.remove("cap")}}
 async function printInv(id,mode){const inv=invById(id);try{const dos=await fetchAll(()=>sb.from("delivery_orders").select("*").eq("invoice_id",id).order("do_date").order("start_time"));
-  $("#print").innerHTML=invoiceHTML(inv,dos.length>0||isMachInv(inv))+breakdownHTML(inv,dos);const fn=inv.invoice_no.replace(/\//g,"-");
+  $("#print").innerHTML=invoiceHTML(inv,dos.length>0||isMachInv(inv))+breakdownHTML(inv,dos);const fn=fileBase(inv);
   if(mode==="print"){document.title=fn;setTimeout(()=>{window.print();document.title="ETK · L3H 开单系统"},100)}else await makePdf(fn)}catch(e){toast(e.message)}}
 
 /* ---- SOA：照 ETK SOA template，一页 ---- */
