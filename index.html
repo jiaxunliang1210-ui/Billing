@@ -2007,6 +2007,7 @@ function signBox(i){const sg=signedOf(i),dos=S.modal?.dos||S.d.delivery_orders.f
   <div class="actions" style="margin-top:10px"><label class="btn ${sg?"sec":""} file">✍️ ${sg?L("换签名页","Replace signed page"):L("上传签名页（PDF / 照片）","Upload signed page (PDF / photo)")}<input type="file" hidden accept="application/pdf,image/*" onchange="upSigned('${i.id}',this)"></label>
     <label class="btn sec file">📎 ${poDocsOf(i).src==="own"?L("加 / 换 PO","Add PO"):L("上传 PO","Upload PO")}<input type="file" hidden accept="application/pdf,image/*" onchange="upPO('${i.id}',this)"></label>
     <button class="btn ${sg?"":"sec"}" onclick="custCopy('${i.id}')">⬇ ${L("下载寄客户版本","Download customer copy")}</button>
+    ${sg?`<button class="btn sec" onclick="signedOnlyPdf('${i.id}')">✍️ ${L("只下载签名页","Signed page only")}</button>`:""}
     <button class="btn sec" onclick="doOnlyPdf('${i.id}')">🧾 ${L(`只下载 DO（${S.doPerPage||6} 张一页）`,`DOs only (${S.doPerPage||6}/page)`)}</button>
     ${share?`<button class="btn sec" onclick="custCopy('${i.id}',1)">📤 ${L("分享到 WhatsApp / Email","Share to WhatsApp / Email")}</button>`:""}</div>
   <p class="mute" style="font-size:13px;margin:6px 0 0">${L("会合成一个 PDF：签名的第一页 + Summary + PO（有的话）+ 所有 DO 照片。","One PDF: signed first page + summary + PO (if any) + all DO photos.")}
@@ -2042,6 +2043,12 @@ async function buildCustomerPdf(inv,doOnly){
   if(doOnly){if(!pics.length)throw new Error(L("这张 invoice 的 DO 还没有照片","No DO photos for this invoice"));pdf.deletePage(1)}
   if(missing)warn.push(L(`${missing} 张 DO 没有照片`,`${missing} DO(s) without photo`));
   return{blob:pdf.output("blob"),warn}}
+async function signedOnlyPdf(id){const inv=invById(id),sg=signedOf(inv);if(!sg)return toast(L("这张还没上传签名页，先按「上传签名页」","No signed page uploaded yet"));
+  const name=fileBase(inv)+"-1.pdf";
+  try{toast(L("正在准备签名页 PDF…","Preparing signed page…"));await loadPdfLibs();const{jsPDF}=window.jspdf,pdf=new jsPDF({orientation:"portrait",unit:"mm",format:"a4",compress:true});
+    await addImagePage(pdf,true,await attDataURL(sg),0);const blob=pdf.output("blob");
+    const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},2000);
+    toast(`${name} · ${kb(blob.size)}`)}catch(e){toast(e.message||String(e))}}
 async function doOnlyPdf(id){const inv=invById(id),name=fileBase(inv)+"_DO.pdf";
   try{toast(L("正在合成 DO PDF…","Building DO PDF…"));const{blob,warn}=await buildCustomerPdf(inv,true);
     const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},2000);
