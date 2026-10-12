@@ -1718,10 +1718,10 @@ const mkNo=s=>normNo(s).replace(/[\/\-]/g,"");
 function parseRep(wb,file){const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:"",raw:true});
   const hi=rows.slice(0,20).findIndex(r=>r.some(c=>/^reference$/i.test(String(c).trim()))&&r.some(c=>/^status$/i.test(String(c).trim())));if(hi<0)throw new Error(file+": "+L("看不懂这个报告（找不到 Reference / Status）","not a Payable Invoice Detail report"));
   const H=rows[hi].map(c=>String(c).trim().toLowerCase()),col=x=>H.indexOf(x);
-  const C={date:col("invoice date"),ref:col("reference"),tot:col("invoice total"),st:col("status"),src:col("source")};
+  const C={date:col("invoice date"),ref:col("reference"),tot:col("invoice total"),st:col("status"),src:col("source"),lp:col("last payment date")};
   const title=String(rows[1]?.[0]||"").trim(),map=new Map(),rank={Paid:3,Approved:2};
   for(const r of rows.slice(hi+1)){const ref=String(r[C.ref]??"").trim();if(!ref||!r[C.st])continue;const k=mkNo(ref),st=String(r[C.st]).trim();
-    const e=map.get(k);if(!e||(rank[st]||0)>(rank[e.status]||0))map.set(k,{no:ref,tot:r2(numOr(r[C.tot],0)),status:st,date:toYMD(r[C.date])})}
+    const e=map.get(k);if(!e||(rank[st]||0)>(rank[e.status]||0))map.set(k,{no:ref,tot:r2(numOr(r[C.tot],0)),status:st,date:toYMD(r[C.date]),lp:C.lp>=0?toYMD(r[C.lp]):null})}
   return{file,cust:title,ck:normCo(title),map}}
 async function aparRepFiles(input){const fs=[...input.files];input.value="";
   try{for(const f of fs){const rp=parseRep(XLSX.read(await f.arrayBuffer(),{cellDates:true}),f.name);APAR.reps=APAR.reps.filter(x=>x.ck!==rp.ck);APAR.reps.push(rp)}aparAnalyse();aparShow()}
@@ -1832,12 +1832,12 @@ async function aparImport(){const A=APAR,R=A.R,P=A.P,co=S.company;
       const invs=await insChunks("invoices",invRowsIns,200,"id,invoice_no");
       const idBy=new Map(invs.map(i=>[normNo(i.invoice_no),i.id]));
       await insChunks("invoice_lines",R.new.map(r=>({invoice_id:idBy.get(r.key),line_no:1,description:r.desc||r.no,qty:1,unit:"LS",unit_price:r.before,amount:r.before})),500);
-      const pr=R.new.filter(aparPaid).map(r=>{const c=custBy.get(r.name);return{r,row:{company:co,customer_id:c.id,payment_date:r.pay.date||r.date,
+      const pr=R.new.filter(aparPaid).map(r=>{const c=custBy.get(r.name);return{r,row:{company:co,customer_id:c.id,payment_date:r.pay.date||(r.rep?.status==="Paid"&&r.rep.lp)||r.date,
         amount:aparAmt(r),method:"Imported",reference:(r.pay.paid?r.payText:r.rep?.status==="Paid"?L(`客户报告显示 Paid（${r.rep.rp.file}）`,`Customer report: Paid (${r.rep.rp.file})`):L("导入：当作已收","Imported: assumed paid")).slice(0,200)||"Imported"}}});
       const pays=await insChunks("payments",pr.map(x=>x.row),200,"id");
       await insChunks("payment_allocations",pays.map((p,i)=>({payment_id:p.id,invoice_id:idBy.get(pr[i].r.key),amount:pr[i].row.amount})),500)}
     if(R.markPaid.length){
-      const mp=R.markPaid.map(r=>({inv:r.inSys,row:{company:co,customer_id:r.inSys.customer_id,payment_date:r.inSys.invoice_date,amount:balOf(r.inSys),method:"Imported",
+      const mp=R.markPaid.map(r=>({inv:r.inSys,row:{company:co,customer_id:r.inSys.customer_id,payment_date:r.rep.lp||r.inSys.invoice_date,amount:balOf(r.inSys),method:"Imported",
         reference:L(`客户报告显示 Paid（${r.rep.rp.file}）`,`Customer report: Paid (${r.rep.rp.file})`).slice(0,200)}}));
       const pays=await insChunks("payments",mp.map(x=>x.row),200,"id");
       await insChunks("payment_allocations",pays.map((p,i)=>({payment_id:p.id,invoice_id:mp[i].inv.id,amount:mp[i].row.amount})),500);
