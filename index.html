@@ -278,7 +278,12 @@ const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
 
 const SERVICES={ETK:["TMA","VMS"],L3H:["Tipper","Lorry Crane","Excavator"]};
-const RATE_SERVICES={ETK:["TMA Day","TMA Night","VMS"],L3H:["Lorry Crane","Tipper","Tipper Load","Excavator","Internal Work","Transfer","Supply","Disposal"]};
+const RATE_SERVICES={ETK:["TMA Day","TMA Night","VMS"],L3H:["Lorry Crane","Tipper","Tipper Load","Excavator","Internal Work","Disposal Only","Disposal","Supply","Transfer"]};
+/* 材料类 Service（per load / per trip）；旧资料的 Disposal = 含运输 */
+const SVC_LABEL={"Disposal Only":"Disposal fee only (Material)","Disposal":"Disposal (Material) inclusive transportation","Supply":"Supply (Material) inclusive transportation","Transfer":"Transfer (Material) – per trip"};
+const svcLabel=s=>SVC_LABEL[s]||s||"";
+const MAT_SVC={"Disposal Only":"per load","Disposal":"per load","Supply":"per load","Transfer":"per trip"};
+const TIME_SVC=["Lorry Crane","Tipper","Excavator","Internal Work"];
 const L3H_DESC={"Tipper":"Provide Tipper Truck Transportation with diesel / driver (G.S.G)",
   "Lorry Crane":"Provide Lorry Crane with Lifting Supervisor (inclusive of transportation, diesel & driver – G.S.G)",
   "Excavator":"Provide Excavator Rental with operator"};
@@ -579,7 +584,7 @@ function doList(){
 
 /* ================= L3H：Project / 车牌价钱 / 司机 / 多行收费 / 检查 / 记录表 ================= */
 const isL3=()=>S.company==="L3H";
-const L3_ITEMS=[["Internal Work","hr"],["Transfer","trip"],["Supply","load"],["Disposal","load"],["Lorry Crane","hr"],["Excavator","hr"],["Other","LS"]];
+const L3_ITEMS=[["Transfer","trip"],["Supply","load"],["Disposal","load"],["Disposal Only","load"],["Internal Work","hr"],["Lorry Crane","hr"],["Excavator","hr"],["Other","LS"]];
 const MATERIALS=["Hardcore","Soil","Good Earth","Earth","RCA","Millwaste","Graded Stone","Premix Block","Base Course","Sand"];
 const itemUom=it=>(L3_ITEMS.find(x=>x[0]===it)||[,"LS"])[1];
 const drvOf=n=>S.d.drivers.find(d=>String(d.name||"").trim().toLowerCase()===String(n||"").trim().toLowerCase());
@@ -610,7 +615,7 @@ function supWarn(d){if(d.service!=="Lorry Crane"||!d.start_time||d.record_only)r
 const exactHours=(s,e)=>{const a=mins(s),b=mins(e);if(a==null||b==null)return null;let d=b-a;if(d<=0)d+=1440;return d/60};
 const isTipLoad=d=>d.service==="Tipper"&&!d.start_time&&!d.end_time&&Number(d.loads)>0;
 function lineTitle(l){if(l.desc)return l.desc;const m=l.material?l.material+" ":"";
-  return {"Supply":`Supply ${m}inclusive transportation`,"Disposal":`Being Disposal of ${l.material||""}`.trim(),"Transfer":`Transfer ${l.material||""}`.trim(),
+  return {"Supply":`Supply ${m}inclusive transportation`,"Disposal":`Disposal of ${m}inclusive transportation`,"Disposal Only":`Disposal fee only${l.material?" – "+l.material:""}`,"Transfer":`Transfer ${l.material||""}`.trim(),
     "Internal Work":"Internal Work Charges","Lorry Crane":"Lorry Crane Charges","Excavator":"Excavator Rental"}[l.item]||l.item||""}
 function calcLine(f,l){l.uom=l.uom||itemUom(l.item);
   const r=findL3Rate(f.customer_id,l.item,f.plate,f.do_date,l.material||null);l._auto=r?Number(r.price):null;
@@ -677,14 +682,14 @@ const noRateL3=f=>{if(f.record_only||!f.customer_id||!f.service)return"";
 function chgBox(f){const ls=f.charges||[];
   return `<div class="att" id="chg" style="margin-top:10px" oninput="if(event.target.dataset.ci!=null)chgInput(event.target)"><h3>${L("其他收费（Transfer / Supply / Disposal / Internal Work）","Other charges")}</h3>
   ${ls.length?`<div class="tw"><table class="chg"><thead><tr><th>${L("项目","Item")}</th><th>${L("材料","Material")}</th><th>${L("说明（空白自动）","Description (auto)")}</th><th class="num">Qty</th><th>UOM</th><th class="num">${L("单价","Rate")}</th><th class="num">${L("金额","Amount")}</th><th></th></tr></thead><tbody>
-    ${ls.map((l,i)=>`<tr${l._chg?` class="chgd"`:""}><td><select class="inp" data-ci="${i}" data-ck="item">${optList(L3_ITEMS.map(x=>[x[0],x[0]]),l.item)}</select></td>
+    ${ls.map((l,i)=>`<tr${l._chg?` class="chgd"`:""}><td><select class="inp" data-ci="${i}" data-ck="item">${optList(L3_ITEMS.map(x=>[x[0],svcLabel(x[0])]),l.item)}</select></td>
       <td><select class="inp" data-ci="${i}" data-ck="material">${optList(MATERIALS.map(m=>[m,m]),l.material,"—")}</select></td>
       <td><input class="inp" data-ci="${i}" data-ck="desc" value="${esc(l.desc||"")}" placeholder="${esc(lineTitle({...l,desc:""}))}"></td>
       <td style="width:80px"><input class="inp ${l._qt?"":"auto"}" type="number" step="0.01" data-ci="${i}" data-ck="qty" value="${l.qty??""}"></td>
       <td style="width:70px"><input class="inp" data-ci="${i}" data-ck="uom" value="${esc(l.uom||"")}"></td>
       <td style="width:100px"><input class="inp ${l._rt?"":"auto"}" type="number" step="0.01" data-ci="${i}" data-ck="rate" value="${l.rate??""}" title="${l._auto!=null?L("系统价 $","System $")+money(l._auto):L("Master List 没有这个价钱","No rate in Master List")}"></td>
       <td class="num" data-amt="${i}">${money(l.amount)}</td><td><button class="btn del sm" onclick="chgDel(${i})">✕</button></td></tr>`).join("")}</tbody></table></div>`:""}
-  <div class="actions" style="margin-top:6px">${L3_ITEMS.slice(0,4).map(([it])=>`<button class="btn sec sm" onclick="chgAdd('${it}')">+ ${it}</button>`).join("")}</div>
+  <div class="actions" style="margin-top:6px">${L3_ITEMS.slice(0,5).map(([it])=>`<button class="btn sec sm" onclick="chgAdd('${it}')">+ ${esc(svcLabel(it).replace(" (Material)","").replace(" – per trip",""))}</button>`).join("")}</div>
   <p class="mute" style="font-size:12px;margin:4px 0 0">${L("例：DO 24956 = Supply RCA 1 load + Internal Work 8 hr。单价从 Master List 价钱自动带出（客户 + 项目 + 材料），改了会标黄，要写改价原因。","Rates come from Master List; changed rates are marked and need a reason.")}</p></div>`}
 function chgAdd(it){const f=S.doForm;f.charges=f.charges||[];f.charges.push({item:it,material:null,qty:null,uom:itemUom(it)});S.dirty=true;recompute(f);render()}
 function chgDel(i){const f=S.doForm;f.charges.splice(i,1);S.dirty=true;recompute(f);render()}
@@ -1554,8 +1559,12 @@ const ENT={
   drivers:{scoped:1,label:["司机","Drivers"],fields:[F("name","text",1,["名字","Name"]),F("usual_sup","yesno",0,["通常有 Lifting Supervisor（例：Ah Yew）","Usually with lifting supervisor"],false),
     F("phone","text",0,["电话","Phone"]),F("remark","text",0,["Remark","Remark"])],cols:["name","usual_sup","phone","remark"],
     note:["打勾「通常有 Lifting Supervisor」的司机，录 Lorry Crane DO 时会自动勾 supervisor、用白天价。","Drivers marked here auto-tick lifting supervisor on lorry crane DOs."]},
-  rates:{scoped:1,label:["价钱","Rates"],before(row){if(S.company!=="L3H"&&!row.customer_id)return L("请选客户","Choose a customer")},fields:[F("customer_id","customer",0,["客户（L3H 空白 = 所有客户）","Customer (L3H: blank = all)"]),F("service","rateService",1,["Service","Service"]),
-    {...F("plate","plateOpt",0,["车牌（空白 = 所有车）","Vehicle (blank = all)"]),only:"L3H"},{...F("material","materialOpt",0,["材料（Supply / Disposal 用）","Material"]),only:"L3H"},F("unit","rateUnit",0,["计价方式","Unit"],"per hr"),
+  rates:{scoped:1,label:["价钱","Rates"],before(row){if(S.company!=="L3H"&&!row.customer_id)return L("请选客户","Choose a customer");
+      if(S.company==="L3H"){const s=row.service;
+        if(MAT_SVC[s]){row.unit=MAT_SVC[s];row.plate=null;row.price_night=null;row.ot_rate=null;row.ot_rate_night=null;row.break_after_hours=null;row.break_hours=null;row.min_hours=null}
+        else{row.material=null;if(s==="Tipper Load"){row.unit="per load";row.price_night=null;row.ot_rate=null;row.ot_rate_night=null}
+          else if(!/8/.test(row.unit||"")){row.ot_rate=null;row.ot_rate_night=null}}}},fields:[F("customer_id","customer",0,["客户（L3H 空白 = 所有客户）","Customer (L3H: blank = all)"]),F("service","rateService",1,["Service","Service"]),
+    {...F("plate","plateOpt",0,["车牌（空白 = 所有车）","Vehicle (blank = all)"]),only:"L3H"},{...F("material","materialOpt",0,["材料（Disposal / Supply / Transfer 用）","Material"]),only:"L3H"},F("unit","rateUnit",0,["计价方式","Unit"],"per hr"),
     {...F("price","money",1,["价钱（按小时 = 每小时；8 小时价 = 8 小时的价钱）","Price (per hr, or price for 8 hrs)"]),labelL3:["白天价（17:00 前开工）","Day price (start before 17:00)"]},{...F("price_night","money",0,["晚上价（17:00 或以后开工，空白 = 跟白天一样）","Night price (start 17:00+; blank = same)"]),only:"L3H"},
     {...F("ot_rate","money",0,["OT 每小时（8 小时价才用）","OT per hr (for 8-hr rate)"]),labelL3:["白天 OT 每小时（per 8 hrs 才用）","Day OT per hr (per 8 hrs only)"]},{...F("ot_rate_night","money",0,["晚上 OT 每小时（per 8 hrs 才用）","Night OT per hr (per 8 hrs only)"]),only:"L3H"},F("effective_from","date",1,["生效日期","Effective from"]),F("effective_to","date",0,["结束日期","Effective to"]),
     F("break_after_hours","number",0,["超过几小时扣吃饭","Meal break if over (hrs)"]),F("break_hours","number",0,["扣几小时","Deduct (hrs)"]),F("min_hours","number",0,["最少小时","Min hrs"]),F("remark","text",0,["Remark","Remark"])],
@@ -1608,6 +1617,8 @@ function genCell(cfg,c,r){
   if(c==="_check"){const x=surchargeCheck(r);return x.ok?esc(x.t):`<span class="tag bad">${esc(x.t)}</span>`}
   if(c==="_att"){const n=S.d.attachments.filter(a=>a.entity_id===r.id).length;return n?`📎 ${n}`:""}
   const f=cfg.fields.find(x=>x.k===c),v=r[c];
+  if(cfg===ENT.rates&&isL3()){if(c==="service")return esc(svcLabel(v));
+    if((c==="ot_rate"||c==="ot_rate_night")&&!isDayRate(r))return"";if((c==="price_night"||c==="plate")&&MAT_SVC[r.service])return"";if(c==="material"&&!MAT_SVC[r.service]&&!v)return""}
   switch(f.type){case"customer":return v?esc(custName(v)):(cfg===ENT.rates?`<span class="mute">${L("所有客户","All")}</span>`:"");case"yesno":return v?`<span class="tag ok">✓</span>`:"";case"plateOpt":return v?esc(v):(cfg===ENT.rates&&S.company==="L3H"?`<span class="mute">${L("所有车","All")}</span>`:"");case"supplier":return esc(supName(v));case"terms":return esc(termLabel(v));case"money":return money(v);
     case"bool":return v?`<span class="tag ok">${L("是","Yes")}</span>`:`<span class="tag mute">${L("停止","Stopped")}</span>`;case"month":return esc((v||"").slice(0,7));
     case"date":return dmy(v);case"serviceOpt":return v?esc(v):L("所有 service","All services");default:return esc(v)}
@@ -1616,9 +1627,9 @@ function genInput(f,v){const lab=L(...(isL3()&&f.labelL3||f.label))+(f.req?" *":
   switch(f.type){
     case"customer":return `<label class="f">${lab}<select name="${f.k}">${custOpts(v)}</select></label>`;
     case"supplier":return `<label class="f">${lab}<select name="${f.k}">${optList(S.d.suppliers.map(s=>[s.id,s.name]),v,"")}</select></label>`;
-    case"rateService":return `<label class="f">${lab}<select name="${f.k}">${optList(RATE_SERVICES[S.company].map(s=>[s,s]),v)}</select></label>`;
+    case"rateService":return `<label class="f">${lab}<select name="${f.k}" onchange="rateVis()">${optList(RATE_SERVICES[S.company].map(s=>[s,svcLabel(s)]),v)}</select></label>`;
     case"serviceOpt":return `<label class="f">${lab}<select name="${f.k}">${optList(SERVICES[S.company].map(s=>[s,s]),v,L("所有 service","All services"))}</select></label>`;
-    case"rateUnit":return `<label class="f">${lab}<select name="${f.k}">${optList([["per hr",L("按小时（per hr）","per hr")],["per 8 hrs",L("8 小时一个价 + OT（per 8 hrs）","per 8 hrs + OT")],["per trip",L("每趟（per trip）","per trip")],["per load",L("每车（per load）","per load")]],v)}</select></label>`;
+    case"rateUnit":return `<label class="f">${lab}<select name="${f.k}" onchange="rateVis()">${optList(isL3()?[["per hr",L("按小时（per hr）","per hr")],["per 8 hrs",L("8 小时一个价（per 8 hrs）","per 8 hrs")],...(["per trip","per load"].includes(v)?[[v,v]]:[])]:[["per hr",L("按小时（per hr）","per hr")],["per 8 hrs",L("8 小时一个价 + OT（per 8 hrs）","per 8 hrs + OT")],["per trip",L("每趟（per trip）","per trip")],["per load",L("每车（per load）","per load")]],v)}</select></label>`;
     case"terms":return `<label class="f">${lab}<select name="${f.k}">${optList(TERMS.map(d=>[d,termLabel(d)]),v)}</select></label>`;
     case"chargedTo":return `<label class="f">${lab}<input name="${f.k}" list="chargedList" value="${esc(v)}"><datalist id="chargedList"><option value="CHC"><option value="ETK"><option value="L3H"></datalist></label>`;
     case"yesno":return `<label class="f">${lab}<select name="${f.k}">${optList([["false",L("否","No")],["true",L("是","Yes")]],String(v))}</select></label>`;
@@ -1631,12 +1642,20 @@ function genInput(f,v){const lab=L(...(isL3()&&f.labelL3||f.label))+(f.req?" *":
     default:return `<label class="f">${lab}<input type="${f.type}" name="${f.k}" value="${esc(v)}"></label>`}}
 function genForm(ent,cfg,e,sk){
   return `<section class="panel"><h2>${e.id?L("修改","Edit"):L("新增","Add")} · ${L(...cfg.label)}</h2>
-  <form id="gForm" class="grid" oninput="S.dirty=true" onsubmit="event.preventDefault();saveGen('${ent}')">${fieldsOf(cfg).map(f=>genInput(f,e[f.k])).join("")}</form>
+  <form id="gForm" class="grid" oninput="S.dirty=true" onsubmit="event.preventDefault();saveGen('${ent}')">${fieldsOf(cfg).map(f=>`<div data-gk="${f.k}" style="display:contents">${genInput(f,e[f.k])}</div>`).join("")}</form>${ent==="rates"&&isL3()?`<p class="mute" id="rateHint" style="font-size:13px;margin:4px 0 0"></p>`:""}
   ${ent==="supplier_invoices"&&e.id?`<p>${L("Surcharge 检查","Surcharge check")}：${genCell(cfg,"_check",e)}</p>`:""}
   ${cfg.att&&e.id?attBox(ent,e.id,cfg.att):cfg.att?`<p class="mute">${L("保存后可以上传附件。","Upload attachments after saving.")}</p>`:""}
-  <div class="warn" id="gWarn"></div>
+  <div class="warn" id="gWarn"></div>${ent==="rates"&&isL3()?(setTimeout(rateVis),""):""}
   <div class="actions"><button class="btn" onclick="saveGen('${ent}')">${L("保存","Save")}</button><button class="btn sec" onclick="done();render()">${L("取消","Cancel")}</button>
   ${e.id&&!cfg.noDelete?`<button class="btn del" onclick="delGen('${ent}','${e.id}')">${L("删除","Delete")}</button>`:""}</div></section>`}
+/* L3H 价钱表：选了 Service 只显示要填的格子 */
+function rateVis(){const fm=$("#gForm");if(!fm||!isL3()||!fm.querySelector('[data-gk="service"]')||!fm.querySelector('[data-gk="ot_rate"]'))return;
+  const svc=fm.service?.value,mat=!!MAT_SVC[svc],time=TIME_SVC.includes(svc),per8=time&&/8/.test(fm.unit?.value||"");
+  const show={material:mat,plate:time||svc==="Tipper Load",unit:time,price_night:time,ot_rate:per8,ot_rate_night:per8,break_after_hours:time,break_hours:time,min_hours:time};
+  for(const[k,v]of Object.entries(show)){const w=fm.querySelector(`[data-gk="${k}"]`);if(w)w.style.display=v?"contents":"none"}
+  const pl=fm.querySelector('[data-gk="price"] label');if(pl&&pl.firstChild)pl.firstChild.textContent=mat?(MAT_SVC[svc]==="per trip"?L("每趟运费（per trip）","Price per trip"):L("每车价钱（per load）","Price per load"))+" *":svc==="Tipper Load"?L("每车价钱（per load）","Price per load")+" *":per8?L("白天 8 小时价（17:00 前开工）","Day price for 8 hrs (start before 17:00)")+" *":L("白天每小时价（17:00 前开工）","Day price per hr (start before 17:00)")+" *";
+  const h=$("#rateHint");if(h)h.textContent=mat?L(`${svcLabel(svc)}：按 ${MAT_SVC[svc]} 计。${svc==="Transfer"?"所有客户同一个价就把客户留空。":"可以按材料分开价钱。"}`,`${svcLabel(svc)}: charged ${MAT_SVC[svc]}.`)
+    :per8?L("8 小时一个价：超过 8 小时的部分按下面的 OT 每小时价算。","8-hr rate: hours over 8 use the OT rate."):time?L("按小时：每小时 × 计费小时，没有 OT。","Hourly: rate × billable hours, no OT."):""}
 function gEdit(ent,id){S.gEdit={...S.d[ent].find(r=>r.id===id)};S.dirty=true;render();window.scrollTo({top:0,behavior:"smooth"})}
 async function saveGen(ent){const cfg=ENT[ent],fd=new FormData($("#gForm")),row={},miss=[];if(cfg.scoped)row.company=S.company;
   for(const f of fieldsOf(cfg)){let v=fd.get(f.k);if(v===""||v==null)v=null;else if(["number","money","terms"].includes(f.type))v=Number(v);else if(f.type==="bool"||f.type==="yesno")v=v==="true";else if(f.type==="month")v=v+"-01";
