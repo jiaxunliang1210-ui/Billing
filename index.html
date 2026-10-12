@@ -238,6 +238,9 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 #print .rech div b{display:block;line-height:1.35}#print .sumlist{padding:22mm 16mm}#print .sumlist table.rec{font-size:10.5pt}#print .sumlist table.rec td{padding:2.4mm 1.6mm}#print .rech .no{font-size:11pt;padding-right:6mm}
 #print table.rec{font-size:9pt}#print table.rec th{padding:1.8mm 1mm}#print table.rec td{padding:1.4mm 1mm}
 #print table.rec th.y{background:#ffff00!important}#print table.rec th.o{background:#ffc000!important}#print table.rec th.s{background:#f4b183!important}
+#print .mtsp{font-family:Arial,Helvetica,sans-serif}#print .mts{font-size:11pt;line-height:1.8;margin-bottom:10px}#print .mtt{font-weight:700;font-size:10.5pt;margin:10px 0 2px}
+#print table.mt{width:100%;border-collapse:collapse;font-size:10pt}#print table.mt th,#print table.mt td{border:1px solid #000;padding:4px 3px;text-align:center}#print table.mt th{font-weight:700}
+#print table.mt tr.st td{border-left:none;border-right:none;border-bottom:none}
 #print .crs{font-size:8.5pt;line-height:1.5;margin-bottom:8px}#print .crs .t{font-weight:700;text-decoration:underline}
 #print table.crt th{font-size:7.5pt}#print table.crt tr.crtt td{border:none}#print table.crt tr.crtt td.u{border-bottom:3px double #000}
 #print table.sm tr.tt td{border:0;font-weight:700;padding-top:2mm}
@@ -590,6 +593,11 @@ const isL3=()=>S.company==="L3H";
 const isCHC=cid=>/^CHC\s*CONSTRUCTION/i.test(custName(cid));
 const dLong=d=>`${+d.slice(8,10)} ${MONL[+d.slice(5,7)-1]} ${d.slice(0,4)}`;
 const dNum=d=>`${+d.slice(8,10)}/${+d.slice(5,7)}/${d.slice(0,4)}`;
+/* Transfer / Supply / Disposal：同一种 5 张 DO 以上 → 附 summary（她的 Excel 格式） */
+const MAT_SUM_MIN=5;
+const matKey=l=>[l.item,l.material||"",l.desc||"",l.uom||""].join("|");
+function matGroups(dos){const g={};for(const d of dos)for(const l of d.charges||[]){if(!MAT_SVC[l.item])continue;const k=matKey(l);(g[k]=g[k]||{l,rows:[],dos:new Set()});g[k].rows.push({d,l});g[k].dos.add(d.id)}
+  for(const x of Object.values(g))x.big=x.dos.size>=MAT_SUM_MIN;return g}
 const L3_ITEMS=[["Transfer","trip"],["Supply","load"],["Disposal","load"],["Disposal Only","load"],["Internal Work","hr"],["Lorry Crane","hr"],["Excavator","hr"],["Other","LS"]];
 const MATERIALS=["Hardcore","Soil","Good Earth","Earth","RCA","Millwaste","Graded Stone","Premix Block","Base Course","Sand"];
 const itemUom=it=>(L3_ITEMS.find(x=>x[0]===it)||[,"LS"])[1];
@@ -834,8 +842,12 @@ function l3LinesDetail(chosen){const lines=[],grp={};
   for(const g of Object.values(grp)){const ds=g.ds,load=g.k==="tipper_load",amt=sum(ds,mainAmt);
     const det=ds.length===1?`\nDO : ${ds[0].do_no}\nDate : ${dmy(ds[0].do_date)}${ds[0].from_loc||ds[0].to_loc?`\nFrom : ${ds[0].from_loc||""} To : ${ds[0].to_loc||""}`:""}`:`\nDate : ${dRange(ds.map(d=>d.do_date))}`;
     lines.push({description:KIND_DESC[g.k]+det,qty:load?sum(ds,d=>d.loads):r2(sum(ds,d=>d.billable_hours)),unit:load?"load":"hr",unit_price:g.rate,amount:amt})}
+  const mg=matGroups(chosen);
+  for(const x of Object.values(mg)){if(!x.big)continue;const byRate={};for(const r of x.rows)(byRate[r.l.rate]=byRate[r.l.rate]||[]).push(r);
+    for(const rs of Object.values(byRate)){const ds=rs.map(r=>r.d.do_date).sort();
+      lines.push({description:`${lineTitle(x.l)}\n${ds[0]===ds.at(-1)?dLong(ds[0]):`${dLong(ds[0])} To ${dLong(ds.at(-1))}`}`,qty:r2(sum(rs,r=>Number(r.l.qty)||0)),unit:x.l.uom||"LS",unit_price:rs[0].l.rate,amount:r2(sum(rs,r=>Number(r.l.amount)||0))})}}
   const lg={};
-  for(const d of chosen)for(const l of d.charges||[]){const key=[l.item,l.material||"",l.desc||"",d.from_loc||"",d.to_loc||"",l.rate,l.uom].join("|");
+  for(const d of chosen)for(const l of d.charges||[]){if(MAT_SVC[l.item]&&mg[matKey(l)]?.big)continue;const key=[l.item,l.material||"",l.desc||"",d.from_loc||"",d.to_loc||"",l.rate,l.uom].join("|");
     (lg[key]=lg[key]||{l,from:d.from_loc,to:d.to_loc,ds:[],qty:0,amt:0});const x=lg[key];x.ds.push(d);x.qty+=Number(l.qty)||0;x.amt+=Number(l.amount)||0}
   for(const x of Object.values(lg)){const ds=x.ds.sort((a,b)=>a.do_date.localeCompare(b.do_date));
     lines.push({description:`${lineTitle(x.l)}\nDO : ${doListTxt(ds.map(d=>d.do_no))}\nDate : ${dRange(ds.map(d=>d.do_date))}${x.from||x.to?`\nFrom : ${x.from||""} To : ${x.to||""}`:""}`,
@@ -915,9 +927,22 @@ function l3RecordsHTML(inv,dos){const c=custOf(inv.customer_id),no=inv.summary_n
     if(k==="tipper_load")loadSheet(k,rows.map(d=>({d,t:d.description||"",q:Number(d.loads),u:"load",rate:d.rate,amt:r2(mainAmt(d)+(Number(d.surcharge)||0))})));else hourlySheet(k,rows)}
   const lr=[];
   for(const d of ds){if(d.record_only)lr.push({d,t:d.description||"",q:Number(d.loads)||1,u:"load",rate:null,amt:null});
-    for(const l of d.charges||[])lr.push({d,t:lineTitle(l),q:Number(l.qty)||0,u:l.uom||"",rate:l.rate,amt:l.amount})}
+    for(const l of d.charges||[])if(!MAT_SVC[l.item])lr.push({d,t:lineTitle(l),q:Number(l.qty)||0,u:l.uom||"",rate:l.rate,amt:l.amount})}
   if(lr.length)loadSheet("load",lr);
+  const big=Object.values(matGroups(ds)).filter(x=>x.big);if(big.length)out.push(matSummaryHTML(inv,big,ds));
   return out.join("")}
+
+/* ---- Transfer / Supply / Disposal 5 张以上：Transportation summary（直的） ---- */
+function matSummaryHTML(inv,groups,ds){const s=settingsOf(inv.company),a=inv.period_from||ds[0]?.do_date||inv.invoice_date,per=34;
+  const head=`<div class="mts"><div>Transportation for ${esc(monthLong(a.slice(0,7)))}</div><div><b>Transporter&nbsp; : ${esc(s.name||"")}</b></div><div><b>INV NO : ${esc(inv.invoice_no)}</b></div></div>`;
+  const blocks=[];for(const g of groups){const rs=g.rows.sort((x,y)=>x.d.do_date.localeCompare(y.d.do_date)||String(x.d.do_no).localeCompare(String(y.d.do_no)));
+    for(let i=0;i<rs.length;i+=per)blocks.push({g,rs:rs.slice(i,i+per),start:i,last:i+per>=rs.length})}
+  const pages=[];let cur=[],n=0;for(const b of blocks){const h=b.rs.length+4;if(cur.length&&n+h>per+6){pages.push(cur);cur=[];n=0}cur.push(b);n+=h}if(cur.length)pages.push(cur);
+  return pages.map((bs,pi)=>`<div class="doc pg mtsp">${head}${bs.map(b=>`<div class="mtt">${esc(lineTitle(b.g.l))}</div>
+    <table class="mt"><colgroup><col style="width:7%"><col style="width:16%"><col style="width:13%"><col style="width:15%"><col style="width:15%"><col style="width:8%"><col style="width:12%"><col style="width:14%"></colgroup>
+    <thead><tr><th>No.</th><th>Date</th><th>#DO#</th><th>#Lorry No#</th><th>Product</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead><tbody>
+    ${b.rs.map((r,i)=>`<tr><td>${b.start+i+1}</td><td>${dNum(r.d.do_date)}</td><td>${esc(r.d.do_no)}</td><td>${esc(r.d.plate||"")}</td><td>${esc(r.l.material||r.d.description||"")}</td><td>${Number(r.l.qty)||0}</td><td>${r.l.rate!=null?"$"+money(r.l.rate):""}</td><td>$${money(r.l.amount)}</td></tr>`).join("")}
+    ${b.last?`<tr class="st"><td></td><td></td><td></td><td></td><td><b>Sub Total</b></td><td><b>${r2(sum(b.g.rows,r=>Number(r.l.qty)||0))}</b></td><td></td><td><b>$${money(sum(b.g.rows,r=>Number(r.l.amount)||0))}</b></td></tr>`:""}</tbody></table>`).join("")}${pages.length>1?`<div class="pno">Page ${pi+1} of ${pages.length}</div>`:""}</div>`).join("")}
 
 /* ---- 非 CHC Lorry Crane：Hire Of Lorry Crane Summary Report ---- */
 function craneRow(d){const rr=findL3Rate(d.customer_id,"Lorry Crane",d.plate,d.do_date,null),per8=isDayRate(rr),hrs=Number(d.billable_hours)||0,main=mainAmt(d),sur=Number(d.surcharge)||0,night=isNightStart(d.start_time);
@@ -947,7 +972,7 @@ async function projBoard(month){month=month||S.pbMonth||prevMonthRange()[0].slic
   const g={};for(const d of ds){const k=JSON.stringify([d.customer_id,d.project||""]);(g[k]=g[k]||[]).push(d)}
   const rows=Object.entries(g).map(([k,list])=>{const[cid,proj]=JSON.parse(k),bill=list.filter(d=>!d.record_only),un=bill.filter(d=>!d.invoice_id),p=projOf(proj);
     return{cid,proj,no:p?.no||"",n:list.length,un:un.length,unAmt:sum(un,d=>d.amount),invs:[...new Set(bill.filter(d=>d.invoice_id).map(d=>invById(d.invoice_id)?.invoice_no||"✓"))],
-      ovl:list.filter(d=>bad.has(d.id)).length,noPic:list.filter(d=>!doPhotos(d.id).length).length,chg:list.filter(d=>d.price_note).length,np:noPriceList(un).length}})
+      ovl:list.filter(d=>bad.has(d.id)).length,noPic:list.filter(d=>!doPhotos(d.id).length).length,chg:list.filter(d=>d.price_note).length,np:isL3()?noPriceList(un).length:un.filter(d=>d.rate==null||d.amount==null).length}})
     .sort((a,b)=>(+a.no||999)-(+b.no||999)||String(custName(a.cid)).localeCompare(String(custName(b.cid))));
   ov.querySelector(".pvbox").innerHTML=`<div class="pvhead"><h3 style="margin:0">📊 ${L("Project 进度","Project progress")} · ${monthLong(month+"-01")}</h3><input type="month" class="inp" id="pbM" value="${month}" style="width:auto"><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕ ${L("关闭","Close")}</button></div>
     ${rows.length?`<div class="tw"><table><thead><tr><th>Project</th><th>No.</th><th>${L("客户","Customer")}</th><th class="num">DO</th><th>${L("已开单","Billed")}</th><th class="num">${L("未开单","Unbilled")}</th><th class="num">${L("未开金额","Unbilled $")}</th><th>${L("问题","Issues")}</th><th></th></tr></thead><tbody>
@@ -1172,7 +1197,7 @@ function invView(){
     <label class="f">${L("客户","Customer")}<select onchange="S.invF.customer=this.value;render()">${optList(S.d.customers.map(c=>[c.id,c.name]),F.customer,L("全部","All"))}</select></label>
     <label class="f">${L("状态","Status")}<select onchange="S.invF.status=this.value;render()">${optList([["Unpaid",L("未付","Unpaid")],["Partial",L("部分付款","Partial")],["Paid",L("已付","Paid")],["Overdue",L("逾期","Overdue")]],F.status,L("全部","All"))}</select></label>
     <label class="f">${L("搜寻","Search")}<input value="${esc(F.q)}" placeholder="Invoice No / Project" onchange="S.invF.q=this.value;render()"></label>
-    <button class="btn" onclick="openInvForm()">${L("新增 Invoice","New invoice")}</button>${isL3()?`<button class="btn sec" onclick="projBoard()">📊 ${L("Project 进度","Project progress")}</button>`:""}<button class="btn sec" onclick="exportInv()">⬇ Excel</button></div>
+    <button class="btn" onclick="openInvForm()">${L("新增 Invoice","New invoice")}</button><button class="btn sec" onclick="projBoard()">📊 ${L("Project 进度","Project progress")}</button><button class="btn sec" onclick="exportInv()">⬇ Excel</button></div>
   ${rows.length?`<div class="tw"><table><thead><tr><th>No</th><th>Invoice Date</th><th>Invoice No</th><th>${L("客户","Customer")}</th><th>Description</th>
     <th class="num">Amt before GST</th><th class="num">GST</th><th class="num">Total</th><th class="num">${L("已付","Paid")}</th><th class="num">${L("余额","Balance")}</th>
     <th>Due</th><th>${L("状态","Status")}</th><th>Checked</th><th>${L("签名","Signed")}</th><th>${L("发送","Sent")}</th><th>${L("最新付款","Last paid")}</th></tr></thead><tbody>
@@ -2261,7 +2286,7 @@ async function buildCustomerPdf(inv,doOnly){
   await loadPdfLibs();const{jsPDF}=window.jspdf,pdf=new jsPDF({orientation:"portrait",unit:"mm",format:"a4",compress:true}),box=$("#print"),warn=[];
   const sg=doOnly?null:signedOf(inv);
   if(doOnly){}else if(sg)await addImagePage(pdf,true,await attDataURL(sg),0);
-  else{warn.push(L("还没上传签名页，第一页用没签名的 invoice","No signed page — unsigned invoice used"));box.innerHTML=invoiceHTML(inv,dos.length>0||isMachInv(inv))}
+  else{warn.push(L("还没上传签名页，第一页用没签名的 invoice","No signed page — unsigned invoice used"));box.innerHTML=invoiceHTML(inv,!!breakdownHTML(inv,dos).trim())}
   if(!doOnly&&(!sg||dos.length||isMachInv(inv))){if(sg)box.innerHTML="";box.innerHTML+=breakdownHTML(inv,dos);box.classList.add("cap");
     try{if(document.fonts?.ready)await document.fonts.ready;await new Promise(r=>setTimeout(r,60));let first=!sg;
       for(const pg of box.querySelectorAll(".pg")){const land=pg.classList.contains("land"),W=land?297:210,H=land?210:297,cv=await html2canvas(pg,{scale:2,backgroundColor:"#ffffff",logging:false});
@@ -2493,7 +2518,7 @@ async function makePdf(filename){
     pdf.save(filename.replace(/[\\/:*?"<>|]+/g,"-")+".pdf");toast(L("PDF 已下载","PDF downloaded"))
   }catch(e){toast(e.message||String(e))}finally{box.classList.remove("cap")}}
 async function printInv(id,mode){const inv=invById(id);try{const dos=await fetchAll(()=>sb.from("delivery_orders").select("*").eq("invoice_id",id).order("do_date").order("start_time"));
-  $("#print").innerHTML=invoiceHTML(inv,dos.length>0||isMachInv(inv))+breakdownHTML(inv,dos);const fn=fileBase(inv);
+  const bd=breakdownHTML(inv,dos);$("#print").innerHTML=invoiceHTML(inv,!!bd.trim())+bd;const fn=fileBase(inv);
   if(mode==="print"){document.title=fn;setTimeout(()=>{window.print();document.title="ETK · L3H 开单系统"},100)}else await makePdf(fn)}catch(e){toast(e.message)}}
 
 /* ---- SOA：照 ETK SOA template，一页 ---- */
