@@ -1264,7 +1264,7 @@ async function saveInv(){
   const f=S.modal.f,w=$("#invWarn");
   if(!f.customer_id||!f.invoice_no||!f.invoice_date){w.textContent=L("请填客户、Invoice No、Invoice Date","Customer, invoice no and date are required");return}
   if(!f.lines.length){w.textContent=L("至少要有一行明细","Add at least one line");return}
-  if(S.d.invoices.some(i=>i.invoice_no===f.invoice_no.trim()&&i.id!==f.id)){w.textContent=L("Invoice No 已经存在","Invoice number already exists");return}
+  {const dup=S.d.invoices.find(i=>normNo(i.invoice_no)===normNo(f.invoice_no)&&i.id!==f.id);if(dup){w.textContent=L(`Invoice No 已经存在：${dup.invoice_no}（${dmy(dup.invoice_date)} · ${custName(dup.customer_id)} · $${money(dup.total)}）`,`Invoice number already exists: ${dup.invoice_no}`);return}}
   const t=invTotals(f);
   const row={company:S.company,customer_id:f.customer_id,invoice_no:f.invoice_no.trim(),invoice_date:f.invoice_date,due_date:f.due_date||null,customer_po:f.customer_po||null,
     our_ref:f.our_ref||null,description:f.description||null,project:f.project||null,period_from:f.period_from||null,period_to:f.period_to||null,
@@ -1572,7 +1572,9 @@ const ENT={
     F("total","money",0,["Total（空白自动算）","Total (auto if blank)"]),F("trips","number",0,["趟数","Trips"]),F("surcharge_charged","money",0,["收了多少 Diesel Surcharge","Diesel surcharge charged"]),
     F("payment_date","date",0,["付款日期","Payment date"]),F("remark","text",0,["Remark","Remark"])],
     cols:["invoice_date","supplier_id","invoice_no","charged_to","total","due_date","payment_date","_apstatus","_check","_att"],
-    before(row){if(row.gst_amount==null&&row.amount_before_gst!=null)row.gst_amount=r2(row.amount_before_gst*0.09);
+    before(row){{const dup=S.d.supplier_invoices.find(x=>x.id!==S.gEdit?.id&&x.supplier_id===row.supplier_id&&normNo(x.invoice_no)===normNo(row.invoice_no));
+        if(dup)return L(`这个供应商的 Invoice No 已经有了：${dup.invoice_no}（${dmy(dup.invoice_date)} · $${money(dup.total)}）`,`Duplicate supplier invoice: ${dup.invoice_no}`)}
+      if(row.gst_amount==null&&row.amount_before_gst!=null)row.gst_amount=r2(row.amount_before_gst*0.09);
       if(row.total==null&&row.amount_before_gst!=null)row.total=r2(row.amount_before_gst+(row.gst_amount||0));
       if(!row.due_date&&row.invoice_date){const s=S.d.suppliers.find(x=>x.id===row.supplier_id);row.due_date=addDays(row.invoice_date,Number(s?.payment_terms_days??30))}
       row.status=row.payment_date?"Paid":"Unpaid"}},
@@ -1668,11 +1670,197 @@ async function delAtt(aid){if(!confirm(L("确定删除这个附件？","Delete t
   await sb.storage.from("attachments").remove([a.file_path]);const{error}=await sb.from("attachments").delete().eq("id",aid);if(error)return toast(error.message);
   S.d.attachments=S.d.attachments.filter(x=>x.id!==aid);render()}
 
+/* ================= 导入 AP-AR Summary（她自己的 Excel） ================= */
+const normNo=s=>String(s??"").toUpperCase().replace(/\s+/g,"").replace(/[–—]/g,"-");
+const normCo=s=>String(s??"").toUpperCase().replace(/\bP\s*\/\s*L\b/g," ").replace(/&/g," AND ").replace(/[^A-Z0-9]+/g," ")
+  .replace(/\b(ENGRG|ENGG|ENGR)\b/g,"ENGINEERING").replace(/\bS PORE\b/g,"SINGAPORE").replace(/\b(PTE|PRIVATE|LTD|LIMITED)\b/g," ").replace(/\s+/g," ").trim();
+function lev(a,b){if(a===b)return 0;const m=a.length,n=b.length;let pr=Array.from({length:n+1},(_,j)=>j);
+  for(let i=1;i<=m;i++){const cu=[i];for(let j=1;j<=n;j++)cu[j]=Math.min(pr[j]+1,cu[j-1]+1,pr[j-1]+(a[i-1]===b[j-1]?0:1));pr=cu}return pr[n]}
+const simCo=(a,b)=>{if(!a||!b)return 0;if(a===b)return 1;const w1=a.split(" ")[0],w2=b.split(" ")[0];
+  if(w1!==w2&&a.replace(/ /g,"")!==b.replace(/ /g,"")&&!(Math.min(w1.length,w2.length)>=5&&lev(w1,w2)<=1)&&!w1.startsWith(w2)&&!w2.startsWith(w1))return 0;
+  const L1=Math.max(a.length,b.length);return 1-lev(a,b)/L1};
+/* 名字分组：existing = Map(key→row)；返回 merge(key→targetKey)、newNames(canonical key→name)、cnt */
+function groupNames(names,existing,noMerge){const cnt=new Map(),first=new Map();
+  for(const n of names){const k=normCo(n);cnt.set(k,(cnt.get(k)||0)+1);if(!first.has(k))first.set(k,n||"(no name)")}
+  const merge=new Map(),newNames=new Map(),targets=[...existing.keys()];
+  for(const k of [...cnt.keys()].sort((a,b)=>cnt.get(b)-cnt.get(a))){if(existing.has(k))continue;
+    let best=null,bs=0;for(const t of targets){const v=simCo(k,t);if(v>bs){bs=v;best=t}}
+    if(best&&bs>=0.86&&k.length>=6&&!noMerge.has(k)){merge.set(k,best);continue}
+    newNames.set(k,first.get(k));targets.push(k)}
+  return{merge,newNames,cnt,first}}
+const PAIDRX=/paid|receiv|recei?ve?d|recd|rcvd|giro|transfer|cheque|chq|ocbc|uob|dbs|paynow|contra|\d{1,2}\s*[\/.\-]\s*\d{1,2}\s*[\/.\-]\s*\d{2,4}/i;
+const NOTPAIDRX=/unpaid|not\s*paid|pending|outstanding|no\s*payment/i;
+function payParse(v,total){
+  if(v instanceof Date)return{paid:true,date:toYMD(v),amt:total,text:dmy(toYMD(v))};
+  const t=String(v??"").replace(/\s+/g," ").trim();if(!t||NOTPAIDRX.test(t)||!PAIDRX.test(t))return{paid:false,text:t};
+  let date=null;const m=t.match(/(\d{1,2})\s*[\/.\-]\s*(\d{1,2})\s*[\/.\-]\s*(\d{2,4})/);
+  if(m&&+m[2]>=1&&+m[2]<=12&&+m[1]>=1&&+m[1]<=31){const y=m[3].length===2?"20"+m[3]:m[3].length===4?m[3]:null;if(y)date=`${y}-${z2(m[2])}-${z2(m[1])}`}
+  let amt=total,partial=false;const a=t.match(/\$\s*([\d,]+(?:\.\d+)?)/);
+  return{paid:true,date,amt:r2(amt),partial,text:t}}
+function aparSheetRows(ws){
+  const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:"",raw:true});
+  const hi=rows.slice(0,12).findIndex(r=>r.some(c=>/invoice\s*number/i.test(String(c))));if(hi<0)return null;
+  const H=rows[hi].map(c=>String(c).trim().toLowerCase()),col=rx=>H.findIndex(h=>rx.test(h));
+  const C={date:col(/date/),no:col(/invoice\s*number/),name:col(/name|customer|supplier/),desc:col(/desc/),before:col(/before/),gst:col(/^gst/),total:col(/^total/),pay:col(/payment/),remark:col(/remark/)};
+  const out=[];
+  rows.slice(hi+1).forEach((r,i)=>{const g=k=>C[k]>=0?r[C[k]]:"";const no=String(g("no")).trim();if(!no)return;
+    const before=numOr(g("before")),gst=numOr(g("gst"),0);let total=numOr(g("total"));if(total==null&&before!=null)total=r2(before+gst);if(total==null)return;
+    let cnFix=false,bf=before,gs=gst;if(/(^|\/)CN/i.test(no)&&total>0){total=-total;bf=bf==null?null:-bf;gs=-gs;cnFix=true}
+    let date=toYMD(g("date")),dateGuess=false;
+    if(!date){const m=no.match(/\/(\d{2})(\d{2})\//);if(m&&+m[2]>=1&&+m[2]<=12){date=`20${m[1]}-${m[2]}-01`;dateGuess=true}}
+    const p1=payParse(g("pay"),total),p2=p1.paid?p1:payParse(g("remark"),total);
+    out.push({row:hi+2+i,no,key:normNo(no),date,dateGuess,name:String(g("name")).trim(),desc:String(g("desc")).replace(/\s+/g," ").trim(),
+      before:bf==null?r2(total-gs):r2(bf),gst:r2(gs),total:r2(total),cnFix,pay:p2,payText:[g("pay"),g("remark")].map(x=>x instanceof Date?dmy(toYMD(x)):String(x??"").trim()).filter(Boolean).join(" · ")})});
+  return out}
+let APAR=null;
+const mkNo=s=>normNo(s).replace(/[\/\-]/g,"");
+/* 客户的 Payable Invoice Detail（Xero 报告）：Reference / Invoice Total / Status */
+function parseRep(wb,file){const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:"",raw:true});
+  const hi=rows.slice(0,20).findIndex(r=>r.some(c=>/^reference$/i.test(String(c).trim()))&&r.some(c=>/^status$/i.test(String(c).trim())));if(hi<0)throw new Error(file+": "+L("看不懂这个报告（找不到 Reference / Status）","not a Payable Invoice Detail report"));
+  const H=rows[hi].map(c=>String(c).trim().toLowerCase()),col=x=>H.indexOf(x);
+  const C={date:col("invoice date"),ref:col("reference"),tot:col("invoice total"),st:col("status"),src:col("source"),lp:col("last payment date")};
+  const title=String(rows[1]?.[0]||"").trim(),map=new Map(),rank={Paid:3,Approved:2};
+  for(const r of rows.slice(hi+1)){const ref=String(r[C.ref]??"").trim();if(!ref||!r[C.st])continue;const k=mkNo(ref),st=String(r[C.st]).trim();
+    const e=map.get(k);if(!e||(rank[st]||0)>(rank[e.status]||0))map.set(k,{no:ref,tot:r2(numOr(r[C.tot],0)),status:st,date:toYMD(r[C.date]),lp:C.lp>=0?toYMD(r[C.lp]):null})}
+  return{file,cust:title,ck:normCo(title),map}}
+async function aparRepFiles(input){const fs=[...input.files];input.value="";
+  try{for(const f of fs){const rp=parseRep(XLSX.read(await f.arrayBuffer(),{cellDates:true}),f.name);APAR.reps=APAR.reps.filter(x=>x.ck!==rp.ck);APAR.reps.push(rp)}aparAnalyse();aparShow()}
+  catch(e){alert(e.message)}}
+function aparPanel(){return `<div class="panel"><h2>${L("导入你的 AP-AR Summary Excel","Import your AP-AR Summary Excel")}</h2>
+  <p class="mute" style="font-size:14px;margin-top:0">${L("直接上传你平时用的 AP-AR SUMMARY 文件。AR 读「Sales invoices」，AP 读「Tax Invoice 23」（没有就读「TAX INVOICES」）。Invoice No 已经在系统里的会跳过（不分大小写、空格）。Payment Received 有写 paid / received / 日期 的当作已收。导入前会先给你看结果。","Upload your usual AP-AR SUMMARY file. AR reads 'Sales invoices', AP reads 'Tax Invoice 23' (or 'TAX INVOICES'). Invoice numbers already in the system are skipped. You'll see a preview first.")}</p>
+  <label class="btn file">⬆ ${L("选 AP-AR Summary 文件","Choose AP-AR Summary file")}<input type="file" accept=".xlsx,.xlsm,.xls" hidden onchange="aparFile(this)"></label>
+  <div id="aparOut" style="margin-top:12px"></div></div>`}
+async function aparFile(input){const file=input.files[0];input.value="";if(!file)return;const box=$("#aparOut");box.innerHTML=L("读取中…","Reading…");
+  try{const wb=XLSX.read(await file.arrayBuffer(),{cellDates:true});const find=rx=>wb.SheetNames.find(n=>rx.test(n.trim()));
+    APAR={file:file.name,arSheet:find(/^sales invoices$/i)||"",apSheet:find(/^tax invoice 23$/i)||find(/^tax invoices$/i)||"",wb,sheets:wb.SheetNames,assume:false,assumeTo:"",noMerge:new Set(),dupTake:new Set(),partAmt:{},reps:[]};
+    aparAnalyse();aparShow()}catch(e){box.innerHTML=`<p class="err">${esc(e.message)}</p>`}}
+function aparAnalyse(){const A=APAR,co=S.company;
+  const ar=A.arSheet?aparSheetRows(A.wb.Sheets[A.arSheet])||[]:[],ap=A.apSheet?aparSheetRows(A.wb.Sheets[A.apSheet])||[]:[];
+  const haveAR=new Map(S.d.invoices.map(i=>[normNo(i.invoice_no),i]));
+  const custBy=new Map(S.d.customers.map(c=>[normCo(c.name),c]));
+  const repFor=r=>{const ck=normCo(r.name);for(const rp of A.reps){if(simCo(ck,rp.ck)<0.86)continue;const e=rp.map.get(mkNo(r.no))||(/A$/i.test(r.no.trim())?rp.map.get(mkNo(r.no.trim().slice(0,-1))):null);if(e&&/^(paid|approved)$/i.test(e.status))return{...e,rp}}return null};
+  for(const r of ar)r.rep=repFor(r);
+  const R={new:[],exist:[],dupFile:[],bad:[],odd:[],wrongCo:0};const seen=new Map(),maxD=addDays(today(),60);
+  for(const r of ar){if(!r.date){R.bad.push(r);continue}
+    if(haveAR.has(r.key)){R.exist.push({...r,inSys:haveAR.get(r.key)});continue}
+    if(seen.has(r.key)){const d={...r,first:seen.get(r.key),dupNo:r.no+"-B"};R.dupFile.push(d);if(A.dupTake.has(r.row)&&!haveAR.has(normNo(d.dupNo)))R.new.push({...r,no:d.dupNo,key:normNo(d.dupNo)});continue}seen.set(r.key,r);
+    if(!new RegExp("^"+co).test(r.key))R.wrongCo++;
+    if(r.date<"2018-01-01"||r.date>maxD)R.odd.push(r);R.new.push(r)}
+  R.g=groupNames(R.new.map(r=>r.name),custBy,A.noMerge);R.newCust=R.g.newNames;
+  R.markPaid=R.exist.filter(r=>r.rep?.status==="Paid"&&Math.abs(balOf(r.inSys))>0.005);
+  R.repInfo=A.reps.map(rp=>{const mine=ar.filter(r=>simCo(normCo(r.name),rp.ck)>=0.86),mk=new Set(mine.map(r=>mkNo(r.no)));
+    const live=[...rp.map.values()].filter(e=>/^(paid|approved)$/i.test(e.status));
+    return{rp,paid:mine.filter(r=>r.rep?.status==="Paid"),appr:mine.filter(r=>r.rep?.status==="Approved"),
+      notInRep:mine.filter(r=>!r.rep),notInMine:live.filter(e=>!mk.has(mkNo(e.no))&&!mk.has(mkNo(e.no)+"A")),
+      diff:mine.filter(r=>r.rep&&Math.abs(r.rep.tot-r.total)>0.02)}});
+  const haveAP=new Map();for(const s of S.d.supplier_invoices){const k=normNo(s.invoice_no);if(!haveAP.has(k))haveAP.set(k,[]);haveAP.get(k).push(normCo(supName(s.supplier_id)))}
+  const inAP=r=>{const ns=haveAP.get(r.key);if(!ns)return false;const n=normCo(r.name);return ns.some(x=>simCo(n,x)>=0.86)};
+  const supBy=new Map(S.d.suppliers.map(s=>[normCo(s.name),s]));
+  const P={new:[],exist:[],dupFile:[],bad:[]};const seenP=new Map();
+  for(const r of ap){if(!r.date){P.bad.push(r);continue}const k=r.key+"|"+normCo(r.name);
+    if(inAP(r)){P.exist.push(r);continue}if(seenP.has(k)){P.dupFile.push({...r,first:seenP.get(k)});continue}seenP.set(k,r);
+    P.new.push(r)}
+  P.g=groupNames(P.new.map(r=>r.name),supBy,A.noMerge);P.newSup=P.g.newNames;
+  A.R=R;A.P=P}
+const aparPaid=r=>r.rep?.status==="Paid"||r.pay.paid||(!r.rep&&APAR.assume&&APAR.assumeTo&&r.date<=APAR.assumeTo);
+const aparAmt=r=>r.pay.paid&&r.total>0?r2(Math.min(r.total,APAR.partAmt[r.key]??r.total)):r.total;
+const aparPartial=r=>r.pay.paid&&/partial|parital|\bbal(ance)?\b|short|deposit/i.test(r.pay.text);
+function aparShow(){const A=APAR,R=A.R,P=A.P,box=$("#aparOut");
+  const opt=(v)=>`<option value="">${L("（不导入）","(skip)")}</option>`+A.sheets.map(n=>`<option ${n===v?"selected":""}>${esc(n)}</option>`).join("");
+  const unpaid=R.new.filter(r=>!aparPaid(r)),byYear={};unpaid.forEach(r=>{const y=r.date.slice(0,4);byYear[y]=(byYear[y]||0)+r.total});
+  const list=(arr,f,max=40)=>arr.length?`<div class="tw" style="max-height:260px;overflow:auto"><table><tbody>${arr.slice(0,max).map(f).join("")}${arr.length>max?`<tr><td colspan="6" class="mute">… +${arr.length-max}</td></tr>`:""}</tbody></table></div>`:"";
+  const det=(t,n,inner,open)=>n?`<details ${open?"open":""} style="margin:6px 0"><summary><b>${t}</b> (${n})</summary>${inner}</details>`:"";
+  const partial=R.new.filter(aparPartial),guess=[...R.new,...P.new].filter(r=>r.dateGuess);
+  const custBy=new Map(S.d.customers.map(c=>[normCo(c.name),c])),supBy=new Map(S.d.suppliers.map(s=>[normCo(s.name),s])),mergeList=(g,exist,label)=>g.merge.size+A.noMerge.size?det(label,g.merge.size,`<p class="mute" style="font-size:13px;margin:4px 0">${L("名字很像，会当作同一个。不是同一个就取消打勾。","Very similar names will be merged. Untick if they are different.")}</p>`+list([...g.merge.entries()].concat([...A.noMerge].filter(k=>g.cnt.has(k)).map(k=>[k,null])),([k,t])=>`<tr><td><input type="checkbox" ${t?"checked":""} onchange="APAR.noMerge[this.checked?'delete':'add']('${k}');aparAnalyse();aparShow()"></td><td>${esc(g.first.get(k))}</td><td>→</td><td>${t?esc(exist.get(t)?.name||g.newNames.get(t)||t):`<span class="mute">${L("分开（新开）","separate")}</span>`}</td></tr>`,200),1):"";
+  box.innerHTML=`<p><b>${esc(A.file)}</b> → ${L("导入到","into")} <b>${S.company}</b></p>
+  <div class="actions"><label class="f">AR sheet<select onchange="APAR.arSheet=this.value;aparAnalyse();aparShow()">${opt(A.arSheet)}</select></label>
+  <label class="f">AP sheet<select onchange="APAR.apSheet=this.value;aparAnalyse();aparShow()">${opt(A.apSheet)}</select></label></div>
+  ${R.wrongCo>R.new.length/2&&R.new.length?`<p class="err">⚠ ${L(`大部分 Invoice No 不是 ${S.company} 开头，你是不是选错公司？`,`Most invoice numbers don't start with ${S.company} — wrong company?`)}</p>`:""}
+  <h3 style="margin:12px 0 4px">AR（${esc(A.arSheet||"-")}）</h3>
+  <ul style="margin:0 0 6px 18px;font-size:14px"><li>${L("新 Invoice","New invoices")}: <b>${R.new.length}</b>（${L("已收","paid")} ${R.new.length-unpaid.length} · ${L("未收","unpaid")} ${unpaid.length} = $${money(sum(unpaid,r=>r.total))}）</li>
+  <li>${L("系统已经有，跳过","Already in system, skipped")}: ${R.exist.length}</li><li>${L("文件里重复 Invoice No（只导入第一笔）","Duplicate numbers in file (first kept)")}: ${R.dupFile.length}</li>
+  <li>${L("没有日期，跳过","No date, skipped")}: ${R.bad.length}</li><li>${L("新客户（会自动开）","New customers (auto-created)")}: ${R.newCust.size}</li></ul>
+  ${unpaid.length?`<p class="mute" style="font-size:13px;margin:4px 0">${L("未收按年份","Unpaid by year")}: ${Object.entries(byYear).sort().map(([y,v])=>`${y} $${money(v)}`).join(" · ")}</p>`:""}
+  <div style="border:1px solid var(--line,#ccc);border-radius:8px;padding:8px 10px;margin:8px 0">
+  <b>${L("客户的 Payable Invoice Detail 报告（可选）","Customer Payable Invoice Detail reports (optional)")}</b>
+  <p class="mute" style="font-size:13px;margin:2px 0 6px">${L("例：CHC 给的 Xero 报告。报告说 Paid 的标已收，Approved 的标未收（你有写收款的照你写的）。可以选多个。","e.g. CHC's Xero report. Paid → received, Approved → unpaid. Multiple allowed.")}</p>
+  <label class="btn sec file">＋ ${L("加客户报告","Add customer report")}<input type="file" accept=".xlsx,.xls" multiple hidden onchange="aparRepFiles(this)"></label>
+  ${(R.repInfo||[]).map(x=>`<div style="margin-top:8px;font-size:14px"><b>${esc(x.rp.cust)}</b> <span class="mute">(${esc(x.rp.file)})</span>
+    <a href="#" onclick="APAR.reps=APAR.reps.filter(r=>r.ck!=='${x.rp.ck}');aparAnalyse();aparShow();return false">✕</a>
+    <ul style="margin:2px 0 0 18px"><li>${L("报告 Paid → 标已收","Paid → received")}: ${x.paid.length}（$${money(sum(x.paid,r=>r.total))}）</li>
+    <li>${L("报告 Approved → 未收","Approved → unpaid")}: ${x.appr.filter(r=>!r.pay.paid).length}（$${money(sum(x.appr.filter(r=>!r.pay.paid),r=>r.total))}）</li></ul>
+    ${det(L("你开给这个客户、报告里没有","In your sheet, not in their report"),x.notInRep.length,list(x.notInRep,r=>`<tr><td>${dmy(r.date)}</td><td>${esc(r.no)}</td><td class="num">$${money(r.total)}</td><td class="mute">${esc(r.payText)}</td></tr>`,80),1)}
+    ${det(L("报告里有、你的 Excel 没有","In their report, not in your sheet"),x.notInMine.length,list(x.notInMine,e=>`<tr><td>${dmy(e.date)}</td><td>${esc(e.no)}</td><td class="num">$${money(e.tot)}</td><td>${esc(e.status)}</td></tr>`),1)}
+    ${det(L("金额不同","Amount differs"),x.diff.length,list(x.diff,r=>`<tr><td>${esc(r.no)}</td><td>${L("你","yours")} $${money(r.total)}</td><td>${L("报告","report")} $${money(r.rep.tot)}</td><td>${esc(r.rep.status)}</td></tr>`),1)}</div>`).join("")}
+  ${R.markPaid.length?`<p style="font-size:14px">✔ ${L(`系统里已经有、报告说已付、系统还没收的：${R.markPaid.length} 张（$${money(sum(R.markPaid,r=>balOf(r.inSys)))}），导入时会记收款`,`${R.markPaid.length} existing invoices will be marked paid`)}</p>`:""}</div>
+  <label style="font-size:14px"><input type="checkbox" ${A.assume?"checked":""} onchange="APAR.assume=this.checked;aparShow()"> ${L("这个日期（含）之前没写收款的，当作已收（有客户报告的不受影响）：","Treat invoices up to this date with no payment note as paid (not for report customers):")}</label>
+  <input type="date" value="${A.assumeTo}" onchange="APAR.assumeTo=this.value;aparShow()">
+  ${det(L("文件里重复的 Invoice No（打勾 = 也导入，号码加 -B）","Duplicates in file (tick = import too as -B)"),R.dupFile.length,list(R.dupFile,r=>`<tr><td><input type="checkbox" ${A.dupTake.has(r.row)?"checked":""} onchange="APAR.dupTake[this.checked?'add':'delete'](${r.row});aparAnalyse();aparShow()"></td><td>${L("第","Row ")}${r.row}${L("行","")}</td><td>${esc(r.no)}</td><td>${esc(r.name)}</td><td class="num">$${money(r.total)}</td><td class="mute">${L("同第","same as row ")} ${r.first.row} ${L("行","")}: ${esc(r.first.name)} $${money(r.first.total)}</td></tr>`),1)}
+  ${det(L("系统已经有（跳过）","Already in system"),R.exist.length,list(R.exist,r=>`<tr><td>${esc(r.no)}</td><td>${esc(r.name)}</td><td class="num">$${money(r.total)}</td><td>${Math.abs(r.total-Number(r.inSys.total))>0.01?`<span class="tag bad">${L("金额不同","amount differs")}: $${money(r.inSys.total)}</span>`:""}</td></tr>`))}
+  ${mergeList(R.g,custBy,L("相似客户名字（合并）","Similar customer names (merged)"))}
+  ${det(L("新客户","New customers"),R.newCust.size,`<p style="font-size:13px">${[...R.newCust.values()].map(esc).join("<br>")}</p>`,1)}
+  ${det(L("写了 partial / balance（请填实际收了多少，默认全收）","Partial / balance notes (enter amount received; default full)"),partial.length,list(partial,r=>`<tr><td>${esc(r.no)}</td><td class="num">$${money(r.total)}</td><td>${L("收了","received")} $<input style="width:110px" type="number" step="0.01" value="${aparAmt(r)}" onchange="APAR.partAmt['${r.key}']=Number(this.value);aparShow()"></td><td class="mute wrap">${esc(r.pay.text)}</td></tr>`,80),1)}
+  ${det(L("CN 写成正数 → 改成负数","Credit notes made negative"),R.new.filter(r=>r.cnFix).length,list(R.new.filter(r=>r.cnFix),r=>`<tr><td>${esc(r.no)}</td><td>${esc(r.name)}</td><td class="num">$${money(r.total)}</td></tr>`),1)}
+  ${det(L("日期可能打错（2018 年前 / 未来）","Dates that look wrong"),R.odd.length,list(R.odd,r=>`<tr><td>${L("第","Row ")}${r.row}${L("行","")}</td><td>${esc(r.no)}</td><td>${dmy(r.date)}</td><td>${esc(r.name)}</td><td class="num">$${money(r.total)}</td></tr>`),1)}
+  ${det(L("日期用 Invoice No 估计（1号）","Date guessed from invoice no"),guess.length,list(guess,r=>`<tr><td>${esc(r.no)}</td><td>${dmy(r.date)}</td><td>${esc(r.name)}</td></tr>`),1)}
+  ${det(L("没有日期（不会导入）","No date (skipped)"),R.bad.length,list(R.bad,r=>`<tr><td>${L("第","Row ")}${r.row}${L("行","")}</td><td>${esc(r.no)}</td><td>${esc(r.name)}</td></tr>`),1)}
+  <h3 style="margin:12px 0 4px">AP（${esc(A.apSheet||"-")}）</h3>
+  <ul style="margin:0 0 6px 18px;font-size:14px"><li>${L("新 Supplier Invoice","New supplier invoices")}: <b>${P.new.length}</b>（${L("已付","paid")} ${P.new.filter(r=>r.pay.paid).length} · ${L("未付","unpaid")} ${P.new.filter(r=>!r.pay.paid).length}）</li>
+  <li>${L("系统已经有，跳过","Already in system")}: ${P.exist.length}</li><li>${L("文件里重复（同供应商同 Invoice No）","Duplicates in file")}: ${P.dupFile.length}</li><li>${L("没有日期，跳过","No date")}: ${P.bad.length}</li><li>${L("新供应商（会自动开）","New suppliers")}: ${P.newSup.size}</li></ul>
+  ${det(L("AP 文件里重复","AP duplicates"),P.dupFile.length,list(P.dupFile,r=>`<tr><td>${L("第","Row ")}${r.row}${L("行","")}</td><td>${esc(r.no)}</td><td>${esc(r.name)}</td><td class="num">$${money(r.total)}</td><td class="mute">${L("同第","same as row ")} ${r.first.row} ${L("行","")}</td></tr>`))}
+  ${mergeList(P.g,supBy,L("相似供应商名字（合并）","Similar supplier names (merged)"))}
+  ${det(L("新供应商","New suppliers"),P.newSup.size,`<p style="font-size:13px">${[...P.newSup.values()].map(esc).join("<br>")}</p>`)}
+  <div class="actions" style="margin-top:12px">${R.new.length||P.new.length||R.markPaid.length?`<button class="btn" id="aparGo" onclick="aparImport()">${L(`导入 AR ${R.new.length} + AP ${P.new.length}`,`Import AR ${R.new.length} + AP ${P.new.length}`)}${R.markPaid.length?L(` + 记收款 ${R.markPaid.length}`,` + mark paid ${R.markPaid.length}`):""}</button>`:`<span class="mute">${L("没有新的要导入","Nothing new to import")}</span>`}</div>
+  <p id="aparProg" class="mute"></p>`}
+async function insChunks(table,rows,size=200,sel){const out=[];for(let i=0;i<rows.length;i+=size){let q=sb.from(table).insert(rows.slice(i,i+size));if(sel)q=q.select(sel);
+  const{data,error}=await q;if(error)throw new Error(table+": "+error.message);if(sel)out.push(...data);const pg=$("#aparProg");if(pg)pg.textContent=`${table} ${Math.min(i+size,rows.length)}/${rows.length}`}return out}
+async function aparImport(){const A=APAR,R=A.R,P=A.P,co=S.company;
+  if(!confirm(L(`确定导入到 ${co}？\nAR ${R.new.length} 张，AP ${P.new.length} 张${R.markPaid.length?`\n记收款 ${R.markPaid.length} 张`:""}`,`Import into ${co}?\nAR ${R.new.length}, AP ${P.new.length}`)))return;
+  const b=$("#aparGo");if(b)b.disabled=true;
+  try{
+    /* AR */
+    if(R.new.length){
+      const keys=[...R.newCust.keys()],nc=keys.map(k=>({company:co,name:R.newCust.get(k),payment_terms_days:30}));
+      const created=nc.length?await insChunks("customers",nc,200,"*"):[];
+      const cmap=new Map(S.d.customers.map(c=>[normCo(c.name),c]));keys.forEach((k,i)=>cmap.set(k,created[i]));
+      const custBy={get:n=>{const k=normCo(n);return cmap.get(R.g.merge.get(k)||k)}};
+      const invRowsIns=R.new.map(r=>{const c=custBy.get(r.name);const paid=aparPaid(r),amt=aparAmt(r);
+        const rate=r.before?Math.round(r.gst/r.before*100):0;
+        return{company:co,customer_id:c.id,invoice_no:r.no,invoice_date:r.date,due_date:addDays(r.date,Number(c.payment_terms_days??30)),description:r.desc||null,
+          amount_before_gst:r.before,gst_rate:[0,7,8,9].includes(rate)?rate:9,gst_amount:r.gst,total:r.total,checked:true,sent_at:r.date,sent_via:"Imported",
+          status:paid?(amt>=r.total-0.005?"Paid":"Partial"):"Unpaid"}});
+      const invs=await insChunks("invoices",invRowsIns,200,"id,invoice_no");
+      const idBy=new Map(invs.map(i=>[normNo(i.invoice_no),i.id]));
+      await insChunks("invoice_lines",R.new.map(r=>({invoice_id:idBy.get(r.key),line_no:1,description:r.desc||r.no,qty:1,unit:"LS",unit_price:r.before,amount:r.before})),500);
+      const pr=R.new.filter(aparPaid).map(r=>{const c=custBy.get(r.name);return{r,row:{company:co,customer_id:c.id,payment_date:r.pay.date||(r.rep?.status==="Paid"&&r.rep.lp)||r.date,
+        amount:aparAmt(r),method:"Imported",reference:(r.pay.paid?r.payText:r.rep?.status==="Paid"?L(`客户报告显示 Paid（${r.rep.rp.file}）`,`Customer report: Paid (${r.rep.rp.file})`):L("导入：当作已收","Imported: assumed paid")).slice(0,200)||"Imported"}}});
+      const pays=await insChunks("payments",pr.map(x=>x.row),200,"id");
+      await insChunks("payment_allocations",pays.map((p,i)=>({payment_id:p.id,invoice_id:idBy.get(pr[i].r.key),amount:pr[i].row.amount})),500)}
+    if(R.markPaid.length){
+      const mp=R.markPaid.map(r=>({inv:r.inSys,row:{company:co,customer_id:r.inSys.customer_id,payment_date:r.rep.lp||r.inSys.invoice_date,amount:balOf(r.inSys),method:"Imported",
+        reference:L(`客户报告显示 Paid（${r.rep.rp.file}）`,`Customer report: Paid (${r.rep.rp.file})`).slice(0,200)}}));
+      const pays=await insChunks("payments",mp.map(x=>x.row),200,"id");
+      await insChunks("payment_allocations",pays.map((p,i)=>({payment_id:p.id,invoice_id:mp[i].inv.id,amount:mp[i].row.amount})),500);
+      await loadAll();await syncStatuses(mp.map(x=>x.inv.id))}
+    /* AP */
+    if(P.new.length){
+      const keys=[...P.newSup.keys()],ns=keys.map(k=>({name:P.newSup.get(k),payment_terms_days:30}));
+      const created=ns.length?await insChunks("suppliers",ns,200,"*"):[];
+      const smap=new Map(S.d.suppliers.map(s=>[normCo(s.name),s]));keys.forEach((k,i)=>smap.set(k,created[i]));
+      const supBy={get:n=>{const k=normCo(n);return smap.get(P.g.merge.get(k)||k)}};
+      await insChunks("supplier_invoices",P.new.map(r=>{const s=supBy.get(r.name);return{supplier_id:s.id,charged_to:co,invoice_no:r.no,invoice_date:r.date,
+        due_date:addDays(r.date,Number(s.payment_terms_days??30)),description:r.desc||null,amount_before_gst:r.before,gst_amount:r.gst,total:r.total,
+        payment_date:r.pay.paid?(r.pay.date||r.date):null,status:r.pay.paid?"Paid":"Unpaid",remark:r.payText?r.payText.slice(0,200):null}}),200)}
+    await loadAll();aparAnalyse();render();
+    alert(L(`导入完成\nAR ${R.new.length} 张，AP ${P.new.length} 张`,`Done\nAR ${R.new.length}, AP ${P.new.length}`));
+  }catch(e){alert(L("导入中断：","Import stopped: ")+e.message+L("\n\n已导入的不会重复，再上传一次会只导入剩下的。","\n\nRe-upload to import the rest; nothing will be duplicated."));await loadAll();render()}}
+
 /* ================= Master List + 导入 ================= */
 function masterView(){return `<div class="panel"><h2>${L("导入现有资料","Import existing data")}</h2>
   <p class="mute" style="font-size:14px;margin-top:0">${L("先下载模板，在 Excel 填好（每个 sheet 第一行是标题不要改），再上传。资料会导入到目前选的公司（","Download the template, fill it in Excel (keep the header row), then upload. Data goes into the selected company (")}<b>${S.company}</b>${L("）。已经存在的客户、车牌、Invoice No 会自动跳过。","). Existing customers, vehicles and invoice numbers are skipped.")}</p>
   <div class="actions"><button class="btn sec" onclick="downloadTemplate()">⬇ ${L("下载导入模板","Download template")}</button>
   <label class="btn file">⬆ ${L("上传 Excel 导入","Upload Excel")}<input type="file" accept=".xlsx,.xls,.csv" hidden onchange="importExcel(this)"></label></div></div>
+  ${aparPanel()}${APAR?(setTimeout(()=>{if($("#aparOut")&&!$("#aparOut").innerHTML)aparShow()}),""):""}
   ${genView(S.company==="L3H"?["customers","projects","vehicles","drivers","rates","customer_surcharges"]:["customers","projects","vehicles","rates","customer_surcharges"],"master")}`}
 const TPL={Customers:["Name","Payment Terms (0=COD,7,14,30,60)","Attn","Email","WhatsApp","Tel","Fax","Address"],Vehicles:["Vehicle No","Type"],
   Rates:["Customer","Service","Unit","Price","Effective From","Effective To","Meal break if over (hrs)","Deduct (hrs)","Min hrs","OT per hr"],
@@ -1790,7 +1978,7 @@ function exportDO(){const rows=doFiltered();
     fill:i=>rows[i].invoice_id?null:"amber",
     total:["Total",`${rows.length} DO`,"","","","","","","","","","",sum(rows,d=>d.actual_hours),sum(rows,d=>d.billable_hours),"",sum(rows,d=>d.surcharge),sum(rows,d=>d.amount),"","",""],
     legend:[["amber","Unbilled"]]}])}
-function invRows(){const F=S.invF;let rows=S.d.invoices.filter(i=>(!F.customer||i.customer_id===F.customer)&&(!F.q||(i.invoice_no+" "+(i.description||"")+" "+(i.project||"")).toLowerCase().includes(F.q.toLowerCase())));
+function invRows(){const F=S.invF;let rows=S.d.invoices.filter(i=>(!F.customer||i.customer_id===F.customer)&&(!F.q||((i.invoice_no+" "+(i.description||"")+" "+(i.project||"")+" "+custName(i.customer_id)).toLowerCase().includes(F.q.toLowerCase())||normNo(i.invoice_no).includes(normNo(F.q)))));
   if(F.status==="Overdue")rows=rows.filter(i=>overdueDays(i)>0);else if(F.status)rows=rows.filter(i=>statusOf(i)===F.status);return rows}
 const invDesc=i=>(i.description||S.d.invoice_lines.find(l=>l.invoice_id===i.id)?.description||"").split("\n").filter(Boolean).join(" / ");
 function exportInv(){const rows=invRows();
