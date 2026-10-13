@@ -218,6 +218,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 #print .inv .meta td{padding:0 0 1.2mm}
 #print .inv .meta td:first-child{width:27mm} #print .inv .meta td:nth-child(2){width:6mm}
 #print .inv .body{min-height:84mm}
+#print .inv .amend{border:1px solid #000;padding:1.6mm 2.4mm;margin:3mm 0 1mm;font-family:Arial,Helvetica,sans-serif;font-size:8pt;line-height:1.45}
 #print table.lines{width:100%;margin-top:1.5mm}
 #print table.lines th{font-family:Arial,Helvetica,sans-serif;font-weight:700;font-size:10pt;border-top:1px solid #000;border-bottom:1px solid #000;padding:1.2mm 1.5mm}
 #print table.lines td{padding:6mm 1.5mm 0}
@@ -1047,7 +1048,8 @@ function invSheet(wb,inv){const s=settingsOf(inv.company),c=custOf(inv.customer_
   let r=1;const put=(txt,o={})=>{const row=ws.getRow(r);ws.mergeCells(r,1,r,6);const cell=row.getCell(1);cell.value=txt;cell.alignment={horizontal:"center"};if(o.b)cell.font={bold:true,size:o.sz||11,italic:o.i};r++};
   put(s.name,{b:1,sz:16,i:l3});put(s.address||"");put(`Co. Reg No: ${s.reg_no||""}   GST Reg No: ${s.gst_no||""}`);
   put(l3?[s.tel&&"Tel: "+s.tel,s.fax&&"Fax: "+s.fax].filter(Boolean).join("   "):[s.tel&&"Mobile: "+s.tel,s.email&&"Email: "+s.email].filter(Boolean).join("   "));if(l3&&s.email)put("Email : "+s.email);
-  r++;ws.getRow(r).getCell(6).value="Tax Invoice";ws.getRow(r).getCell(6).font={bold:true,size:16};ws.getRow(r).getCell(6).alignment={horizontal:"right"};r+=2;
+  r++;ws.getRow(r).getCell(6).value=inv.amended?"Tax Invoice (AMENDED)":"Tax Invoice";ws.getRow(r).getCell(6).font={bold:true,size:16};ws.getRow(r).getCell(6).alignment={horizontal:"right"};r+=2;
+  const amendRow=inv.amended?amendText(inv,1):null;
   const td=Number(c.payment_terms_days),terms=td===0?"C.O.D":`${c.payment_terms_days??30} Days`;
   const mg=l3&&!inv.project&&!isMachInv(inv)&&!isCHC(inv.customer_id);
   const meta=mg?[["No",inv.invoice_no],["D.O. No",""],["Your PO No",inv.customer_po||""],["Terms",terms],["Date",dmy(inv.invoice_date)]]:[["Invoice No.",inv.invoice_no],["Our Ref No.",inv.our_ref||""],["Terms",terms],["Date",dmy(inv.invoice_date)],["Your PO",inv.customer_po||""]];
@@ -1056,7 +1058,8 @@ function invSheet(wb,inv){const s=settingsOf(inv.company),c=custOf(inv.customer_
   const n=Math.max(left.length,meta.length);for(let i=0;i<n;i++){const row=ws.getRow(r+i);
     if(left[i]){row.getCell(1).value=left[i][0];row.getCell(2).value=(left[i][0]?": ":"  ")+left[i][1];if(left[i][2])row.getCell(2).font={bold:true}}
     if(meta[i]){row.getCell(4).value=meta[i][0];row.getCell(5).value=": "+meta[i][1]}}
-  r+=n+1;const hr=ws.getRow(r);["No.","Description","Qty","UOM","Unit Price $","Total Amount $"].forEach((h,i)=>{const cl=hr.getCell(i+1);cl.value=h;cl.font={bold:true};cl.border={top:THIN,bottom:THIN};cl.alignment={horizontal:i>=4?"right":i===1?"center":"center"}});r++;
+  r+=n+1;if(amendRow){ws.mergeCells(r,1,r,6);const cl=ws.getRow(r).getCell(1);cl.value=amendRow;cl.alignment={wrapText:true,vertical:"top"};cl.font={size:9};cl.border=BOX;ws.getRow(r).height=42;r+=2}
+  const hr=ws.getRow(r);["No.","Description","Qty","UOM","Unit Price $","Total Amount $"].forEach((h,i)=>{const cl=hr.getCell(i+1);cl.value=h;cl.font={bold:true};cl.border={top:THIN,bottom:THIN};cl.alignment={horizontal:i>=4?"right":i===1?"center":"center"}});r++;
   if(inv.description){const row=ws.getRow(r++);row.getCell(2).value=inv.description;row.getCell(2).font={bold:true,underline:true};row.getCell(2).alignment={wrapText:true,vertical:"top"};row.height=15*String(inv.description).split("\n").length}
   const first=r;lines.forEach((l,i)=>{const row=ws.getRow(r++),u=lineUnit(l);row.getCell(1).value=`${i+1})`;row.getCell(2).value=String(l.description||"");row.getCell(2).alignment={wrapText:true,vertical:"top"};
     row.height=Math.max(15,15*String(l.description||"").split("\n").length);row.getCell(3).value=u==="hrs"?Number(l.qty||0):Number(l.qty??1);row.getCell(4).value=u==="hrs"?"hrs":(u||"LS");
@@ -1751,9 +1754,9 @@ function invView(){
     ${thS("inv","due","Due")}${thS("inv","status",L("状态","Status"))}<th>Checked</th><th>${L("签名","Signed")}</th><th>${L("发送","Sent")}</th><th>${L("最新付款","Last paid")}</th></tr></thead><tbody>
   ${rows.map((i,n)=>`<tr class="click${S.invSel.has(i.id)?" sel":""}" onclick="openInv('${i.id}')"><td onclick="event.stopPropagation()"><input type="checkbox" ${S.invSel.has(i.id)?"checked":""} onchange="invSelToggle('${i.id}',this.checked)"></td><td>${n+1}</td><td>${dmy(i.invoice_date)}</td><td>${esc(i.invoice_no)}</td><td>${esc(custName(i.customer_id))}</td>
     <td class="wrap">${isMachInv(i)?`<span class="tag mute">${L("机械","Machinery")}</span> `:""}${esc(desc(i).slice(0,80))}</td><td class="num">${money(i.amount_before_gst)}</td><td class="num">${money(i.gst_amount)}</td><td class="num">${money(i.total)}</td>
-    <td class="num">${money(paidOf(i))}</td><td class="num">${money(balOf(i))}</td><td>${dmy(i.due_date)}</td><td>${statusTag(i)}</td>
+    <td class="num">${money(paidOf(i))}</td><td class="num">${money(balOf(i))}</td><td>${dmy(i.due_date)}</td><td>${statusTag(i)}${i.amended?` <span class="tag warn" title="${esc(i.amend_note||"")}">AMENDED${i.amend_sent_at?"":L(" · 未重发"," · not re-sent")}</span>`:""}</td>
     <td>${i.checked?`<span class="tag ok">✓</span>`:`<span class="tag warn">${L("未检查","Not checked")}</span>`}</td>
-    <td>${signedOf(i)?`<span class="tag ok">✓</span>`:i.sent_at?"":`<span class="tag warn">${L("未签","Unsigned")}</span>`}</td>
+    <td>${signStale(i)?`<span class="tag warn">${L("要重签","Re-sign")}</span>`:signedOf(i)?`<span class="tag ok">✓</span>`:i.sent_at?"":`<span class="tag warn">${L("未签","Unsigned")}</span>`}</td>
     <td>${i.sent_at?`${dmy(i.sent_at)} ${esc(i.sent_via||"")}`:`<span class="tag mute">${L("未发","Not sent")}</span>`}</td><td>${dmy(lastPayDate(i))}</td></tr>`).join("")}</tbody>
   <tfoot><tr><td colspan="6">${L("合计","Total")} ${rows.length}</td><td class="num">${money(sum(rows,i=>i.amount_before_gst))}</td><td class="num">${money(sum(rows,i=>i.gst_amount))}</td>
     <td class="num">${money(sum(rows,i=>i.total))}</td><td class="num">${money(sum(rows,paidOf))}</td><td class="num">${money(sum(rows,balOf))}</td><td colspan="6"></td></tr></tfoot></table></div>`
@@ -1881,8 +1884,11 @@ async function saveInv(){
       const edits=["invoice_no","invoice_date","due_date","customer_po","our_ref","description","amount_before_gst","gst_amount","total","remark"]
         .filter(k=>String(old[k]??"")!==String(row[k]??"")&&!(typeof row[k]==="number"&&Number(old[k])===row[k])).map(k=>({invoice_id:id,field:k,old_value:String(old[k]??""),new_value:String(row[k]??""),reason}));
       if(!edits.length)edits.push({invoice_id:id,field:"lines",old_value:"",new_value:"",reason});
+      if(old.sent_at&&confirm(L(`这张已经发给客户了。\nPDF 要显示 AMENDED 和 Amendment Notice 吗？\n\n确定 = 显示（改了金额 / 内容）\n取消 = 不显示（改错字之类的小改动）`,`This invoice was already sent.\nShow AMENDED and an Amendment Notice on the PDF?`))){
+        const note=prompt(L("Amendment Notice 的原因（英文，会印在 PDF 上；可以留空）：","Reason for the Amendment Notice (printed on the PDF; may be blank):"),old.amend_note||reason);
+        if(note!==null)Object.assign(row,{amended:true,amend_note:note.trim()||null,amended_at:new Date().toISOString(),amend_from_total:old.amended&&old.amend_from_total!=null?old.amend_from_total:old.total,amend_sent_at:null})}
       const e1=await sb.from("invoice_edits").insert(edits);if(e1.error)return w.textContent=e1.error.message}
-    const{error}=await sb.from("invoices").update(row).eq("id",id);if(error)return w.textContent=error.message;
+    const{error}=await sb.from("invoices").update(row).eq("id",id);if(error)return w.textContent=amendSqlMsg(error.message);
     await sb.from("invoice_lines").delete().eq("invoice_id",id);
   }else{const{data,error}=await sb.from("invoices").insert(row).select().single();if(error)return w.textContent=error.message;id=data.id}
   const e2=await sb.from("invoice_lines").insert(f.lines.map((l,i)=>({invoice_id:id,line_no:i+1,description:l.description||"",qty:l.qty,unit:l.unit||null,unit_price:l.unit==="hrs"||(isL3()&&l.unit_price==null)?null:(l.unit_price??l.amount),amount:Number(l.amount)||0})));if(e2.error)return w.textContent=e2.error.message;
@@ -1925,6 +1931,11 @@ function invDetailView(id){
   ${signBox(i)}
   <div class="kv" style="margin-top:14px"><div><span>${L("检查","Checked")}</span>${i.checked?`✓ ${i.checked_at?dmy(i.checked_at.slice(0,10)):""}`:L("未检查","Not yet")}</div>
     <div><span>${L("发送","Sent")}</span>${i.sent_at?`${dmy(i.sent_at)} · ${esc(i.sent_via||"")}`:L("未发送","Not sent")}</div>
+    ${i.sent_at||i.amended?`<div><span>AMENDED</span><label class="chk"><input type="checkbox" ${i.amended?"checked":""} onchange="setAmended('${id}',this.checked)">${L("PDF 显示 AMENDED","Show AMENDED on PDF")}</label>
+      ${i.amended?`<div class="mute" style="font-size:13px;margin-top:4px">${dmy(String(i.amended_at||"").slice(0,10))}${i.amend_from_total!=null?` · ${L("原本","original")} $${money(i.amend_from_total)} → $${money(i.total)}`:""}${i.amend_note?` · ${esc(i.amend_note)}`:""}
+        · <a href="#" onclick="setAmended('${id}',true,1);return false">${L("改 notice","Edit notice")}</a>
+        ${i.amend_sent_at?` · <span class="tag ok">${L("已重发","Re-sent")} ${dmy(i.amend_sent_at)}</span>`:` · <span class="tag warn">${L("还没重发","Not re-sent")}</span>`}
+        ${signStale(i)?` · <span class="tag warn">${L("签名是旧版，要重签","Signed copy is the old version")}</span>`:""}</div>`:""}</div>`:""}
     <div><label class="chk"><input type="checkbox" ${i.interest_enabled?"checked":""} onchange="setInterest('${id}',this.checked)">${L("逾期收 interest","Charge overdue interest")}</label></div></div>
   ${i.remark?`<h3>Remark</h3><p style="white-space:pre-line">${esc(i.remark)}</p>`:""}
   <h3>${L("收款记录","Payments")}</h3>${allocs.length?`<ul>${allocs.map(a=>`<li>${dmy(a.p.payment_date)} · $${money(a.amount)} · ${esc(a.p.method||"")} ${esc(a.p.reference||"")}</li>`).join("")}</ul>`:`<p class="mute">${L("还没有收款","No payments yet")}</p>`}
@@ -1933,6 +1944,15 @@ function invDetailView(id){
   <h3>${L("修改记录","Change log")}</h3>${S.modal.edits==null?`<p class="mute">…</p>`:S.modal.edits.length?`<div class="tw"><table><thead><tr><th>${L("时间","When")}</th><th>${L("栏位","Field")}</th><th>${L("旧","Old")}</th><th>${L("新","New")}</th><th>${L("原因","Reason")}</th></tr></thead><tbody>
     ${S.modal.edits.map(e=>`<tr><td>${dmy(e.created_at.slice(0,10))}</td><td>${esc(e.field)}</td><td class="wrap">${esc(e.old_value)}</td><td class="wrap">${esc(e.new_value)}</td><td class="wrap">${esc(e.reason)}</td></tr>`).join("")}</tbody></table></div>`:`<p class="mute">${L("没有修改记录","No changes")}</p>`}`;
 }
+const amendSqlMsg=m=>/amend/i.test(m)?L("还没跑 AMENDED 的 SQL（Supabase → SQL Editor）。","Run the AMENDED SQL in Supabase first.")+" "+m:m;
+const signStale=i=>{const sg=signedOf(i);return!!(i.amended&&sg&&i.amended_at&&String(sg.created_at||"")<String(i.amended_at))};
+async function setAmended(id,on,edit){const i=invById(id);let row;
+  if(on){const last=(S.modal?.edits||[]).find(e=>e.invoice_id===id&&e.reason),lastTot=(S.modal?.edits||[]).filter(e=>e.invoice_id===id&&e.field==="total").at(-1);
+    const note=prompt(L("Amendment Notice 的原因（英文，会印在 PDF 上；可以留空）：","Reason for the Amendment Notice (printed on the PDF; may be blank):"),i.amend_note||last?.reason||"");if(note===null){render();return}
+    const o=prompt(L("原本的金额（含 GST），PDF 会写 Original amount → Amended amount：","Original amount (incl. GST):"),String(i.amend_from_total??lastTot?.old_value??i.total));if(o===null){render();return}
+    row={amended:true,amend_note:note.trim()||null,amend_from_total:numOr(o,Number(i.total))};if(!edit||!i.amended_at)Object.assign(row,{amended_at:new Date().toISOString(),amend_sent_at:null})}
+  else row={amended:false};
+  const{error}=await sb.from("invoices").update(row).eq("id",id);if(error){toast(amendSqlMsg(error.message));render();return}await loadAll();render()}
 async function toggleChecked(id){const i=invById(id);const{error}=await sb.from("invoices").update({checked:!i.checked,checked_at:i.checked?null:new Date().toISOString()}).eq("id",id);
   if(error)return toast(error.message);await loadAll();render()}
 async function setInterest(id,on){const{error}=await sb.from("invoices").update({interest_enabled:on}).eq("id",id);if(error)return toast(error.message);await loadAll();render()}
@@ -1947,9 +1967,10 @@ function openOut(via,c,subj,text){if(via==="WhatsApp"){if(!c.whatsapp)toast(L("�
 async function sendInv(id,via){const i=invById(id),c=custOf(i.customer_id),s=settingsOf(i.company);
   if(!signedOf(i)&&!confirm(L("这张 invoice 还没上传 Chris 签名的第一页。确定现在就发？","No signed page uploaded for this invoice yet. Send anyway?")))return;
   const text=`Dear Team,\n\nPlease find the attached invoice for your reference.\n\n\nThank you.\n\nBest regards,\n${signName(s)}`;
-  openOut(via,c,`Tax Invoice For ${i.invoice_no}`,text);
+  if(i.amended&&signStale(i)&&!confirm(L("这张已改成 AMENDED，但上传的签名第一页是旧版。确定现在就发？","The signed page is the old version. Send anyway?")))return;
+  openOut(via,c,`${i.amended?"Amended ":""}Tax Invoice For ${i.invoice_no}`,i.amended?text.replace("Please find the attached invoice","Please find the attached amended invoice, which supersedes the earlier copy,"):text);
   setTimeout(async()=>{if(confirm(L(`已经用 ${via} 发送了吗？按确定记录今天的发送日期。\n（PDF 请自己附上）`,`Sent by ${via}? Press OK to record today's date.\n(Attach the PDF yourself)`))){
-    const{error}=await sb.from("invoices").update({sent_at:today(),sent_via:via}).eq("id",id);if(error)return toast(error.message);await loadAll();render()}},900)}
+    const{error}=await sb.from("invoices").update({sent_at:today(),sent_via:via,...(i.amended?{amend_sent_at:today()}:{})}).eq("id",id);if(error)return toast(error.message);await loadAll();render()}},900)}
 async function remind(id,via){const i=invById(id),c=custOf(i.customer_id),s=settingsOf(i.company),od=overdueDays(i),intr=interestOf(i);
   const text=`Dear Team,\n\nThis is a friendly reminder that invoice ${i.invoice_no} dated ${dmy(i.invoice_date)} has an outstanding balance of $${money(balOf(i))}${od?`, overdue by ${od} days (due ${dmy(i.due_date)})`:`, due on ${dmy(i.due_date)}`}.${intr?`\nInterest at 1.5% per month applies: $${money(intr)} to date.`:""}\n\nKindly arrange payment at your earliest convenience. Please ignore this message if payment has been made.\n\nThank you.\n\nBest regards,\n${signName(s)}`;
   openOut(via,c,`Payment Reminder For ${i.invoice_no}`,text);
@@ -3097,13 +3118,18 @@ function toBlock(c){const ad=String(c.address||"").split("\n").map(x=>x.trim()).
   return `<table class="to"><tr><td>To</td><td>: <b>${esc(c.name||"")}</b></td></tr>${ad.map(a=>`<tr><td></td><td>&nbsp;&nbsp;<b>${esc(a)}</b></td></tr>`).join("")}
   <tr><td>Tel</td><td>: ${esc(c.tel||"")}</td></tr><tr><td>Fax</td><td>: ${esc(c.fax||"")}</td></tr><tr><td>Attn</td><td>: ${esc(c.attention||"Accounts Department")}</td></tr></table>`}
 function payFoot(s){return `<div class="foot"><div><p>Payment should be made by crossed cheque in favour of</p><p><b>${esc(payeeOf(s))}</b></p><p style="margin:0"><b>Bank Transfer : ${esc(s.bank||"")}</b></p></div><div class="sig">Authorised Signature</div></div>`}
+/* AMENDED：PDF / Excel 的 Amendment Notice */
+function amendText(inv,plain){const b=t=>plain?t:`<b>${t}</b>`,e=plain?String:esc,o=inv.amend_from_total,diff=o!=null&&o!==""&&Math.abs(Number(o)-Number(inv.total))>0.005;
+  return `${b("AMENDMENT NOTICE")}: This amended tax invoice supersedes Invoice No. ${e(inv.invoice_no)} dated ${dmy(inv.invoice_date)} previously issued.`+
+    (diff?` Original amount: $${money(o)} · Amended amount: $${money(inv.total)} (incl. GST).`:"")+(inv.amend_note?` Reason: ${e(String(inv.amend_note).trim().replace(/\.$/,""))}.`:"")}
 function invoiceHTML(inv,hasBd){const s=settingsOf(inv.company),c=custOf(inv.customer_id),l3=coOf(s)==="L3H",lines=S.d.invoice_lines.filter(l=>l.invoice_id===inv.id).sort((a,b)=>(a.line_no||0)-(b.line_no||0));
   const td=Number(c.payment_terms_days),terms=td===0?(l3?"COD":"C.O.D"):`${c.payment_terms_days??30} ${l3?"Days":"days"}`;
   const mg=l3&&!inv.project&&!isMachInv(inv)&&!isCHC(inv.customer_id);
   const meta=mg?[["No",inv.invoice_no],["D.O. No",""],["Your PO No",inv.customer_po||""],["Terms",td===0?"C.O.D":terms],["Date",dmy(inv.invoice_date)]]:[["Invoice No.",inv.invoice_no],["Our Ref No.",inv.our_ref||""],["Terms",terms],["Date",dmy(inv.invoice_date)],["Your PO",inv.customer_po||""]];
   const desc=t=>{const xs=String(t||"").split("\n").filter(x=>x.trim()!=="");if(mg&&xs[0]==="Lorry Crane Transport Charges")return xs.map(x=>`<div class="d1"><span class="ul">${esc(x)}</span></div>`).join("");return xs.map((x,i)=>l3?(i===0&&xs.length>1?`<div class="d1"><span class="ul">${esc(x)}</span></div>`:`<div class="d2">${esc(x)}</div>`):`<div class="d1"><span class="ul">${esc(x)}</span></div>`).join("")};
-  return `<div class="doc pg inv">${coHeader(s)}<div class="ttl">Tax Invoice</div>
+  return `<div class="doc pg inv">${coHeader(s)}<div class="ttl">Tax Invoice${inv.amended?" (AMENDED)":""}</div>
   <div class="hdr">${toBlock(c)}<table class="meta">${meta.map(([k,v])=>`<tr><td>${k}</td><td>:</td><td>${esc(v)}</td></tr>`).join("")}</table></div>
+  ${inv.amended?`<div class="amend">${amendText(inv)}</div>`:""}
   <div class="body"><table class="lines"><colgroup><col style="width:10mm"><col><col style="width:13mm"><col style="width:13mm"><col style="width:28mm"><col style="width:31mm"></colgroup>
   <thead><tr><th>No.</th><th class="c">Description</th><th class="c">Qty</th><th class="c">UOM</th><th class="r">Unit Price $</th><th class="r">Total Amount $</th></tr></thead><tbody>
   ${inv.description?`<tr><td></td><td ${l3?'colspan="5" style="white-space:nowrap"':""}>${String(inv.description).split("\n").filter(Boolean).map(x=>`<div class="d1"><span class="ul">${esc(x)}</span></div>`).join("")}</td>${l3?"":`<td colspan="4"></td>`}</tr>`:""}
