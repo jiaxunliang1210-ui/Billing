@@ -1142,7 +1142,7 @@ function pvView(){const rows=sortRows("pv",(S.d.pvs||[]).filter(p=>p.company===S
   :`<div class="panel empty">${L("这段时间没有 PV。按「新 PV」开始。","No PVs in this period.")}</div>`}`}
 function supView(){const keys=["supplier_invoices","diesel_surcharges","suppliers"],cur=S.sub.sup;
   const tabs=`<div class="sub">${keys.map(k=>`<button class="${k===cur?"on":""}" onclick="S.sub.sup='${k}';S.gEdit=null;S.dirty=false;render()">${L(...ENT[k].label)}</button>`).join("")}<button class="${cur==="pv"?"on":""}" onclick="S.sub.sup='pv';S.gEdit=null;S.dirty=false;render()">💳 ${L("付款 / PV","Payments / PV")}</button></div>`;
-  return tabs+(cur==="pv"?pvView():genView([cur],"sup"))}
+  return `<div class="actions" style="margin:0 0 6px"><button class="btn sec" onclick="bulkUp()">⬆ ${L("批量上传 Excel（供应商 / 客户报告）","Bulk upload Excel")}</button></div>`+tabs+(cur==="pv"?pvView():genView([cur],"sup"))}
 /* ---- 新 PV / 修改 ---- */
 let PVF=null;
 function pvOv(html){let ov=$("#photoOv");if(!ov){ov=document.createElement("div");ov.id="photoOv";document.body.appendChild(ov);ov.onclick=e=>{if(e.target===ov||e.target.closest("[data-a=x]"))ov.remove()}}
@@ -1332,6 +1332,73 @@ async function mepArap(){const{invs,sis}=MEP.d,l3=S.company==="L3H";try{await lo
     si.payment_date?`paid on ${dmy(si.payment_date)}${p?.bank_ref?" - "+p.bank_ref:""}`:"",si.remark||"",gstPeriod(si.invoice_date)]}),[6,7,8],5);
   [5,12,22,34,44,16,12,14,26,20,18].forEach((w,i)=>s2.getColumn(i+1).width=w);
   await xlDownload(wb,`${S.company}_AP-AR_SUMMARY_${monTag(MEP.m+"-01").replace(" ","_")}.xlsx`)}catch(e){toast(e.message)}}
+
+/* ================= 批量上传 Excel（供应商 receivable 报告 → AP；客户 payable 报告 → AR） ================= */
+let BU=null;
+const gstRateOn=d=>d<"2023-01-01"?7:d<"2024-01-01"?8:9;
+function parseRecv(wb,file){const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:"",raw:true});
+  const hi=rows.slice(0,25).findIndex(r=>r.some(c=>/^invoice number$/i.test(String(c).trim()))&&r.some(c=>/last payment date/i.test(String(c))));if(hi<0)return null;
+  const H=rows[hi].map(c=>String(c).trim().toLowerCase()),col=x=>H.findIndex(h=>h===x||h.startsWith(x));
+  const C={no:col("invoice number"),date:col("invoice date"),due:col("due date"),lp:col("last payment date"),ref:col("reference"),gross:col("gross"),paid:col("payments"),bal:col("balance"),src:col("source")};
+  const out=[];for(const r of rows.slice(hi+1)){const no=String(r[C.no]??"").trim(),d=toYMD(r[C.date]);if(!no||!d)continue;const cn=/credit/i.test(String(r[C.src]||""));
+    const g=numOr(r[C.gross],0),sgn=cn&&g>0?-1:1;out.push({no,key:normNo(no),date:d,due:toYMD(r[C.due]),lp:toYMD(r[C.lp]),ref:String(r[C.ref]||"").trim(),total:r2(sgn*g),paid:r2(sgn*numOr(r[C.paid],0)),bal:r2(sgn*numOr(r[C.bal],0)),cn})}
+  const ds=out.map(x=>x.date).sort();return{kind:"AP",file,title:String(rows[1]?.[0]||"").trim(),rows:out,from:ds[0],to:ds.at(-1)}}
+function bulkUp(){BU={files:[],take:new Set()};buRender()}
+async function buFiles(input){const fs=[...input.files];input.value="";
+  for(const f of fs){try{const wb=XLSX.read(await f.arrayBuffer(),{cellDates:true});let r=parseRecv(wb,f.name);
+      if(!r){try{const rp=parseRep(wb,f.name);r={kind:"AR",file:f.name,title:rp.cust,rep:rp}}catch(e){}}
+      if(!r){alert(L(`${f.name}：看不懂这个文件（要 Xero 的「Approved, sent and paid」或「Payable Invoice Detail」报告）`,`${f.name}: unsupported file`));continue}
+      BU.files=BU.files.filter(x=>x.file!==f.name);BU.files.push(r)}catch(e){alert(f.name+": "+e.message)}}
+  buAnalyse();buRender()}
+function buAnalyse(){for(const F of BU.files){
+  if(F.kind==="AP"){const ck=normCo(F.title);let best=null,bs=0;for(const s of S.d.suppliers){const v=simCo(ck,normCo(s.name));if(v>bs){bs=v;best=s}}F.sup=bs>=0.86?best:null;
+    const mine=F.sup?S.d.supplier_invoices.filter(si=>si.supplier_id===F.sup.id&&(!si.charged_to||si.charged_to===S.company)):[];
+    const an=x=>normNo(x).replace(/[^A-Z0-9]/g,""),by=new Map(mine.map(si=>[normNo(si.invoice_no),si])),by2=new Map(mine.map(si=>[an(si.invoice_no),si]));const seen=new Set();
+    F.upd=[];F.already=[];F.partial=[];F.add=[];F.unpaidRep=[];
+    for(const r of F.rows){const si=by.get(r.key)||by2.get(an(r.no))||null;if(si)seen.add(si.id);
+      if(!si){F.add.push(r);continue}
+      if(Math.abs(r.bal)>0.005){if(Math.abs(r.paid)>0.005)F.partial.push({r,si});else F.unpaidRep.push({r,si});continue}
+      if(si.payment_date){F.already.push({r,si});continue}F.upd.push({r,si})}
+    F.notInRep=mine.filter(si=>!seen.has(si.id)&&!si.payment_date&&(!F.from||si.invoice_date>=F.from)).sort((a,b)=>String(a.invoice_date).localeCompare(String(b.invoice_date)));
+    if(!F._init){F.add.forEach(r=>BU.take.add(F.file+"|"+r.key));F._init=1}}
+  else{const rp=F.rep;const mine=S.d.invoices.filter(i=>i.company===S.company&&simCo(normCo(custName(i.customer_id)),rp.ck)>=0.86);
+    F.upd=[];F.already=0;F.appr=[];F.notInRep=[];
+    for(const i of mine){const e=rp.map.get(mkNo(i.invoice_no))||(/A$/i.test(String(i.invoice_no).trim())?rp.map.get(mkNo(String(i.invoice_no).trim().slice(0,-1))):null);
+      if(!e||!/^(paid|approved)$/i.test(e.status)){if(balOf(i)>0.005)F.notInRep.push(i);continue}
+      if(/paid/i.test(e.status)){if(balOf(i)>0.005)F.upd.push({i,e});else F.already++}else F.appr.push({i,e})}}}}
+function buRender(){const list=(arr,f,max=60)=>arr.length?`<div class="tw" style="max-height:220px;overflow:auto"><table><tbody>${arr.slice(0,max).map(f).join("")}${arr.length>max?`<tr><td colspan="6" class="mute">… +${arr.length-max}</td></tr>`:""}</tbody></table></div>`:"";
+  const det=(t,n,inner,open)=>n?`<details ${open?"open":""} style="margin:6px 0"><summary><b>${t}</b> (${n})</summary>${inner}</details>`:"";
+  const body=BU.files.map(F=>F.kind==="AP"?`<div class="panel" style="margin:8px 0"><h3 style="margin-top:0">AP · ${esc(F.title)} <span class="mute" style="font-size:12px">${esc(F.file)} · ${F.rows.length} ${L("张","rows")}</span> <a href="#" onclick="event.preventDefault();BU.files=BU.files.filter(x=>x.file!=='${esc(F.file)}');buRender()">✕</a></h3>
+      <p style="font-size:13px;margin:2px 0">${L("对到供应商","Supplier")}：${F.sup?`<b>${esc(F.sup.name)}</b>`:`<span class="tag warn">${L(`系统没有这个供应商，会新开「${esc(F.title)}」`,`New supplier will be created`)}</span>`}</p>
+      <ul style="margin:4px 0 4px 18px;font-size:14px"><li>${L("标已付（付款日期 = Last Payment Date）","Mark paid")}: <b>${F.upd.length}</b>（$${money(sum(F.upd,x=>x.r.total))}）</li><li>${L("系统已经是已付，跳过","Already paid")}: ${F.already.length}</li>
+        <li>${L("报告有、系统没有（打勾的会新增）","In report, not in system (ticked = add)")}: ${F.add.length}</li><li>${L("部分付款（不会改，看一下）","Partial (not changed)")}: ${F.partial.length}</li><li>${L("系统有、报告没有、还没付","In system, not in report, unpaid")}: ${F.notInRep.length}</li></ul>
+      ${det(L("报告有、系统没有","Not in system"),F.add.length,list(F.add,r=>`<tr><td><input type="checkbox" ${BU.take.has(F.file+"|"+r.key)?"checked":""} onchange="BU.take[this.checked?'add':'delete']('${esc(F.file)}|${r.key}')"></td><td>${dmy(r.date)}</td><td>${esc(r.no)}${r.cn?` <span class="tag CN">CN</span>`:""}</td><td>${esc(r.ref)}</td><td class="num">$${money(r.total)}</td><td>${r.lp&&Math.abs(r.bal)<0.005?L(`已付 ${dmy(r.lp)}`,`Paid ${dmy(r.lp)}`):""}</td></tr>`,200),1)}
+      ${det(L("部分付款","Partial"),F.partial.length,list(F.partial,x=>`<tr><td>${esc(x.r.no)}</td><td class="num">$${money(x.r.total)}</td><td>${L("已付","paid")} $${money(x.r.paid)}</td><td>${L("余","bal")} $${money(x.r.bal)}</td></tr>`),1)}
+      ${det(L("系统有、报告没有、还没付","In system, not in report"),F.notInRep.length,list(F.notInRep,si=>`<tr><td>${dmy(si.invoice_date)}</td><td>${esc(si.invoice_no)}</td><td class="num">$${money(si.total)}</td></tr>`))}
+      ${det(L("会标已付的","Will mark paid"),F.upd.length,list(F.upd,x=>`<tr><td>${esc(x.si.invoice_no)}</td><td>${dmy(x.si.invoice_date)}</td><td class="num">$${money(x.si.total)}</td><td>→ ${L("付","paid")} ${dmy(x.r.lp||x.r.date)}</td>${Math.abs(Number(x.si.total)-x.r.total)>0.02?`<td><span class="tag warn">${L("金额不同","amount differs")}: $${money(x.r.total)}</span></td>`:""}</tr>`))}</div>`
+    :`<div class="panel" style="margin:8px 0"><h3 style="margin-top:0">AR · ${esc(F.title)} <span class="mute" style="font-size:12px">${esc(F.file)}</span> <a href="#" onclick="event.preventDefault();BU.files=BU.files.filter(x=>x.file!=='${esc(F.file)}');buRender()">✕</a></h3>
+      <ul style="margin:4px 0 4px 18px;font-size:14px"><li>${L("报告说 Paid、系统还没收 → 记收款","Paid in report → record payment")}: <b>${F.upd.length}</b>（$${money(sum(F.upd,x=>balOf(x.i)))}）</li><li>${L("系统已经收了，跳过","Already received")}: ${F.already}</li>
+        <li>${L("报告说还没付（Approved）","Approved (unpaid) in report")}: ${F.appr.length}（$${money(sum(F.appr,x=>balOf(x.i)))}）</li><li>${L("系统未收、报告里没有","Unpaid in system, not in report")}: ${F.notInRep.length}</li></ul>
+      ${det(L("系统未收、报告里没有","Not in report"),F.notInRep.length,list(F.notInRep,i=>`<tr><td>${dmy(i.invoice_date)}</td><td>${esc(i.invoice_no)}</td><td class="num">$${money(balOf(i))}</td></tr>`),1)}</div>`).join("");
+  const n=sum(BU.files,F=>F.kind==="AP"?F.upd.length+F.add.filter(r=>BU.take.has(F.file+"|"+r.key)).length:F.upd.length);
+  pvOv(`<div class="pvhead"><h3 style="margin:0">⬆ ${L("批量上传 Excel","Bulk upload Excel")} · ${S.company}</h3><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
+  <p class="mute" style="font-size:13px;margin-top:0">${L("可以放：供应商的 Xero「Approved, sent and paid」（更新 AP 付款），或客户的「Payable Invoice Detail」（更新 AR 收款）。可以一次选几个文件。上传两次也不会重复记。","Supplier receivable reports update AP; customer payable reports update AR. Multiple files OK.")}</p>
+  <label class="btn file">⬆ ${L("选 Excel 文件","Choose Excel files")}<input type="file" accept=".xlsx,.xls" multiple hidden onchange="buFiles(this)"></label>
+  ${body}
+  ${BU.files.length?`<div class="actions" style="margin-top:10px"><button class="btn" id="buGo" ${n?"":"disabled"} onclick="buApply()">${L(`确认更新（${n} 张）`,`Apply (${n})`)}</button></div><p id="aparProg" class="mute"></p>`:""}`)}
+async function buApply(){const b=$("#buGo");if(b)b.disabled=true;const rep=[];
+  try{for(const F of BU.files){
+    if(F.kind==="AP"){let sup=F.sup;if(!sup){const c=await insChunks("suppliers",[{name:F.title,payment_terms_days:30}],1,"*");sup=c[0]}
+      for(const x of F.upd){const{error}=await sb.from("supplier_invoices").update({payment_date:x.r.lp||x.r.date,status:"Paid"}).eq("id",x.si.id);if(error)throw error}
+      const adds=F.add.filter(r=>BU.take.has(F.file+"|"+r.key)).map(r=>{const rt=gstRateOn(r.date),before=r2(r.total/(1+rt/100));
+        return{supplier_id:sup.id,charged_to:S.company,invoice_no:r.no,invoice_date:r.date,due_date:r.due||r.date,description:r.ref||null,amount_before_gst:before,gst_amount:r2(r.total-before),total:r.total,
+          payment_date:Math.abs(r.bal)<0.005?(r.lp||r.date):null,status:Math.abs(r.bal)<0.005?"Paid":"Unpaid",remark:L(`从 ${F.file} 新增`,`Added from ${F.file}`).slice(0,200)}});
+      if(adds.length)await insChunks("supplier_invoices",adds,200);rep.push(`AP ${F.title}: ${L("标已付","paid")} ${F.upd.length}，${L("新增","added")} ${adds.length}`)}
+    else{if(!F.upd.length)continue;const rows=F.upd.map(x=>({inv:x.i,row:{company:S.company,customer_id:x.i.customer_id,payment_date:x.e.lp||x.i.invoice_date,amount:balOf(x.i),method:"Bank Transfer",reference:L(`客户报告显示 Paid（${F.file}）`,`Customer report: Paid (${F.file})`).slice(0,200)}}));
+      const pays=await insChunks("payments",rows.map(x=>x.row),200,"id");await insChunks("payment_allocations",pays.map((p,k)=>({payment_id:p.id,invoice_id:rows[k].inv.id,amount:rows[k].row.amount})),500);
+      await loadAll();await syncStatuses(rows.map(x=>x.inv.id));rep.push(`AR ${F.title}: ${L("记收款","payments")} ${rows.length}`)}}
+    await loadAll();BU.files.forEach(F=>F._init=1);buAnalyse();buRender();render();alert(L("更新完成\n","Done\n")+rep.join("\n"))}
+  catch(e){alert(e.message);await loadAll();buAnalyse();buRender();render()}}
 
 /* ---- 批量补记收款（旧单） ---- */
 let BP=null;
@@ -2210,6 +2277,7 @@ async function aparRepFiles(input){const fs=[...input.files];input.value="";
 function aparPanel(){return `<div class="panel"><h2>${L("导入你的 AP-AR Summary Excel","Import your AP-AR Summary Excel")}</h2>
   <p class="mute" style="font-size:14px;margin-top:0">${L("直接上传你平时用的 AP-AR SUMMARY 文件。AR 读「Sales invoices」，AP 读「Tax Invoice 23」（没有就读「TAX INVOICES」）。Invoice No 已经在系统里的会跳过（不分大小写、空格）。Payment Received 有写 paid / received / 日期 的当作已收。导入前会先给你看结果。","Upload your usual AP-AR SUMMARY file. AR reads 'Sales invoices', AP reads 'Tax Invoice 23' (or 'TAX INVOICES'). Invoice numbers already in the system are skipped. You'll see a preview first.")}</p>
   <label class="btn file">⬆ ${L("选 AP-AR Summary 文件","Choose AP-AR Summary file")}<input type="file" accept=".xlsx,.xlsm,.xls" hidden onchange="aparFile(this)"></label>
+  <button class="btn sec" onclick="bulkUp()">⬆ ${L("批量上传供应商 / 客户报告（更新付款）","Bulk upload supplier / customer reports")}</button>
   <div id="aparOut" style="margin-top:12px"></div></div>`}
 async function aparFile(input){const file=input.files[0];input.value="";if(!file)return;const box=$("#aparOut");box.innerHTML=L("读取中…","Reading…");
   try{const wb=XLSX.read(await file.arrayBuffer(),{cellDates:true});const find=rx=>wb.SheetNames.find(n=>rx.test(n.trim()));
