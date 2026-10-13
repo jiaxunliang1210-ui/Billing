@@ -2904,15 +2904,52 @@ async function upSigned(id,input){const file=input.files[0];input.value="";if(!f
 function signBox(i){const sg=signedOf(i),dos=S.modal?.dos||S.d.delivery_orders.filter(d=>d.invoice_id===i.id),noPic=dos.filter(d=>!doPhotos(d.id).length),share=!!navigator.canShare;
   return `<div class="panel" style="margin:14px 0 4px;padding:14px 16px"><h3 style="margin-top:0">${L("寄客户版本","Customer copy")}</h3>
   <div class="kv"><div><span>${L("签名页","Signed page")}</span>${sg?`<b class="tag ok" style="display:inline-block;width:auto">✓</b> <a href="#" onclick="openAtt('${sg.id}');return false">${dmy(String(sg.created_at||today()).slice(0,10))}</a>`:`<b class="tag warn" style="display:inline-block;width:auto">${L("还没上传","Not uploaded")}</b>`}</div>
-    <div><span>${L("DO 照片","DO photos")}</span>${dos.length?(noPic.length?`<b class="tag warn" style="display:inline-block;width:auto">${dos.length-noPic.length} / ${dos.length}</b> <em class="mute" style="font-size:12px;font-style:normal">${L("缺：","Missing: ")}${noPic.slice(0,6).map(d=>esc(d.do_no)).join(", ")}${noPic.length>6?" …":""}</em>`:`<b class="tag ok" style="display:inline-block;width:auto">${dos.length} / ${dos.length}</b>`):`<em class="mute" style="font-style:normal">${S.modal?.dos==null?L("载入中…","Loading…"):"—"}</em>`}</div>${poRow(i)}</div>
+    <div><span>${L("DO 照片","DO photos")}</span>${dos.length?(noPic.length?`<a href="#" title="${L("预览 DO","Preview DOs")}" onclick="doPreview('${i.id}');return false"><b class="tag warn" style="display:inline-block;width:auto">${dos.length-noPic.length} / ${dos.length}</b></a> <em class="mute" style="font-size:12px;font-style:normal">${L("缺：","Missing: ")}${noPic.slice(0,6).map(d=>esc(d.do_no)).join(", ")}${noPic.length>6?" …":""}</em>`:`<a href="#" title="${L("预览 DO","Preview DOs")}" onclick="doPreview('${i.id}');return false"><b class="tag ok" style="display:inline-block;width:auto">${dos.length} / ${dos.length}</b></a>`):`<em class="mute" style="font-style:normal">${S.modal?.dos==null?L("载入中…","Loading…"):"—"}</em>`}</div>${poRow(i)}</div>
   <div class="actions" style="margin-top:10px"><label class="btn ${sg?"sec":""} file">✍️ ${sg?L("换签名页","Replace signed page"):L("上传签名页（PDF / 照片）","Upload signed page (PDF / photo)")}<input type="file" hidden accept="application/pdf,image/*" onchange="upSigned('${i.id}',this)"></label>
     <label class="btn sec file">📎 ${poDocsOf(i).src==="own"?L("加 / 换 PO","Add PO"):L("上传 PO","Upload PO")}<input type="file" hidden accept="application/pdf,image/*" onchange="upPO('${i.id}',this)"></label>
+    ${dos.length?`<button class="btn sec" onclick="doPreview('${i.id}')">👁 ${L("预览 DO","Preview DOs")}</button>`:""}
+    <button class="btn sec" onclick="custPreview('${i.id}')">👁 ${L("预览寄客户版本","Preview customer copy")}</button>
     <button class="btn ${sg?"":"sec"}" onclick="custCopy('${i.id}')">⬇ ${L("下载寄客户版本","Download customer copy")}</button>
     ${sg?`<button class="btn sec" onclick="signedOnlyPdf('${i.id}')">✍️ ${L("只下载签名页","Signed page only")}</button>`:""}
     <button class="btn sec" onclick="doOnlyPdf('${i.id}')">🧾 ${L(`只下载 DO（${S.doPerPage||6} 张一页）`,`DOs only (${S.doPerPage||6}/page)`)}</button>
     ${share?`<button class="btn sec" onclick="custCopy('${i.id}',1)">📤 ${L("分享到 WhatsApp / Email","Share to WhatsApp / Email")}</button>`:""}</div>
   <p class="mute" style="font-size:13px;margin:6px 0 0">${L("会合成一个 PDF：签名的第一页 + Summary + PO（有的话）+ 所有 DO 照片。","One PDF: signed first page + summary + PO (if any) + all DO photos.")}
     &nbsp; ${L("DO 每页","DOs per page")} <select onchange="S.doPerPage=this.value;setPref('doPerPage',this.value);render()">${[4,6,8].map(n=>`<option ${Number(S.doPerPage||6)===n?"selected":""}>${n}</option>`).join("")}</select></p></div>`}
+
+/* ---- 👁 预览 DO 照片 / 寄客户版本 ---- */
+let DOPV=null;
+async function doPreview(id,k,all){const inv=invById(id);
+  if(!DOPV||DOPV.id!==id||(k==null&&all==null)){const dos=S.modal?.dos||await fetchAll(()=>sb.from("delivery_orders").select("*").eq("invoice_id",id).order("do_date").order("start_time"));
+    const items=[];for(const d of [...dos].sort((a,b)=>String(a.do_date).localeCompare(String(b.do_date))||String(a.start_time||"").localeCompare(String(b.start_time||"")))){const ph=doPhotos(d.id);
+      if(!ph.length)items.push({d,a:null});else ph.forEach((a,n)=>items.push({d,a,n,of:ph.length}))}
+    DOPV={id,items,k:0,all:false,url:{}}}
+  if(k!=null)DOPV.k=Math.max(0,Math.min(DOPV.items.length-1,k));if(all!=null)DOPV.all=all;
+  const P=DOPV,it=P.items;if(!it.length)return toast(L("这张 invoice 没有 DO","No DOs on this invoice"));
+  const url=async a=>{if(!a)return null;if(P.url[a.id])return P.url[a.id];const{data,error}=await sb.storage.from("attachments").createSignedUrl(a.file_path,900);if(error)throw error;return P.url[a.id]=data.signedUrl};
+  const isPdf=a=>/\.pdf$/i.test(a.file_name||a.file_path||"");
+  const cap=x=>`<b>DO ${esc(x.d.do_no||"")}</b> · ${dmy(x.d.do_date)}${x.d.plate?" · "+esc(x.d.plate):""}${x.of>1?` · ${L("第","p.")}${x.n+1}/${x.of}`:""}`;
+  const view=async(x,h)=>!x.a?`<div class="pvnone" style="min-height:${h?"60vh":"120px"}">${L("这张 DO 没有照片","No photo for this DO")}</div>`
+    :isPdf(x.a)?`<iframe src="${esc(await url(x.a))}" style="width:100%;height:${h?"75vh":"60vh"};border:0;background:#fff;border-radius:6px"></iframe>`
+    :`<img src="${esc(await url(x.a))}" style="max-width:100%;max-height:${h?"75vh":"none"};display:block;margin:0 auto;border-radius:6px;background:#fff">`;
+  try{const miss=it.filter(x=>!x.a).length,nav=`<span class="mute" style="font-size:13px">${it.length} ${L("张","items")}${miss?` · <span class="tag warn">${miss} ${L("张没照片","without photo")}</span>`:""}</span>`;
+    let body;if(P.all){const parts=[];for(const x of it)parts.push(`<div style="margin:0 0 14px"><div style="margin:0 0 4px">${cap(x)}</div>${await view(x,false)}</div>`);body=parts.join("")}
+    else{const x=it[P.k];body=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><button class="btn sec sm" ${P.k?"":"disabled"} onclick="doPreview('${id}',${P.k-1})">‹ ${L("上一张","Prev")}</button>
+        <span style="flex:1;text-align:center">${cap(x)} <span class="mute">（${P.k+1} / ${it.length}）</span></span><button class="btn sec sm" ${P.k<it.length-1?"":"disabled"} onclick="doPreview('${id}',${P.k+1})">${L("下一张","Next")} ›</button></div>${await view(x,true)}
+        <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:8px">${it.map((y,j)=>`<button class="btn sm ${j===P.k?"":"sec"}" onclick="doPreview('${id}',${j})">${esc(y.d.do_no||"?")}${y.a?"":" ⚠"}</button>`).join("")}</div>`}
+    pvOv(`<div class="pvhead"><h3 style="margin:0">👁 DO · ${esc(inv.invoice_no)}</h3>${nav}<span style="flex:1"></span>
+      <button class="btn sm ${P.all?"sec":""}" onclick="doPreview('${id}',null,false)">${L("一张一张","One by one")}</button><button class="btn sm ${P.all?"":"sec"}" onclick="doPreview('${id}',null,true)">${L("全部","All")}</button>
+      <button class="btn sec sm" onclick="doOnlyPdf('${id}')">⬇ ${L("下载 DO PDF","DO PDF")}</button><button class="btn sec sm" data-a="x" onclick="DOPV=null">✕</button></div>${body}`)}
+  catch(e){toast(e.message||String(e))}}
+let CPV=null;
+async function custPreview(id){const inv=invById(id);
+  pvOv(`<div class="pvhead"><h3 style="margin:0">👁 ${L("寄客户版本","Customer copy")} · ${esc(inv.invoice_no)}</h3><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div><p class="mute">${L("正在合成，DO 多的话要等一下…","Building, please wait…")}</p>`);
+  try{const{blob,warn}=await buildCustomerPdf(inv);if(CPV)URL.revokeObjectURL(CPV);CPV=URL.createObjectURL(blob);if(!$("#photoOv"))return;
+    pvOv(`<div class="pvhead"><h3 style="margin:0">👁 ${L("寄客户版本","Customer copy")} · ${esc(inv.invoice_no)}</h3><span class="mute" style="font-size:13px">${kb(blob.size)}</span>
+      ${warn.map(w=>`<span class="tag warn">${esc(w)}</span>`).join(" ")}<span style="flex:1"></span>
+      <a class="btn sec sm" href="${CPV}" target="_blank" rel="noopener">↗ ${L("新视窗打开","Open in new tab")}</a>
+      <button class="btn sm" onclick="document.querySelector('#photoOv')?.remove();custCopy('${id}')">⬇ ${L("没问题，下载","Looks good — download")}</button><button class="btn sec sm" data-a="x">✕</button></div>
+      <iframe src="${CPV}" style="width:100%;height:78vh;border:0;background:#fff;border-radius:6px"></iframe>`)}
+  catch(e){toast(e.message||String(e));$("#photoOv")?.remove()}}
 
 /* ---- 合成寄客户的 PDF ---- */
 const blobToDataURL=b=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(b)});
