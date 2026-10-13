@@ -959,6 +959,34 @@ function craneSummaryHTML(inv,dos){const c=custOf(inv.customer_id),rows=dos.map(
       <td class="a">${A(r.rate)}</td><td class="a">${A(r.otr)}</td><td class="a">${A(r.amt)}</td><td class="a">${A(r.otAmt)}</td><td class="a">${A(r.sur)}</td><td class="a">${A(r.total)}</td></tr>`).join("")}
     ${last?`<tr class="tt crtt"><td colspan="10"></td><td class="lb">Total</td><td class="u a"><b>${acc(sum(rows,r=>r.amt))}</b></td><td class="u a"><b>${acc(sum(rows,r=>r.otAmt||0))}</b></td><td class="u a"><b>${acc(sum(rows,r=>r.sur))}</b></td><td class="u a"><b>${acc(sum(rows,r=>r.total))}</b></td></tr>`:""}</tbody></table>`)}
 
+/* ---- 批量补记收款（旧单） ---- */
+let BP=null;
+function bpList(){return S.d.invoices.filter(i=>i.company===S.company&&i.status!=="Cancelled"&&(!BP.cid||i.customer_id===BP.cid)&&BP.to&&i.invoice_date<=BP.to&&balOf(i)>0.005)
+  .sort((a,b)=>a.invoice_date.localeCompare(b.invoice_date)||String(a.invoice_no).localeCompare(String(b.invoice_no)))}
+function bulkPay(){BP={cid:"",to:"",pd:"",off:new Set()};let ov=$("#photoOv");if(ov)ov.remove();ov=document.createElement("div");ov.id="photoOv";
+  ov.innerHTML=`<div class="pvbox" id="bpBox"></div>`;document.body.appendChild(ov);
+  ov.onclick=e=>{if(e.target===ov||e.target.closest("[data-a=x]"))ov.remove()};bpRender()}
+function bpRender(){const box=$("#bpBox");if(!box)return;const list=bpList(),sel=list.filter(i=>!BP.off.has(i.id)),max=400;
+  box.innerHTML=`<div class="pvhead"><h3 style="margin:0">💰 ${L("批量补记收款（旧单）","Bulk record payments")}</h3><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕ ${L("关闭","Close")}</button></div>
+  <div class="filters"><label class="f">${L("客户","Customer")}<select onchange="BP.cid=this.value;BP.off.clear();bpRender()">${optList(S.d.customers.map(c=>[c.id,c.name]),BP.cid,L("全部客户","All customers"))}</select></label>
+    <label class="f">${L("这个日期（含）之前的 invoice","Invoices dated up to")}<input type="date" value="${BP.to}" onchange="BP.to=this.value;BP.off.clear();bpRender()"></label>
+    <label class="f">${L("收款日期（空白 = 用每张 invoice 的日期）","Payment date (blank = invoice date)")}<input type="date" value="${BP.pd}" onchange="BP.pd=this.value"></label></div>
+  ${!BP.to?`<p class="mute">${L("先填日期。","Pick a date first.")}</p>`:list.length?`<p>${L(`找到 ${list.length} 张还没收完，已选 ${sel.length} 张，合计`,`${list.length} unpaid, ${sel.length} selected, total`)} <b>$${money(sum(sel,balOf))}</b>
+      &nbsp;<a href="#" onclick="event.preventDefault();BP.off.clear();bpRender()">${L("全选","All")}</a> · <a href="#" onclick="event.preventDefault();bpList().forEach(i=>BP.off.add(i.id));bpRender()">${L("全不选","None")}</a></p>
+    <div class="tw" style="max-height:52vh;overflow:auto"><table><thead><tr><th></th><th>Invoice No</th><th>${L("日期","Date")}</th><th>${L("客户","Customer")}</th><th class="num">Total</th><th class="num">${L("未收","Balance")}</th></tr></thead><tbody>
+    ${list.slice(0,max).map(i=>`<tr><td><input type="checkbox" ${BP.off.has(i.id)?"":"checked"} onchange="this.checked?BP.off.delete('${i.id}'):BP.off.add('${i.id}');bpRender()"></td><td>${esc(i.invoice_no)}</td><td>${dmy(i.invoice_date)}</td><td>${esc(custName(i.customer_id))}</td><td class="num">${money(i.total)}</td><td class="num">${money(balOf(i))}</td></tr>`).join("")}
+    ${list.length>max?`<tr><td colspan="6" class="mute">${L(`… 还有 ${list.length-max} 张（也会一起记）`,`… ${list.length-max} more (included)`)}</td></tr>`:""}</tbody></table></div>
+    <div class="actions" style="margin-top:10px"><button class="btn" id="bpGo" ${sel.length?"":"disabled"} onclick="bpSave()">${L(`记成已收（${sel.length} 张）`,`Mark ${sel.length} paid`)}</button></div><p id="aparProg" class="mute"></p>`
+   :`<p class="mute">${L("这段时间没有还没收的 invoice。","No unpaid invoices in this range.")}</p>`}`}
+async function bpSave(){const sel=bpList().filter(i=>!BP.off.has(i.id));if(!sel.length)return;
+  if(!confirm(L(`确定把 ${sel.length} 张 invoice（$${money(sum(sel,balOf))}）记成已收？`,`Mark ${sel.length} invoices paid?`)))return;
+  const b=$("#bpGo");if(b)b.disabled=true;
+  try{const rows=sel.map(i=>({inv:i,row:{company:S.company,customer_id:i.customer_id,payment_date:BP.pd||i.invoice_date,amount:balOf(i),method:"Bank Transfer",reference:"旧单补记收款"}}));
+    const pays=await insChunks("payments",rows.map(x=>x.row),200,"id");
+    await insChunks("payment_allocations",pays.map((p,k)=>({payment_id:p.id,invoice_id:rows[k].inv.id,amount:rows[k].row.amount})),500);
+    await loadAll();await syncStatuses(sel.map(i=>i.id));toast(L(`已记 ${sel.length} 张`,`${sel.length} marked paid`));BP.off.clear();bpRender();render()}
+  catch(e){alert(e.message);await loadAll();bpRender();render()}}
+
 /* ---- 每月 Project 进度 ---- */
 async function projBoard(month){month=month||S.pbMonth||prevMonthRange()[0].slice(0,7);S.pbMonth=month;
   let ov=$("#photoOv");if(ov)ov.remove();ov=document.createElement("div");ov.id="photoOv";
@@ -1197,7 +1225,7 @@ function invView(){
     <label class="f">${L("客户","Customer")}<select onchange="S.invF.customer=this.value;render()">${optList(S.d.customers.map(c=>[c.id,c.name]),F.customer,L("全部","All"))}</select></label>
     <label class="f">${L("状态","Status")}<select onchange="S.invF.status=this.value;render()">${optList([["Unpaid",L("未付","Unpaid")],["Partial",L("部分付款","Partial")],["Paid",L("已付","Paid")],["Overdue",L("逾期","Overdue")]],F.status,L("全部","All"))}</select></label>
     <label class="f">${L("搜寻","Search")}<input value="${esc(F.q)}" placeholder="Invoice No / Project" onchange="S.invF.q=this.value;render()"></label>
-    <button class="btn" onclick="openInvForm()">${L("新增 Invoice","New invoice")}</button><button class="btn sec" onclick="projBoard()">📊 ${L("Project 进度","Project progress")}</button><button class="btn sec" onclick="exportInv()">⬇ Excel</button></div>
+    <button class="btn" onclick="openInvForm()">${L("新增 Invoice","New invoice")}</button><button class="btn sec" onclick="projBoard()">📊 ${L("Project 进度","Project progress")}</button><button class="btn sec" onclick="bulkPay()">💰 ${L("批量补记收款","Bulk record payments")}</button><button class="btn sec" onclick="exportInv()">⬇ Excel</button></div>
   ${rows.length?`<div class="tw"><table><thead><tr><th>No</th><th>Invoice Date</th><th>Invoice No</th><th>${L("客户","Customer")}</th><th>Description</th>
     <th class="num">Amt before GST</th><th class="num">GST</th><th class="num">Total</th><th class="num">${L("已付","Paid")}</th><th class="num">${L("余额","Balance")}</th>
     <th>Due</th><th>${L("状态","Status")}</th><th>Checked</th><th>${L("签名","Signed")}</th><th>${L("发送","Sent")}</th><th>${L("最新付款","Last paid")}</th></tr></thead><tbody>
@@ -1438,7 +1466,7 @@ function openPayForm(p){
   const f=p.id?{...p,alloc:Object.fromEntries(S.d.payment_allocations.filter(a=>a.payment_id===p.id).map(a=>[a.invoice_id,Number(a.amount)]))}
     :{customer_id:p.customer_id||"",payment_date:today(),amount:null,method:"Bank Transfer",reference:"",remark:"",alloc:{}};
   if(!p.id&&p.invoice_id){const i=invById(p.invoice_id);f.amount=balOf(i);f.alloc[p.invoice_id]=balOf(i)}
-  S.modal={kind:"payForm",f};S.dirty=true;render()}
+  f._amtManual=f.amount!=null&&f.amount!=="";S.modal={kind:"payForm",f};S.dirty=true;render()}
 function payInvList(f){return S.d.invoices.filter(i=>i.customer_id===f.customer_id&&i.status!=="Cancelled"&&(balExcl(i,f.id)>0.005||f.alloc[i.id]))}
 function payFormView(f){
   const list=payInvList(f),allocSum=sum(Object.values(f.alloc),x=>x),un=r2((Number(f.amount)||0)-allocSum);
@@ -1467,9 +1495,11 @@ function payFormView(f){
 function payTotHTML(f){const a=sum(Object.values(f.alloc),x=>x),un=r2((Number(f.amount)||0)-a);
   return `<div>${L("收到","Received")}<b>$${money(f.amount||0)}</b></div><div>${L("已分配","Applied")}<b>$${money(a)}</b></div>
   <div class="total">${L("未分配（多付）","Unallocated")}<b style="color:${un<-0.005?"var(--bad)":""}">$${money(un)}</b></div>`}
-function payIn(el,isChange){const f=S.modal.f,k=el.dataset.k;if(!k)return;f[k]=k==="amount"?(el.value===""?null:Number(el.value)):el.value;
+function payIn(el,isChange){const f=S.modal.f,k=el.dataset.k;if(!k)return;f[k]=k==="amount"?(el.value===""?null:Number(el.value)):el.value;if(k==="amount")f._amtManual=el.value!=="";
   if(k==="customer_id"&&isChange){f.alloc={};render();return}$("#payTot").innerHTML=payTotHTML(f)}
-function payAlloc(id,v){const f=S.modal.f;if(v===""||Number(v)===0)delete f.alloc[id];else f.alloc[id]=Number(v);$("#payTot").innerHTML=payTotHTML(f)}
+function payAlloc(id,v){const f=S.modal.f;if(v===""||Number(v)===0)delete f.alloc[id];else f.alloc[id]=Number(v);
+  if(!f._amtManual){const t=r2(sum(Object.values(f.alloc),x=>x));f.amount=t||null;const a=document.querySelector('[data-k="amount"]');if(a)a.value=t?t:""}
+  $("#payTot").innerHTML=payTotHTML(f)}
 function autoAlloc(){const f=S.modal.f;let left=Number(f.amount)||0;f.alloc={};
   for(const i of payInvList(f).sort((a,b)=>a.invoice_date.localeCompare(b.invoice_date))){if(left<=0.005)break;const b=balExcl(i,f.id);const x=r2(Math.min(b,left));if(x>0){f.alloc[i.id]=x;left=r2(left-x)}}render()}
 async function savePay(){const f=S.modal.f,w=$("#payWarn");
