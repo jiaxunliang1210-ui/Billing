@@ -174,6 +174,11 @@ label.f.need input{border-color:#f5a623!important;box-shadow:0 0 0 2px rgba(245,
 .dfbar{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 0 10px}.dfbar .inp.sm{width:auto;padding:4px 6px;font-size:13px}
 .selbar{position:sticky;top:0;z-index:5;display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 10px;margin:0 0 8px;background:var(--panel);border:1px solid var(--accent,#f5a623);border-radius:10px}
 th.srt{cursor:pointer;user-select:none;white-space:nowrap}th.srt .sa{opacity:.45;font-size:10px;margin-left:3px}tr.sel td{background:rgba(245,166,35,.10)}
+#print .pvd{font-family:Arial,Helvetica,sans-serif;font-size:10.5pt}#print .pvd .pvt{display:grid;grid-template-columns:1fr 1.2fr 1fr;align-items:end;margin:18px 0 14px}
+#print .pvd .pvt .h{font-weight:700;font-size:12pt;text-align:center}#print .pvd .pvt .m{line-height:1.8}#print .pvd .u{display:inline-block;min-width:38mm;border-bottom:1px solid #000;padding:0 4px}
+#print .pvd .pto{display:flex;gap:10mm;align-items:end;margin:8px 0 12px}#print .pvd .pto .u{flex:1}#print .pvd .pto.sum{margin-top:14px}
+#print table.pvl{width:100%;border-collapse:collapse;font-size:10pt}#print table.pvl th,#print table.pvl td{border:1px solid #000;padding:3px 6px}#print table.pvl th{letter-spacing:2px}
+#print table.pvl .acr{display:flex;justify-content:space-between}#print .pvd .pvs{display:grid;grid-template-columns:1fr 1fr;gap:10px 14mm;margin-top:18px}#print .pvd .pvs>div{display:flex;gap:4mm;align-items:end}#print .pvd .pvs .u{flex:1}
 .tag.CN{background:rgba(120,140,255,.15);color:#9fb0ff;border-color:rgba(120,140,255,.4)}
 /* margin 0 = 浏览器不会印网址、日期、页码 */
 @page{size:A4 portrait;margin:0}
@@ -328,7 +333,7 @@ const money=n=>(n==null||n==="")?"":Number(n).toLocaleString("en-SG",{minimumFra
 const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const $=s=>document.querySelector(s);
 const pref=(k,d)=>{try{return localStorage.getItem(k)||d}catch(e){return d}};
-const setPref=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};
+const setPref=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};const getPref=k=>{try{return localStorage.getItem(k)}catch(e){return null}};
 function toast(m){const e=$("#toast");e.textContent=m;e.classList.add("show");clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove("show"),2600)}
 const inRange=(d,from,to)=>d&&from&&from<=d&&(!to||to>=d);
 const sum=(a,f)=>r2(a.reduce((s,x)=>s+(Number(f(x))||0),0));
@@ -395,7 +400,7 @@ function statusTag(inv){const s=statusOf(inv);if(s==="CN")return `<span class="t
 function nextInvNo(date){const s=settingsOf(S.company);const[y,m]=date.split("-");const base=`${s.inv_prefix||""}${y.slice(2)}${m}/`;let max=0;
   for(const i of S.d.invoices)if(i.invoice_no.startsWith(base)){const n=parseInt(i.invoice_no.slice(base.length),10);if(n>max)max=n}
   return base+z2(max+1)}
-function apStatus(si){if(si.payment_date)return `<span class="tag ok">${L("已付","Paid")}</span>`;
+function apStatus(si){if(si.payment_date)return `<span class="tag ok">${L("已付","Paid")}</span>`;{const p=typeof pvOfSI==="function"?pvOfSI(si):null;if(p)return `<span class="tag Day">PV · ${L(PV_ST[p.status]?.[0]||"待批准",PV_ST[p.status]?.[1]||"Pending")}</span>`}
   if(si.due_date&&si.due_date<today())return `<span class="tag bad">${L("逾期","Overdue")}</span>`;return `<span class="tag mute">${L("未付","Unpaid")}</span>`}
 function surchargeCheck(si){
   const act=S.d.diesel_surcharges.filter(d=>d.supplier_id===si.supplier_id&&inRange(si.invoice_date,d.start_date,d.end_date)).sort((a,b)=>b.start_date.localeCompare(a.start_date))[0];
@@ -426,6 +431,7 @@ async function loadAll(){
     ["customers","vehicles","rates","customer_surcharges","invoices","invoice_lines","payments","payment_allocations","reminders","soa_sends",
      "monthly_fix","monthly_fix_log","suppliers","supplier_invoices","diesel_surcharges","attachments","company_settings"].forEach((k,i)=>S.d[k]=r[i]);
     for(const t of["drivers","do_voids","projects"]){try{S.d[t]=await fetchAll(()=>sb.from(t).select("*").eq("company",co))}catch(e){S.d[t]=[]}}
+    try{S.d.pvs=await fetchAll(()=>sb.from("payment_vouchers").select("*").eq("company",co));S.d.pvl=await fetchAll(()=>sb.from("payment_voucher_lines").select("*"));S.d._pvOK=true}catch(e){S.d.pvs=[];S.d.pvl=[];S.d._pvOK=false}
     for(const[k,t]of[["machines","machines"],["mlogs","machine_logs"],["mbills","machine_bills"]]){try{S.d[k]=co==="L3H"?await fetchAll(()=>sb.from(t).select("*").eq("company",co)):[]}catch(e){S.d[k]=[]}}
     await loadDO(); S.lastSync=new Date();
   }catch(e){toast(e.message)}
@@ -449,7 +455,7 @@ function render(){
   const app=$("#app");
   if(!S.user){app.innerHTML=loginView();return}
   const urgent=urgentCount();
-  const V={exc:excView,do:doView,inv:invView,pay:payView,soa:soaView,sum:sumView,mf:mfView,sup:()=>genView(["supplier_invoices","diesel_surcharges","suppliers"],"sup"),master:masterView,set:setView};
+  const V={exc:excView,do:doView,inv:invView,pay:payView,soa:soaView,sum:sumView,mf:mfView,sup:supView,master:masterView,set:setView};
   app.innerHTML=`<header class="top"><div class="brand"><span class="stripe"></span>${S.company} ${L("开单系统","Billing")}</div>
     <div class="seg">${["ETK","L3H"].map(c=>`<button class="${c===S.company?"on":""}" onclick="setCompany('${c}')">${c}</button>`).join("")}</div>
     <span class="sync"><i></i><span></span></span>
@@ -1003,6 +1009,7 @@ function invSelAll(on){const rows=invRows();if(on)rows.forEach(i=>S.invSel.add(i
 function invSelBar(){const ids=[...S.invSel].filter(id=>invById(id));if(!ids.length)return"";const inv=ids.map(invById);
   return `<div class="selbar"><b>${L(`已选 ${ids.length} 张`,`${ids.length} selected`)}</b><span>${L("合计","Total")} $${money(sum(inv,i=>i.total))}</span>
     <button class="btn sm" onclick="previewInv([...S.invSel])">👁 ${L("预览","Preview")}</button>
+    <button class="btn sm" onclick="signedFirstPages(sortInvIds([...S.invSel]))">✍️ ${L("签名第一页（合并）","Signed first pages")}</button>
     <button class="btn sm sec" onclick="multiPdf([...S.invSel])">⬇ PDF</button>
     <button class="btn sm sec" onclick="multiXlsx([...S.invSel])">⬇ Excel</button>
     <button class="btn sm sec" onclick="multiCust([...S.invSel])">📤 ${L("寄客户版本（每张一个）","Customer copies")}</button>
@@ -1107,6 +1114,224 @@ async function multiXlsx(ids){const list=sortInvIds(ids);if(!list.length)return;
   [5,12,16,28,40,14,11,13,12,12,10].forEach((w,i)=>ls.getColumn(i+1).width=w);ls.views=[{state:"frozen",ySplit:1}];ls.autoFilter={from:"A1",to:"K1"};
   for(const inv of list)invSheet(wb,inv);
   await xlDownload(wb,`${S.company}_Invoices_${fileBase(list[0])}${list.length>1?"_to_"+fileBase(list.at(-1)):""}.xlsx`)}catch(e){toast(e.message)}}
+
+/* ================= 第 2 批：Supplier 付款流程 + Payment Voucher ================= */
+const PV_ST={Pending:["待批准","Pending approval","warn"],Approved:["已批准","Approved","Day"],Keyed:["已 key in bank","Keyed in bank","Day"],Paid:["已付","Paid","ok"]};
+const pvTag=p=>{const x=PV_ST[p.status]||PV_ST.Pending;return `<span class="tag ${x[2]}">${L(x[0],x[1])}</span>`};
+const pvLines=id=>(S.d.pvl||[]).filter(l=>l.pv_id===id).sort((a,b)=>(a.line_no||0)-(b.line_no||0));
+const pvById=id=>(S.d.pvs||[]).find(p=>p.id===id);
+const pvOfSI=si=>(S.d.pvl||[]).filter(l=>l.supplier_invoice_id===si.id).map(l=>pvById(l.pv_id)).filter(Boolean)[0]||null;
+const supById=id=>S.d.suppliers.find(s=>s.id===id)||{};
+const supAcct=s=>[s.bank_name,s.bank_account].filter(Boolean).join(" ");
+const pvSigned=p=>S.d.attachments.filter(a=>a.entity_type==="pv"&&a.entity_id===p.id).sort((a,b)=>String(b.created_at||"").localeCompare(String(a.created_at||"")))[0]||null;
+const defCheque=()=>S.company==="L3H"?"OCBC":"DBS Giro";
+function numWords(d){const p=[];for(const[v,w]of[[1e6,"Million"],[1e3,"Thousand"],[1,""]]){const q=Math.floor(d/v);if(q){p.push(w999(q)+(w?" "+w:""));d%=v}}return p.join(" ")||"Zero"}
+function pvWords(x){x=Math.abs(r2(x));const d=Math.floor(x+1e-9),c=Math.round((x-d)*100);return `${numWords(d)}${c?` And ${w999(c)} Cents`:""} Only.`}
+function pvView(){const rows=sortRows("pv",(S.d.pvs||[]).filter(p=>p.company===S.company&&dfIn("pv",p.pv_date)),{date:p=>p.pv_date,sup:p=>supName(p.supplier_id),amt:p=>Number(p.total)||0,st:p=>p.status});
+  if(!S.d._pvOK)return `<div class="panel"><h2>${L("付款 / PV","Payments / PV")}</h2><p>${L("还没跑第二批的 SQL（第二批-付款PV-Supabase.sql）。跑完重新整理页面就可以用。","Run the batch-2 SQL first, then refresh.")}</p></div>`;
+  return `<div class="actions" style="margin:0 0 8px"><button class="btn" onclick="pvForm()">＋ ${L("新 PV（提交付款）","New PV")}</button>
+    <button class="btn sec" onclick="pvListingXlsx(${esc(JSON.stringify(rows.map(p=>p.id)))})">⬇ PV Excel（${L("每张一个 sheet + Listing","one sheet each + listing")}）</button>
+    <button class="btn sec" onclick="pvPdf(${esc(JSON.stringify(rows.map(p=>p.id)))})">⬇ PV PDF</button></div>
+  ${dfBar("pv",yearsOf(S.d.pvs||[],"pv_date"))}
+  <p class="mute" style="font-size:13px;margin:0 0 8px">${L("流程：新 PV → 印出来给批准人签 → 上传签好的 PV → 按「已批准」→ key in bank → 按「已付」（supplier invoice 会自动记付款日期）。","Flow: new PV → print & sign → upload signed PV → Approved → key in bank → Paid.")}</p>
+  ${rows.length?`<div class="tw"><table><thead><tr>${thS("pv","date",L("日期","Date"))}${thS("pv","sup","Pay to")}<th>Invoice</th>${thS("pv","amt",L("金额","Amount"),"num")}${thS("pv","st",L("状态","Status"))}<th>${L("签名 PV","Signed PV")}</th><th>A/C · Cheque No.</th><th>${L("银行 Ref","Bank ref")}</th></tr></thead><tbody>
+    ${rows.map(p=>`<tr class="click" onclick="pvOpen('${p.id}')"><td>${dmy(p.pv_date)}</td><td>${esc(supName(p.supplier_id))}</td><td class="wrap">${pvLines(p.id).map(l=>esc(l.description)).join(", ")}</td><td class="num">${money(p.total)}</td>
+      <td>${pvTag(p)}${p.approved_by?`<div class="mute" style="font-size:12px">${esc(p.approved_by)} ${dmy(p.approved_at)}</div>`:""}</td><td>${pvSigned(p)?`<span class="tag ok">✓</span>`:`<span class="tag warn">${L("未上传","No")}</span>`}</td>
+      <td style="font-size:12px">${esc(p.account||"")}<br>${esc(p.cheque_no||"")}</td><td>${esc(p.bank_ref||"")}${p.paid_at?`<div class="mute" style="font-size:12px">${L("付","Paid")} ${dmy(p.paid_at)}</div>`:""}</td></tr>`).join("")}</tbody>
+    <tfoot><tr><td colspan="3">${L("合计","Total")} ${rows.length}</td><td class="num">${money(sum(rows,p=>p.total))}</td><td colspan="4"></td></tr></tfoot></table></div>`
+  :`<div class="panel empty">${L("这段时间没有 PV。按「新 PV」开始。","No PVs in this period.")}</div>`}`}
+function supView(){const keys=["supplier_invoices","diesel_surcharges","suppliers"],cur=S.sub.sup;
+  const tabs=`<div class="sub">${keys.map(k=>`<button class="${k===cur?"on":""}" onclick="S.sub.sup='${k}';S.gEdit=null;S.dirty=false;render()">${L(...ENT[k].label)}</button>`).join("")}<button class="${cur==="pv"?"on":""}" onclick="S.sub.sup='pv';S.gEdit=null;S.dirty=false;render()">💳 ${L("付款 / PV","Payments / PV")}</button></div>`;
+  return tabs+(cur==="pv"?pvView():genView([cur],"sup"))}
+/* ---- 新 PV / 修改 ---- */
+let PVF=null;
+function pvOv(html){let ov=$("#photoOv");if(!ov){ov=document.createElement("div");ov.id="photoOv";document.body.appendChild(ov);ov.onclick=e=>{if(e.target===ov||e.target.closest("[data-a=x]"))ov.remove()}}
+  ov.innerHTML=`<div class="pvbox">${html}</div>`}
+function pvOpenSIs(f){const used=new Set((S.d.pvl||[]).filter(l=>l.pv_id!==f.id&&l.supplier_invoice_id).map(l=>l.supplier_invoice_id));
+  return S.d.supplier_invoices.filter(si=>si.supplier_id===f.supplier_id&&(!si.charged_to||si.charged_to===S.company)&&(!si.payment_date||f.sel.has(si.id))&&!used.has(si.id))
+    .sort((a,b)=>String(a.invoice_date).localeCompare(String(b.invoice_date)))}
+function pvForm(id){const p=id?pvById(id):null;
+  PVF=p?{id:p.id,supplier_id:p.supplier_id,pv_date:p.pv_date,account:p.account||"",cheque_no:p.cheque_no||"",prepared_by:p.prepared_by||signName(settingsOf(S.company)),remark:p.remark||"",
+      sel:new Set(pvLines(p.id).map(l=>l.supplier_invoice_id).filter(Boolean)),extra:pvLines(p.id).filter(l=>!l.supplier_invoice_id).map(l=>({d:l.description,a:l.amount}))}
+    :{supplier_id:"",pv_date:today(),account:"",cheque_no:defCheque(),prepared_by:signName(settingsOf(S.company)),remark:"",sel:new Set(),extra:[]};
+  pvFormRender()}
+function pvFormTotal(){const f=PVF;return r2(sum(S.d.supplier_invoices.filter(si=>f.sel.has(si.id)),si=>Number(si.total)||0)+sum(f.extra,x=>Number(x.a)||0))}
+function pvFormRender(){const f=PVF,list=f.supplier_id?pvOpenSIs(f):[];
+  pvOv(`<div class="pvhead"><h3 style="margin:0">${f.id?L("修改 PV","Edit PV"):L("新 PV（提交付款）","New PV")}</h3><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
+  <div class="grid">
+    <label class="f">Pay to（${L("供应商","Supplier")}） *<select onchange="PVF.supplier_id=this.value;PVF.sel.clear();PVF.account=supAcct(supById(this.value));pvFormRender()">${optList(S.d.suppliers.map(s=>[s.id,s.name]),f.supplier_id,"—")}</select></label>
+    <label class="f">${L("日期","Date")} *<input type="date" value="${f.pv_date}" onchange="PVF.pv_date=this.value"></label>
+    <label class="f">A/C:<input value="${esc(f.account)}" placeholder="${L("供应商资料填了银行就会自动带出","Auto from supplier bank details")}" onchange="PVF.account=this.value"></label>
+    <label class="f">Cheque No.:<input value="${esc(f.cheque_no)}" onchange="PVF.cheque_no=this.value"></label>
+    <label class="f">Prepared by<input value="${esc(f.prepared_by)}" onchange="PVF.prepared_by=this.value"></label>
+    <label class="f">Remark<input value="${esc(f.remark)}" onchange="PVF.remark=this.value"></label></div>
+  ${f.supplier_id&&!supAcct(supById(f.supplier_id))?`<p class="mute" style="font-size:12px">${L("这个供应商还没填银行资料（Supplier → 供应商 → 银行 / 户口号码），A/C 不会自动带出。","No bank details for this supplier yet.")}</p>`:""}
+  <h3>${L("付哪些 invoice","Invoices to pay")}</h3>
+  ${!f.supplier_id?`<p class="mute">${L("先选供应商","Choose a supplier first")}</p>`:list.length?`<div class="tw"><table><thead><tr><th></th><th>${L("日期","Date")}</th><th>Invoice No</th><th>Description</th><th>Due</th><th class="num">Total</th></tr></thead><tbody>
+    ${list.map(si=>`<tr><td><input type="checkbox" ${f.sel.has(si.id)?"checked":""} onchange="this.checked?PVF.sel.add('${si.id}'):PVF.sel.delete('${si.id}');pvFormRender()"></td><td>${dmy(si.invoice_date)}</td><td>${esc(si.invoice_no)}${Number(si.total)<0?` <span class="tag CN">CN</span>`:""}</td><td class="wrap">${esc(si.description||"")}</td><td>${dmy(si.due_date)}</td><td class="num">${money(si.total)}</td></tr>`).join("")}</tbody></table></div>`
+    :`<p class="mute">${L("这个供应商没有未付的 invoice（或已经在别的 PV 里）。","No unpaid invoices for this supplier.")}</p>`}
+  <h3>${L("其他项目（可选）","Other lines (optional)")}</h3>
+  ${f.extra.map((x,i)=>`<div class="actions"><input class="inp" style="flex:1" value="${esc(x.d)}" placeholder="Description" onchange="PVF.extra[${i}].d=this.value"><input class="inp" style="width:130px" type="number" step="0.01" value="${x.a??""}" onchange="PVF.extra[${i}].a=Number(this.value);pvFormRender()"><button class="btn del sm" onclick="PVF.extra.splice(${i},1);pvFormRender()">✕</button></div>`).join("")}
+  <button class="btn sec sm" onclick="PVF.extra.push({d:'',a:null});pvFormRender()">＋ ${L("加一行","Add line")}</button>
+  <div class="calc" style="margin-top:10px"><div class="total">${L("合计","Total")}<b>$${money(pvFormTotal())}</b></div><div style="font-size:12px">${esc(pvWords(pvFormTotal()))}</div></div>
+  <div class="warn" id="pvWarn"></div>
+  <div class="actions"><button class="btn" onclick="pvSave()">${L("保存（待批准）","Save (pending approval)")}</button><button class="btn sec" data-a="x">${L("取消","Cancel")}</button></div>`)}
+async function pvSave(){const f=PVF,w=$("#pvWarn");
+  if(!f.supplier_id||!f.pv_date)return w.textContent=L("请选供应商和日期","Choose supplier and date");
+  const sis=S.d.supplier_invoices.filter(si=>f.sel.has(si.id)).sort((a,b)=>String(a.invoice_date).localeCompare(String(b.invoice_date))),ex=f.extra.filter(x=>x.d||x.a);
+  if(!sis.length&&!ex.length)return w.textContent=L("至少选一张 invoice 或加一行","Pick at least one invoice or line");
+  const lines=[...sis.filter(si=>Number(si.total)>=0).map(si=>({supplier_invoice_id:si.id,description:String(si.invoice_no),amount:Number(si.total)||0})),
+    ...sis.filter(si=>Number(si.total)<0).map(si=>({supplier_invoice_id:si.id,description:`LESS:CREDIT NOTE/INVOICE#${si.invoice_no}`,amount:Number(si.total)||0})),
+    ...ex.map(x=>({supplier_invoice_id:null,description:x.d||"",amount:Number(x.a)||0}))].map((l,i)=>({...l,line_no:i+1}));
+  const row={company:S.company,supplier_id:f.supplier_id,pv_date:f.pv_date,account:f.account||null,cheque_no:f.cheque_no||null,prepared_by:f.prepared_by||null,remark:f.remark||null,total:r2(sum(lines,l=>l.amount))};
+  let id=f.id;
+  if(id){const{error}=await sb.from("payment_vouchers").update(row).eq("id",id);if(error)return w.textContent=error.message;await sb.from("payment_voucher_lines").delete().eq("pv_id",id)}
+  else{const{data,error}=await sb.from("payment_vouchers").insert({...row,status:"Pending"}).select().single();if(error)return w.textContent=error.message;id=data.id}
+  const{error}=await sb.from("payment_voucher_lines").insert(lines.map(l=>({...l,pv_id:id})));if(error)return w.textContent=error.message;
+  await loadAll();toast(L("PV 已保存（待批准）","PV saved"));pvOpen(id);render()}
+/* ---- PV 详情 + 流程 ---- */
+function pvOpen(id){const p=pvById(id);if(!p)return;const st=p.status||"Pending";
+  pvOv(`<div class="pvhead"><h3 style="margin:0">PV · ${esc(supName(p.supplier_id))} · $${money(p.total)}</h3>${pvTag(p)}<span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
+  <div class="actions"><button class="btn sec" onclick="pvPdf(['${id}'],1)">⬇ ${L("PV PDF（印出来签）","PV PDF (print to sign)")}</button><button class="btn sec" onclick="pvListingXlsx(['${id}'])">⬇ PV Excel</button>
+    ${st==="Pending"?`<button class="btn sec" onclick="pvForm('${id}')">${L("修改","Edit")}</button>`:""}</div>
+  <div class="tw"><table><thead><tr><th>Description</th><th class="num">Amount</th></tr></thead><tbody>${pvLines(id).map(l=>`<tr><td>${esc(l.description)}</td><td class="num">${money(l.amount)}</td></tr>`).join("")}</tbody>
+    <tfoot><tr><td>A/C: ${esc(p.account||"")} · Cheque No.: ${esc(p.cheque_no||"")}</td><td class="num">${money(p.total)}</td></tr></tfoot></table></div>
+  <p style="font-size:13px">${esc(pvWords(p.total))}</p>
+  <div class="ckl panel"><h3 style="margin-top:0">${L("流程","Steps")}</h3>
+    <div class="ck ${pvSigned(p)?"ok":"warn"}"><b>${pvSigned(p)?"✓":"1"}</b><div>${L("印 PV 给批准人签，签好后上传","Print, get it signed, upload it")}${attBox("pv",id,["Signed PV","Other"])}</div></div>
+    <div class="ck ${st!=="Pending"?"ok":"warn"}"><b>${st!=="Pending"?"✓":"2"}</b><div>${st!=="Pending"?L(`已批准：${esc(p.approved_by||"")} ${dmy(p.approved_at)}`,`Approved by ${esc(p.approved_by||"")}`):`<button class="btn sm" onclick="pvApprove('${id}')">✓ ${L("已批准","Approved")}</button>`}</div></div>
+    <div class="ck ${["Keyed","Paid"].includes(st)?"ok":"warn"}"><b>${["Keyed","Paid"].includes(st)?"✓":"3"}</b><div>${["Keyed","Paid"].includes(st)?L(`已 key in bank ${dmy(p.keyed_at)} · Ref: ${esc(p.bank_ref||"")}`,`Keyed ${dmy(p.keyed_at)}`):st==="Approved"?`<button class="btn sm" onclick="pvKey('${id}')">🏦 ${L("已 key in bank","Keyed in bank")}</button>`:`<span class="mute">${L("批准后才可以","After approval")}</span>`}</div></div>
+    <div class="ck ${st==="Paid"?"ok":"warn"}"><b>${st==="Paid"?"✓":"4"}</b><div>${st==="Paid"?L(`已付 ${dmy(p.paid_at)}`,`Paid ${dmy(p.paid_at)}`):st==="Keyed"?`<button class="btn sm" onclick="pvPaid('${id}')">💰 ${L("已付（银行确认）","Paid")}</button>`:`<span class="mute">${L("key in bank 后才可以","After keying in")}</span>`}</div></div></div>
+  <div class="actions">${st!=="Paid"?`<button class="btn del sm" onclick="pvDel('${id}')">${L("删除这张 PV","Delete PV")}</button>`:""}${st!=="Pending"&&st!=="Paid"?`<button class="btn sec sm" onclick="pvUndo('${id}')">↩ ${L("退回上一步","Undo last step")}</button>`:""}</div>`)}
+async function pvUpd(id,patch){const{error}=await sb.from("payment_vouchers").update(patch).eq("id",id);if(error){toast(error.message);return false}await loadAll();pvOpen(id);render();return true}
+async function pvApprove(id){const p=pvById(id);if(!pvSigned(p)&&!confirm(L("还没上传签好的 PV，还是要标记已批准吗？","No signed PV uploaded. Mark approved anyway?")))return;
+  const by=prompt(L("批准人名字","Approved by"),getPref("pvApprover")||"");if(by==null)return;setPref("pvApprover",by);
+  await pvUpd(id,{status:"Approved",approved_by:by||null,approved_at:today()})}
+async function pvKey(id){const ref=prompt(L("银行 reference（网银的交易号码）","Bank reference"),"");if(ref==null)return;await pvUpd(id,{status:"Keyed",keyed_at:today(),bank_ref:ref||null})}
+async function pvPaid(id){const d=prompt(L("付款日期（YYYY-MM-DD）","Payment date (YYYY-MM-DD)"),today());if(d==null)return;const pd=toYMD(d)||today();
+  const ids=pvLines(id).map(l=>l.supplier_invoice_id).filter(Boolean);
+  if(ids.length){const{error}=await sb.from("supplier_invoices").update({payment_date:pd,status:"Paid"}).in("id",ids);if(error)return toast(error.message)}
+  await pvUpd(id,{status:"Paid",paid_at:pd});toast(L(`已付，${ids.length} 张 supplier invoice 记了付款日期`,`Paid; ${ids.length} supplier invoices updated`))}
+async function pvUndo(id){const p=pvById(id),back={Approved:{status:"Pending",approved_by:null,approved_at:null},Keyed:{status:"Approved",keyed_at:null,bank_ref:null}}[p.status];if(back&&confirm(L("退回上一步？","Undo last step?")))await pvUpd(id,back)}
+async function pvDel(id){if(!confirm(L("确定删除这张 PV？","Delete this PV?")))return;const{error}=await sb.from("payment_vouchers").delete().eq("id",id);if(error)return toast(error.message);
+  $("#photoOv")?.remove();await loadAll();render();toast(L("已删除","Deleted"))}
+/* ---- PV 样子（照她的 Excel） ---- */
+function pvHTML(p){const s=settingsOf(p.company||S.company),ls=pvLines(p.id),pad=Math.max(0,6-ls.length);
+  return `<div class="doc pg pvd">${coHeader(s)}
+  <div class="pvt"><div></div><div class="h">PAYMENT VOUCHER</div><div class="m"><div>Voucher No.: <span class="u">${esc(p.voucher_no||"")}</span></div><div>Date: <span class="u">${dmy(p.pv_date)}</span></div></div></div>
+  <div class="pto"><span>PAY TO</span><span class="u">${esc(supName(p.supplier_id))}</span></div>
+  <table class="pvl"><colgroup><col><col style="width:26%"></colgroup><thead><tr><th>D E S C R I P T I O N</th><th>AMOUNT</th></tr></thead><tbody>
+    <tr><td><b>Invoice :</b></td><td></td></tr>
+    ${ls.map(l=>`<tr><td><b>${esc(l.description)}</b></td><td>${acc(l.amount)}</td></tr>`).join("")}${"<tr><td>&nbsp;</td><td></td></tr>".repeat(pad)}
+    <tr class="ac"><td><div class="acr"><b>A/C: ${esc(p.account||"")}</b><b>Cheque No.: ${esc(p.cheque_no||"")}</b></div></td><td>${acc(p.total)}</td></tr></tbody></table>
+  <div class="pto sum"><span>The Sum of Dollars</span><span class="u">${esc(pvWords(p.total))}</span></div>
+  <div class="pvs"><div><span>Prepared by:</span><span class="u">${esc(p.prepared_by||"")}</span></div><div><span>Received by:</span><span class="u"></span></div>
+    <div><span>Approved by:</span><span class="u">${p.approved_by?esc(p.approved_by)+" · "+dmy(p.approved_at):""}</span></div><div></div></div></div>`}
+/* 合成 PDF：项目可以是附件（扫描 / PDF）或 HTML 页 */
+async function buildPdf(items,filename){await loadPdfLibs();const{jsPDF}=window.jspdf,pdf=new jsPDF({orientation:"portrait",unit:"mm",format:"a4",compress:true}),box=$("#print"),warn=[];let first=true,n=0;
+  const keep=box.innerHTML,pv=box.classList.contains("pv");box.classList.remove("pv");
+  try{for(const it of items){const pg=$("#pgProg");if(pg)pg.textContent=`${++n}/${items.length}`;
+      if(it.att){try{for(const src of await attPages(it.att,it.max||20)){await addImagePage(pdf,first,src,0);first=false}continue}catch(e){warn.push(`${it.label||""}: ${e.message}`);if(!it.html)continue}}
+      if(it.html){box.innerHTML=it.html;box.classList.add("cap");if(document.fonts?.ready)await document.fonts.ready;await new Promise(r=>setTimeout(r,40));
+        for(const el of box.querySelectorAll(".pg")){const land=el.classList.contains("land"),W=land?297:210,H=land?210:297,cv=await html2canvas(el,{scale:2,backgroundColor:"#ffffff",logging:false});
+          if(!first)pdf.addPage("a4",land?"landscape":"portrait");first=false;let w=W,h=cv.height*W/cv.width;if(h>H){h=H;w=cv.width*H/cv.height}
+          pdf.addImage(cv.toDataURL("image/jpeg",0.82),"JPEG",0,0,w,h,undefined,"FAST")}box.classList.remove("cap")}}
+    if(first)throw new Error(L("没有内容","Nothing to include"));
+    const blob=pdf.output("blob"),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=filename.replace(/[\\/:*?"<>|]+/g,"-")+".pdf";document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},2000);
+    toast(`${a.download} · ${kb(blob.size)}${warn.length?" · ⚠ "+warn.length:""}`);return warn}
+  finally{box.classList.remove("cap");box.innerHTML=keep;if(pv)box.classList.add("pv")}}
+const monTag=d=>`${MONL[+d.slice(5,7)-1].slice(0,3).toUpperCase()} ${d.slice(0,4)}`;
+const sameMonth=ds=>ds.length&&ds.every(d=>d.slice(0,7)===ds[0].slice(0,7));
+async function pvPdf(ids,blank){const list=ids.map(pvById).filter(Boolean).sort((a,b)=>a.pv_date.localeCompare(b.pv_date));if(!list.length)return toast(L("没有 PV","No PVs"));
+  const items=list.map(p=>{const sg=blank?null:pvSigned(p);return sg?{att:sg,html:pvHTML(p),label:supName(p.supplier_id)}:{html:pvHTML(p)}});
+  const ds=list.map(p=>p.pv_date);try{await buildPdf(items,list.length===1?`${S.company} PV ${supName(list[0].supplier_id)} ${dmy(ds[0]).replace(/\//g,"-")}`:sameMonth(ds)?`${S.company} PV FOR ${monTag(ds[0])}`:`${S.company} PV ${ds[0]} to ${ds.at(-1)}`)}catch(e){toast(e.message)}}
+/* PV Excel：每张 PV 一个 sheet（照她的格式）+ PV Listing */
+function pvSheet(wb,p){const s=settingsOf(p.company||S.company),ws=wb.addWorksheet(xlName(wb,`${S.company}-${supName(p.supplier_id).split(/\s+/)[0]}`.toUpperCase())),ls=pvLines(p.id);
+  [12,8,10,10,10,10,12,12,6].forEach((w,i)=>ws.getColumn(i+1).width=w);
+  ws.mergeCells("A1:I1");const h=ws.getRow(1).getCell(1);h.value=`${s.name}\n${s.address||""}\nCo. Reg No: ${s.reg_no||""}   GST Reg No: ${s.gst_no||""}\n${s.tel?(S.company==="L3H"?"Tel: ":"Mobile: ")+s.tel:""} ${s.email?"Email: "+s.email:""}`;
+  h.alignment={horizontal:"center",vertical:"middle",wrapText:true};h.font={bold:true,size:11};ws.getRow(1).height=70;
+  const set=(a,v,o={})=>{const c=ws.getCell(a);c.value=v;if(o.b)c.font={bold:true,size:o.sz||11};if(o.al)c.alignment={horizontal:o.al};if(o.f)c.numFmt=o.f;if(o.bt)c.border={bottom:THIN};return c};
+  set("C3","PAYMENT VOUCHER",{b:1,sz:12});set("G3","Voucher No.:");set("H3",p.voucher_no||"");set("G4","Date:");set("H4",dmy(p.pv_date));
+  set("A6","PAY TO");ws.mergeCells("B6:H6");set("B6",supName(p.supplier_id),{bt:1});
+  ws.mergeCells("A8:G8");set("A8","D E S C R I P T I O N",{b:1,al:"center"});ws.mergeCells("H8:I8");set("H8","AMOUNT",{b:1,al:"center"});
+  ws.mergeCells("A9:G9");set("A9","Invoice : ",{b:1});ws.mergeCells("H9:I9");
+  const n=Math.max(5,ls.length);for(let i=0;i<n;i++){const r=10+i;ws.mergeCells(`A${r}:G${r}`);ws.mergeCells(`H${r}:I${r}`);if(ls[i]){set(`A${r}`,ls[i].description,{b:1});set(`H${r}`,Number(ls[i].amount)||0,{f:'"$"#,##0.00'})}}
+  const tr=10+n;set(`A${tr}`,`A/C: ${p.account||""}`,{b:1});set(`E${tr}`,`Cheque No.: ${p.cheque_no||""}`,{b:1});ws.mergeCells(`H${tr}:I${tr}`);
+  const tc=set(`H${tr}`,{formula:`SUM(H9:H${tr-1})`,result:Number(p.total)||0},{b:1,f:'"$"#,##0.00'});tc.border={top:THIN,bottom:{style:"double"}};
+  for(let r=8;r<=tr;r++)for(const col of["A","H"]){const c=ws.getCell(`${col}${r}`);c.border={...(c.border||{}),top:THIN,bottom:THIN,left:THIN,right:THIN}}
+  set(`A${tr+2}`,"The Sum of Dollars");ws.mergeCells(`C${tr+2}:I${tr+2}`);set(`C${tr+2}`,pvWords(p.total),{bt:1});
+  set(`A${tr+4}`,"Prepared by: ");ws.mergeCells(`B${tr+4}:C${tr+4}`);set(`B${tr+4}`,p.prepared_by||"",{bt:1});set(`E${tr+4}`,"Received by:");ws.mergeCells(`G${tr+4}:H${tr+4}`);set(`G${tr+4}`,"",{bt:1});
+  set(`A${tr+5}`,"Approved by:");ws.mergeCells(`B${tr+5}:C${tr+5}`);set(`B${tr+5}`,p.approved_by||"",{bt:1});
+  ws.pageSetup={paperSize:9,orientation:"portrait",fitToPage:true,fitToWidth:1,fitToHeight:0};return ws}
+function pvListingSheet(wb,list){const s=settingsOf(S.company),ws=wb.addWorksheet(xlName(wb,`PV for ${S.company} Listing`));
+  ws.getCell("B1").value=s.name;ws.getCell("B1").font={bold:true,size:12};
+  ["S/N","Date ","Company Name","Description","Amount"].forEach((h,i)=>{const c=ws.getRow(3).getCell(i+1);c.value=h;c.font={bold:true};c.border=BOX;c.alignment={horizontal:"center"}});
+  list.forEach((p,k)=>{const r=4+k,row=ws.getRow(r);row.getCell(1).value={formula:"ROW()-3",result:k+1};row.getCell(2).value=dmy(p.pv_date);row.getCell(3).value=supName(p.supplier_id);
+    row.getCell(4).value="Invoice : "+pvLines(p.id).map(l=>l.description).join(", ");row.getCell(5).value=Number(p.total)||0;row.getCell(5).numFmt=MONEY;for(let c=1;c<=5;c++)row.getCell(c).border=BOX});
+  const tr=ws.getRow(4+list.length);tr.getCell(4).value="Total";tr.getCell(4).font={bold:true};tr.getCell(5).value={formula:`SUM(E4:E${3+list.length})`};tr.getCell(5).numFmt=MONEY;tr.getCell(5).font={bold:true};
+  [6,12,38,46,14].forEach((w,i)=>ws.getColumn(i+1).width=w);return ws}
+async function pvListingXlsx(ids){const list=ids.map(pvById).filter(Boolean).sort((a,b)=>a.pv_date.localeCompare(b.pv_date));if(!list.length)return toast(L("没有 PV","No PVs"));
+  try{await loadExcelJS();const wb=new ExcelJS.Workbook();for(const p of list)pvSheet(wb,p);pvListingSheet(wb,list);const ds=list.map(p=>p.pv_date);
+    await xlDownload(wb,`${S.company} PV - ${sameMonth(ds)?`${MONL[+ds[0].slice(5,7)-1]} ${ds[0].slice(0,4)}`:`${ds[0]} to ${ds.at(-1)}`}.xlsx`)}catch(e){toast(e.message)}}
+
+/* ================= 第 3 批：签名第一页合并 + 月底文件包 ================= */
+async function signedFirstPages(invs,name){if(!invs.length)return toast(L("没有 invoice","No invoices"));const warn=[];
+  const items=[];for(const inv of invs){const sg=signedOf(inv);if(sg)items.push({att:sg,max:1,label:inv.invoice_no,html:invoiceHTML(inv,true)});else{warn.push(inv.invoice_no);items.push({html:invoiceHTML(inv,true)})}}
+  const ds=invs.map(i=>i.invoice_date).sort();
+  const fn=name||(sameMonth(ds)?`${S.company} SALES INVOICE FOR ${monTag(ds[0])}`:`${S.company} SALES INVOICE ${dmy(ds[0]).replace(/\//g,"-")} to ${dmy(ds.at(-1)).replace(/\//g,"-")}`);
+  try{await buildPdf(items,fn);if(warn.length)alert(L(`这些还没上传签名页，用了没签名的第一页：\n${warn.join("\n")}`,`No signed page (unsigned used):\n${warn.join("\n")}`))}catch(e){toast(e.message)}}
+function siAtts(si){const a=S.d.attachments.filter(x=>x.entity_type==="supplier_invoices"&&x.entity_id===si.id);const t=a.filter(x=>/tax/i.test(x.kind||""));return(t.length?t:a).sort((x,y)=>String(x.created_at||"").localeCompare(String(y.created_at||"")))}
+const gstPeriod=d=>{const q=Math.ceil(+d.slice(5,7)/3)*3;return `GST ${MONL[q-1].slice(0,3).toUpperCase()} ${d.slice(2,4)}`};
+function payText(inv){const al=S.d.payment_allocations.filter(a=>a.invoice_id===inv.id);if(!al.length)return"";
+  return al.map(a=>{const p=S.d.payments.find(x=>x.id===a.payment_id);if(!p)return"";const full=Math.abs(Number(a.amount)-Number(inv.total))<0.01;
+    return `${full?"PAID":"received $"+money(a.amount)} ${dmy(p.payment_date)}${p.reference?" - "+p.reference:p.method?" - "+p.method:""}`}).filter(Boolean).join("; ")}
+let MEP=null;
+function monthEnd(){const[a]=prevMonthRange();MEP={m:a.slice(0,7)};mepRender()}
+async function mepRender(){const m=MEP.m,from=`${m}-01`,to=lastDayOf(m),co=S.company;
+  const invs=S.d.invoices.filter(i=>i.company===co&&i.status!=="Cancelled"&&i.invoice_date>=from&&i.invoice_date<=to).sort((a,b)=>String(a.invoice_no).localeCompare(String(b.invoice_no),undefined,{numeric:true}));
+  const sis=S.d.supplier_invoices.filter(si=>(!si.charged_to||si.charged_to===co)&&si.invoice_date>=from&&si.invoice_date<=to).sort((a,b)=>String(a.invoice_date).localeCompare(String(b.invoice_date))||String(a.invoice_no).localeCompare(String(b.invoice_no)));
+  const pvs=(S.d.pvs||[]).filter(p=>p.company===co&&p.pv_date>=from&&p.pv_date<=to).sort((a,b)=>a.pv_date.localeCompare(b.pv_date));
+  const gaps=[];{const g={};for(const i of invs){const mm=String(i.invoice_no).match(/^(.*?)(\d+)$/);if(!mm||/CN/i.test(mm[1]))continue;(g[mm[1]]=g[mm[1]]||[]).push({n:+mm[2],w:mm[2].length})}
+    for(const[pre,xs]of Object.entries(g)){const ns=new Set(xs.map(x=>x.n)),w=xs[0].w,mx=Math.max(...ns);for(let k=1;k<mx;k++)if(!ns.has(k))gaps.push(pre+String(k).padStart(w,"0"))}}
+  const unsigned=invs.filter(i=>!signedOf(i)&&Number(i.total)>0),noScan=sis.filter(si=>!siAtts(si).length),pvOpen=pvs.filter(p=>p.status!=="Paid");
+  MEP.d={invs,sis,pvs};
+  const row=(ok,t,body,lvl)=>`<div class="ck ${ok?"ok":lvl||"warn"}"><b>${ok?"✓":"!"}</b><div>${t}${body?`<div class="mute" style="font-size:12px">${body}</div>`:""}</div></div>`;
+  pvOv(`<div class="pvhead"><h3 style="margin:0">📦 ${L("月底文件包","Month-end pack")} · ${co}</h3><input type="month" class="inp" value="${m}" style="width:auto" onchange="MEP.m=this.value;mepRender()"><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
+  <div class="ckl panel"><h3 style="margin-top:0">${L("打包前检查","Checks")}</h3>
+    ${row(!gaps.length,gaps.length?L("Invoice 号码跳号","Missing invoice numbers"):L(`Invoice 号码连续（${invs.length} 张）`,`No gaps (${invs.length})`),gaps.join("、"),"bad")}
+    ${row(!unsigned.length,unsigned.length?L(`${unsigned.length} 张还没上传签名页（会用没签名的第一页）`,`${unsigned.length} unsigned`):L("全部 invoice 都有签名页","All signed"),unsigned.map(i=>esc(i.invoice_no)).join("、"))}
+    ${row(!noScan.length,noScan.length?L(`${noScan.length} 张 supplier invoice 还没上传扫描件`,`${noScan.length} supplier invoices without scan`):L(`Supplier invoice 都有扫描件（${sis.length} 张）`,`All scanned (${sis.length})`),noScan.map(si=>`${esc(supName(si.supplier_id))} ${esc(si.invoice_no)}`).join("、"))}
+    ${row(!pvOpen.length,pvOpen.length?L(`${pvOpen.length} 张 PV 还没付完`,`${pvOpen.length} PVs not paid`):L(`PV 都处理好了（${pvs.length} 张）`,`PVs done (${pvs.length})`),pvOpen.map(p=>`${esc(supName(p.supplier_id))} ${L((PV_ST[p.status]||PV_ST.Pending)[0],(PV_ST[p.status]||PV_ST.Pending)[1])}`).join("、"))}
+    <div id="mepDO">${row(true,L("检查这个月还没开单的 DO…","Checking unbilled DOs…"))}</div></div>
+  <div class="actions" style="flex-wrap:wrap">
+    <button class="btn" onclick="mepSales()">⬇ Sales Invoice PDF（${invs.length}）</button>
+    <button class="btn" onclick="mepTax()">⬇ Tax Invoice PDF（${sis.length}）</button>
+    <button class="btn" onclick="mepArap()">⬇ AP-AR Summary（Excel）</button>
+    <button class="btn sec" onclick="pvPdf(MEP.d.pvs.map(p=>p.id))" ${pvs.length?"":"disabled"}>⬇ PV PDF（${pvs.length}）</button>
+    <button class="btn sec" onclick="pvListingXlsx(MEP.d.pvs.map(p=>p.id))" ${pvs.length?"":"disabled"}>⬇ PV Excel + Listing</button></div>
+  <p class="mute" id="pgProg" style="font-size:12px"></p>
+  <p class="mute" style="font-size:12px">${L("Sales Invoice：签名第一页，按 Invoice No 排。Tax Invoice：Supplier 那边上传的扫描件，按日期从最早排。AP-AR Summary：只有这个月。","Sales: signed first pages by invoice no. Tax: supplier scans by date. AP-AR: this month only.")}</p>`);
+  try{const dos=await fetchAll(()=>sb.from("delivery_orders").select("id,do_no,do_date,customer_id,record_only").eq("company",co).is("invoice_id",null).gte("do_date",from).lte("do_date",to));
+    const un=dos.filter(d=>!d.record_only),el=$("#mepDO");if(el)el.innerHTML=row(!un.length,un.length?L(`这个月还有 ${un.length} 张 DO 没开单`,`${un.length} unbilled DOs`):L("这个月的 DO 都开单了","All DOs billed"),un.slice(0,30).map(d=>`${esc(d.do_no)} ${esc(custName(d.customer_id))}`).join("、"))}catch(e){}}
+function mepSales(){const{invs}=MEP.d;signedFirstPages(invs,`${S.company} SALES INVOICE FOR ${monTag(MEP.m+"-01")}`)}
+async function mepTax(){const{sis}=MEP.d;if(!sis.length)return toast(L("这个月没有 supplier invoice","No supplier invoices"));const items=[],miss=[];
+  for(const si of sis){const at=siAtts(si);if(!at.length){miss.push(`${supName(si.supplier_id)} ${si.invoice_no}`);continue}for(const a of at)items.push({att:a,label:si.invoice_no})}
+  if(!items.length)return toast(L("还没有上传任何扫描件","No scans uploaded"));
+  try{await buildPdf(items,`${S.company} TAX INVOICE FOR ${monTag(MEP.m+"-01")}`);if(miss.length)alert(L(`这些没有扫描件，没放进去：\n${miss.join("\n")}`,`Missing scans:\n${miss.join("\n")}`))}catch(e){toast(e.message)}}
+async function mepArap(){const{invs,sis}=MEP.d,l3=S.company==="L3H";try{await loadExcelJS();const wb=new ExcelJS.Workbook();
+  const sheet=(name,H,rows,moneyCols,totalLabelCol)=>{const ws=wb.addWorksheet(name);const hr=ws.getRow(1);H.forEach((h,i)=>{const c=hr.getCell(i+1);c.value=h;c.font={bold:true};c.border=BOX;c.alignment={horizontal:"center",vertical:"middle",wrapText:true}});hr.height=32;
+    rows.forEach((v,k)=>{const row=ws.getRow(k+2);v.forEach((x,i)=>{const c=row.getCell(i+1);c.value=x;c.border=BOX;if(moneyCols.includes(i+1))c.numFmt=MONEY;c.alignment={vertical:"top",wrapText:i===4}})});
+    const t=ws.getRow(rows.length+2);t.getCell(totalLabelCol).value="Total";t.getCell(totalLabelCol).font={bold:true};
+    for(const mc of moneyCols){const L1=ws.getColumn(mc).letter,c=t.getCell(mc);c.value={formula:`SUM(${L1}2:${L1}${rows.length+1})`};c.numFmt=MONEY;c.font={bold:true};c.border={top:THIN,bottom:{style:"double"}}}
+    ws.views=[{state:"frozen",ySplit:1}];ws.autoFilter={from:{row:1,column:1},to:{row:1,column:H.length}};return ws};
+  const sH=["No.","Invoice Date","Invoice Number","Name of Customer","Description","Invoice Amount before GST ($)","GST ($)","TOTAL ",...(l3?["Remark","Payment Received"]:["Payment Received","Remark"])];
+  const s1=sheet("Sales invoices",sH,invs.map((i,k)=>{const pt=payText(i);return[k+1,dmy(i.invoice_date),i.invoice_no,custName(i.customer_id),invDesc(i),Number(i.amount_before_gst)||0,Number(i.gst_amount)||0,Number(i.total)||0,...(l3?["",pt]:[pt,""])]}),[6,7,8],5);
+  [6,12,18,36,48,16,12,14,30,22].forEach((w,i)=>s1.getColumn(i+1).width=w);
+  const tH=["No","Invoice Date","Invoice Number","Name of Customer","Description","Invoice Amount before GST ($)","GST ($)","Total","Payment","Remark","GST SUBMISSION PERIOD"];
+  const s2=sheet("Tax Invoice",tH,sis.map((si,k)=>{const p=pvOfSI(si);return[k+1,dmy(si.invoice_date),String(si.invoice_no),supName(si.supplier_id),si.description||"",Number(si.amount_before_gst)||0,Number(si.gst_amount)||0,Number(si.total)||0,
+    si.payment_date?`paid on ${dmy(si.payment_date)}${p?.bank_ref?" - "+p.bank_ref:""}`:"",si.remark||"",gstPeriod(si.invoice_date)]}),[6,7,8],5);
+  [5,12,22,34,44,16,12,14,26,20,18].forEach((w,i)=>s2.getColumn(i+1).width=w);
+  await xlDownload(wb,`${S.company}_AP-AR_SUMMARY_${monTag(MEP.m+"-01").replace(" ","_")}.xlsx`)}catch(e){toast(e.message)}}
 
 /* ---- 批量补记收款（旧单） ---- */
 let BP=null;
@@ -1374,7 +1599,7 @@ function invView(){
     <label class="f">${L("客户","Customer")}<select onchange="S.invF.customer=this.value;render()">${optList(S.d.customers.map(c=>[c.id,c.name]),F.customer,L("全部","All"))}</select></label>
     <label class="f">${L("状态","Status")}<select onchange="S.invF.status=this.value;render()">${optList([["Unpaid",L("未付","Unpaid")],["Partial",L("部分付款","Partial")],["Paid",L("已付","Paid")],["Overdue",L("逾期","Overdue")],["CN","CN"]],F.status,L("全部","All"))}</select></label>
     <label class="f">${L("搜寻","Search")}<input value="${esc(F.q)}" placeholder="Invoice No / Project" onchange="S.invF.q=this.value;render()"></label>
-    <button class="btn" onclick="openInvForm()">${L("新增 Invoice","New invoice")}</button><button class="btn sec" onclick="projBoard()">📊 ${L("Project 进度","Project progress")}</button><button class="btn sec" onclick="bulkPay()">💰 ${L("批量补记收款","Bulk record payments")}</button><button class="btn sec" onclick="exportInv()">⬇ Excel</button></div>
+    <button class="btn" onclick="openInvForm()">${L("新增 Invoice","New invoice")}</button><button class="btn sec" onclick="projBoard()">📊 ${L("Project 进度","Project progress")}</button><button class="btn sec" onclick="bulkPay()">💰 ${L("批量补记收款","Bulk record payments")}</button><button class="btn sec" onclick="monthEnd()">📦 ${L("月底文件包","Month-end pack")}</button><button class="btn sec" onclick="exportInv()">⬇ Excel</button></div>
   ${dfBar("inv",yearsOf(S.d.invoices,"invoice_date"))}${invSelBar()}
   ${rows.length?`<div class="tw"><table><thead><tr><th onclick="event.stopPropagation()"><input type="checkbox" ${rows.length&&rows.every(i=>S.invSel.has(i.id))?"checked":""} onchange="invSelAll(this.checked)"></th><th>No</th>${thS("inv","date","Invoice Date")}${thS("inv","no","Invoice No")}${thS("inv","cust",L("客户","Customer"))}<th>Description</th>
     ${thS("inv","sub","Amt before GST","num")}${thS("inv","gst","GST","num")}${thS("inv","total","Total","num")}${thS("inv","paid",L("已付","Paid"),"num")}${thS("inv","bal",L("余额","Balance"),"num")}
@@ -1723,7 +1948,7 @@ function sumView(){
   const ap={};for(const s of S.d.supplier_invoices){if(s.payment_date||!dfIn("arap",s.invoice_date))continue;const r=ap[s.supplier_id]=ap[s.supplier_id]||{bal:0,over:0,n:0,next:""};r.bal+=Number(s.total)||0;r.n++;
     if(s.due_date&&s.due_date<today())r.over+=Number(s.total)||0;else if(s.due_date&&(!r.next||s.due_date<r.next))r.next=s.due_date}
   const arR=sortRows("ar",Object.entries(ar),{c:([k])=>custName(k),n:([,r])=>r.n,bal:([,r])=>r.bal,over:([,r])=>r.over,intr:([,r])=>r.intr}),apR=sortRows("ap",Object.entries(ap),{c:([k])=>supName(k),n:([,r])=>r.n,bal:([,r])=>r.bal,over:([,r])=>r.over,next:([,r])=>r.next});
-  return `<div class="actions" style="margin:0 0 8px"><button class="btn sec" onclick="exportARAP()">⬇ ${L("下载 AR / AP Excel","Download AR / AP Excel")}</button></div>
+  return `<div class="actions" style="margin:0 0 8px"><button class="btn" onclick="monthEnd()">📦 ${L("月底文件包","Month-end pack")}</button><button class="btn sec" onclick="exportARAP()">⬇ ${L("下载 AR / AP Excel","Download AR / AP Excel")}</button></div>
   <h2>${L("要马上处理","Needs action now")}</h2><div class="cards">
     <div class="card urgent"><h3>${L("客户逾期未付","Overdue receivables")} (${A.overdue.length})</h3>${li(A.overdue,i=>`<li onclick="openInv('${i.id}')"><span>${esc(i.invoice_no)} · ${esc(custName(i.customer_id))} · ${overdueDays(i)}${L("天","d")}</span><span>$${money(balOf(i))}</span></li>`)}</div>
     <div class="card urgent"><h3>${L("Supplier 逾期未付","Overdue payables")} (${A.apOver.length})</h3>${li(A.apOver,apLi)}</div>
@@ -1806,8 +2031,8 @@ const ENT={
   customer_surcharges:{scoped:1,label:["Diesel Surcharge（客户）","Diesel surcharge (customer)"],fields:[F("customer_id","customer",1,["客户","Customer"]),F("service","serviceOpt",0,["Service","Service"]),
     F("amount_per_do","money",1,["每张 DO 金额","Amount per DO"]),F("start_date","date",1,["开始日期","Start date"]),F("end_date","date",0,["结束日期","End date"]),F("remark","text",0,["Remark","Remark"])],
     cols:["customer_id","service","amount_per_do","start_date","end_date","remark"]},
-  suppliers:{label:["供应商","Suppliers"],fields:[F("name","text",1,["名称","Name"]),F("payment_terms_days","terms",0,["付款期限","Payment terms"],30),F("contact","text",0,["联络人 / 电话","Contact"]),F("email","email",0,["Email","Email"]),F("remark","text",0,["Remark","Remark"])],
-    cols:["name","payment_terms_days","contact","email"]},
+  suppliers:{label:["供应商","Suppliers"],fields:[F("name","text",1,["名称","Name"]),F("payment_terms_days","terms",0,["付款期限","Payment terms"],30),F("contact","text",0,["联络人 / 电话","Contact"]),F("email","email",0,["Email","Email"]),F("bank_name","text",0,["银行（PV 的 A/C 用）","Bank (for PV A/C)"]),F("bank_account","text",0,["户口号码","Account no."]),F("remark","text",0,["Remark","Remark"])],
+    cols:["name","payment_terms_days","contact","email","bank_name","bank_account"]},
   supplier_invoices:{label:["Supplier Invoice","Supplier invoices"],att:["Tax Invoice","Supporting"],fields:[F("supplier_id","supplier",1,["供应商","Supplier"]),F("charged_to","chargedTo",0,["To 谁","Charged to"]),
     F("invoice_no","text",1,["Invoice No","Invoice No"]),F("invoice_date","date",1,["Invoice 日期","Invoice date"]),F("due_date","date",0,["Due date（空白自动算）","Due date (auto if blank)"]),
     F("description","text",0,["Description","Description"]),F("amount_before_gst","money",0,["Amt before GST","Amt before GST"]),F("gst_amount","money",0,["GST（空白自动 9%）","GST (auto 9% if blank)"]),
@@ -1918,13 +2143,13 @@ async function upAtt(type,id,input){const file=input.files[0];if(!file)return;co
   const path=`${S.user.id}/${type}/${id}/${Date.now()}_${safe}`;toast(L("上传中…","Uploading…"));
   const up=await sb.storage.from("attachments").upload(path,file);if(up.error)return toast(up.error.message);
   const{data,error}=await sb.from("attachments").insert({entity_type:type,entity_id:id,kind,file_path:path,file_name:file.name}).select().single();if(error)return toast(error.message);
-  S.d.attachments.push(data);toast(L("已上传","Uploaded"));render()}
+  S.d.attachments.push(data);toast(L("已上传","Uploaded"));render();if(type==="pv"&&$("#photoOv"))pvOpen(id)}
 async function openAtt(aid){const a=S.d.attachments.find(x=>x.id===aid),w=window.open("","_blank");
   const{data,error}=await sb.storage.from("attachments").createSignedUrl(a.file_path,600);if(error){w?.close();return toast(error.message)}
   if(w)w.location=data.signedUrl;else location.href=data.signedUrl}
 async function delAtt(aid){if(!confirm(L("确定删除这个附件？","Delete this file?")))return;const a=S.d.attachments.find(x=>x.id===aid);
   await sb.storage.from("attachments").remove([a.file_path]);const{error}=await sb.from("attachments").delete().eq("id",aid);if(error)return toast(error.message);
-  S.d.attachments=S.d.attachments.filter(x=>x.id!==aid);render()}
+  S.d.attachments=S.d.attachments.filter(x=>x.id!==aid);render();if(a.entity_type==="pv"&&$("#photoOv"))pvOpen(a.entity_id)}
 
 /* ================= 导入 AP-AR Summary（她自己的 Excel） ================= */
 const normNo=s=>String(s??"").toUpperCase().replace(/\s+/g,"").replace(/[–—]/g,"-");
