@@ -157,6 +157,8 @@ label.file{cursor:pointer}
 #cropOv .crophead{display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;margin-bottom:8px}
 #cropOv .cropstage{position:relative;display:flex;justify-content:center;touch-action:none;user-select:none;background:#0b0f14;border-radius:8px;padding:8px}
 #cropOv canvas{display:block;max-width:100%}
+#cropOv svg.quad{position:absolute;pointer-events:none;overflow:visible}#cropOv svg.quad polygon{fill:rgba(245,166,35,.12);stroke:var(--amber);stroke-width:2}
+#cropOv .qh{position:absolute;width:26px;height:26px;margin:-13px 0 0 -13px;background:var(--amber);border:2px solid #fff;border-radius:50%;cursor:grab;touch-action:none;box-shadow:0 0 0 3px rgba(0,0,0,.35)}
 #cropOv .cropsel{position:absolute;border:2px solid var(--amber);box-shadow:0 0 0 9999px rgba(0,0,0,.45);cursor:move;touch-action:none}
 #cropOv .cropsel i{position:absolute;width:22px;height:22px;background:var(--amber);border-radius:50%;border:2px solid #fff}
 #cropOv .cropsel i[data-h=nw]{left:-12px;top:-12px;cursor:nwse-resize}#cropOv .cropsel i[data-h=ne]{right:-12px;top:-12px;cursor:nesw-resize}
@@ -3431,7 +3433,7 @@ async function pdfToJpegs(file,maxPages=6,q=0.75){
     const cv=document.createElement("canvas");cv.width=Math.round(v.width);cv.height=Math.round(v.height);const cx=cv.getContext("2d");cx.fillStyle="#fff";cx.fillRect(0,0,cv.width,cv.height);
     await pg.render({canvasContext:cx,viewport:v}).promise;out.push(await canvasJpeg(cv,q))}
   return out}
-async function toJpegs(file,maxPages){return /pdf$/i.test(file.type)||/\.pdf$/i.test(file.name)?pdfToJpegs(file,maxPages):[await compressImage(file)]}
+async function toJpegs(file,maxPages){return /pdf$/i.test(file.type)||/\.pdf$/i.test(file.name)?pdfToJpegs(file,maxPages,0.9):[await compressImage(file,3200,0.92)]}
 async function storeJpeg(type,id,kind,blob,origName){const path=`${S.user.id}/${type}/${id}/${Date.now()}_${Math.random().toString(36).slice(2,7)}.jpg`;
   const up=await sb.storage.from("attachments").upload(path,blob,{contentType:"image/jpeg"});if(up.error)throw up.error;
   const{data,error}=await sb.from("attachments").insert({entity_type:type,entity_id:id,kind,file_path:path,file_name:origName||"photo.jpg"}).select().single();if(error)throw error;
@@ -3443,7 +3445,7 @@ async function pickDoPhotos(input){const files=[...input.files];input.value="";i
   if(!String(f.do_no||"").trim()){toast(L("先填 DO 号码再拍照，才不会对错","Fill in the DO number first"));document.querySelector('.grid [name="do_no"]')?.focus();return}
   const tag=`DO ${f.do_no.trim()} · ${custName(f.customer_id)||"—"} · ${dmy(f.do_date)}${f.plate?" · "+f.plate:""}`;
   try{toast(L("处理照片中…","Processing…"));const blobs=[];let n=0;const raw=[];for(const file of files)for(const b of await toJpegs(file,6))raw.push({b,name:file.name});
-    for(const x of raw){n++;const c=await cropImage(x.b,tag+(raw.length>1?` (${n}/${raw.length})`:""),f.do_no.trim());if(c)blobs.push({blob:await compressImage(c),name:`DO-${f.do_no.trim()}${raw.length>1?"-"+n:""}.jpg`})}
+    for(const x of raw){n++;const c=await cropImage(x.b,tag+(raw.length>1?` (${n}/${raw.length})`:""),f.do_no.trim());if(c)blobs.push({blob:c,name:`DO-${f.do_no.trim()}${raw.length>1?"-"+n:""}.jpg`})}
     if(!blobs.length)return;
     if(f.id){for(const x of blobs)await storeJpeg("do",f.id,"DO",x.blob,x.name);toast(L(`已上传 ${blobs.length} 张（${kb(blobs.reduce((s,x)=>s+x.blob.size,0))}）`,`Uploaded ${blobs.length}`))}
     else{f._pending=(f._pending||[]).concat(blobs);toast(L("照片已准备好，按「保存」时一起上传","Photos ready — they upload when you save"))}
@@ -3458,7 +3460,7 @@ function doPhotoBox(f){const list=f.id?doPhotos(f.id):[],pend=f._pending||[];
 
 /* ---- 签名页 ---- */
 async function upSigned(id,input){const file=input.files[0];input.value="";if(!file)return;
-  try{toast(L("处理签名页中…","Processing signed page…"));const[raw]=await toJpegs(file,1);const c=await cropImage(raw,L("签名页 — 检查清楚再确定","Signed page — check before saving"));if(!c)return;const blob=await compressImage(c,1800,0.78);
+  try{toast(L("处理签名页中…","Processing signed page…"));const[raw]=await toJpegs(file,1);const c=await cropImage(raw,L("签名页 — 检查清楚再确定","Signed page — check before saving"));if(!c)return;const blob=c;
     await storeJpeg("invoice",id,SIGNED_KIND,blob,file.name);toast(L(`签名页已上传（${kb(file.size)} → ${kb(blob.size)}）`,`Signed page uploaded (${kb(blob.size)})`));render()}catch(e){toast(e.message||String(e))}}
 function signBox(i){const sg=signedOf(i),dos=S.modal?.dos||S.d.delivery_orders.filter(d=>d.invoice_id===i.id),noPic=dos.filter(d=>!doPhotos(d.id).length),share=!!navigator.canShare;
   return `<div class="panel" style="margin:14px 0 4px;padding:14px 16px"><h3 style="margin-top:0">${L("寄客户版本","Customer copy")}</h3>
@@ -3643,41 +3645,77 @@ async function quoteCompare(invId){
     catch(e){delete qCache[a.id];box.innerHTML=`<p class="mute">${L("读不到这个文件，请按下面「在新视窗打开」。","Could not preview — use Open original below.")}</p>`}};
   ov.querySelector("#qSel").onchange=e=>show(Number(e.target.value));show(0)}
 /* ---- 预览 + 裁切（上传前） ---- */
+/* ---- 拍照像扫描：拉四个角拉直 + 扫描滤镜，输出 A4 200dpi ---- */
+function homography(src,dst){/* 求 H 使 dst→src：src/dst 都是 4 个 [x,y] */const A=[],b=[];
+  for(let i=0;i<4;i++){const[x,y]=dst[i],[u,v]=src[i];A.push([x,y,1,0,0,0,-u*x,-u*y]);b.push(u);A.push([0,0,0,x,y,1,-v*x,-v*y]);b.push(v)}
+  for(let c=0;c<8;c++){let p=c;for(let r=c+1;r<8;r++)if(Math.abs(A[r][c])>Math.abs(A[p][c]))p=r;[A[c],A[p]]=[A[p],A[c]];[b[c],b[p]]=[b[p],b[c]];
+    for(let r=0;r<8;r++){if(r===c)continue;const f=A[r][c]/A[c][c];for(let k=c;k<8;k++)A[r][k]-=f*A[c][k];b[r]-=f*b[c]}}
+  const h=b.map((v,i)=>v/A[i][i]);return[...h,1]}
+function warpQuad(srcCv,quad,W,H){const sx=srcCv.getContext("2d").getImageData(0,0,srcCv.width,srcCv.height),sd=sx.data,SW=srcCv.width,SH=srcCv.height;
+  const h=homography(quad,[[0,0],[W,0],[W,H],[0,H]]),out=document.createElement("canvas");out.width=W;out.height=H;const ox=out.getContext("2d"),od=ox.createImageData(W,H),o=od.data;
+  for(let y=0;y<H;y++)for(let x=0;x<W;x++){const d=h[6]*x+h[7]*y+1,u=(h[0]*x+h[1]*y+h[2])/d,v=(h[3]*x+h[4]*y+h[5])/d,j=(y*W+x)*4;
+    if(u<0||v<0||u>=SW-1||v>=SH-1){o[j]=o[j+1]=o[j+2]=255;o[j+3]=255;continue}
+    const x0=u|0,y0=v|0,fx=u-x0,fy=v-y0,i00=(y0*SW+x0)*4,i10=i00+4,i01=i00+SW*4,i11=i01+4;
+    for(let c=0;c<3;c++)o[j+c]=(sd[i00+c]*(1-fx)+sd[i10+c]*fx)*(1-fy)+(sd[i01+c]*(1-fx)+sd[i11+c]*fx)*fy;o[j+3]=255}
+  ox.putImageData(od,0,0);return out}
+function scanFilter(cv,mode){if(mode==="orig")return cv;const W=cv.width,H=cv.height,cx=cv.getContext("2d"),id=cx.getImageData(0,0,W,H),d=id.data;
+  /* 背景：缩小再放大（模糊）当作纸的颜色和阴影，用它来除，纸变白、阴影不见 */
+  const sw=Math.max(8,Math.round(W/40)),sh=Math.max(8,Math.round(H/40)),sm=document.createElement("canvas");sm.width=sw;sm.height=sh;const smx=sm.getContext("2d");smx.drawImage(cv,0,0,sw,sh);
+  const sdat=smx.getImageData(0,0,sw,sh).data,bgc=new Float32Array(sw*sh*3);
+  for(let y=0;y<sh;y++)for(let x=0;x<sw;x++){let m=[0,0,0];for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const xx=Math.min(sw-1,Math.max(0,x+dx)),yy=Math.min(sh-1,Math.max(0,y+dy)),k=(yy*sw+xx)*4;for(let c=0;c<3;c++)m[c]=Math.max(m[c],sdat[k+c])}
+    for(let c=0;c<3;c++)bgc[(y*sw+x)*3+c]=Math.max(60,m[c])}
+  for(let y=0;y<H;y++){const gy=Math.min(sh-1,y*sh/H),y0=gy|0,y1=Math.min(sh-1,y0+1),fy=gy-y0;
+    for(let x=0;x<W;x++){const gx=Math.min(sw-1,x*sw/W),x0=gx|0,x1=Math.min(sw-1,x0+1),fx=gx-x0,j=(y*W+x)*4;let g=0;
+      for(let c=0;c<3;c++){const b=(bgc[(y0*sw+x0)*3+c]*(1-fx)+bgc[(y0*sw+x1)*3+c]*fx)*(1-fy)+(bgc[(y1*sw+x0)*3+c]*(1-fx)+bgc[(y1*sw+x1)*3+c]*fx)*fy;
+        let v=d[j+c]/b*255;v=(v-40)*1.18;v=v>255?255:v<0?0:v;if(v>232)v=255;d[j+c]=v;g+=v}
+      if(mode==="bw"){const gg=g/3,t=gg>185?255:gg<110?0:(gg-110)*3.4;d[j]=d[j+1]=d[j+2]=t}}}
+  cx.putImageData(id,0,0);return cv}
+function autoQuad(cv){/* 简单找纸：纸通常比背景亮，找亮区的四个角 */const s=Math.min(1,240/Math.max(cv.width,cv.height)),w=Math.max(2,Math.round(cv.width*s)),h=Math.max(2,Math.round(cv.height*s)),t=document.createElement("canvas");t.width=w;t.height=h;
+  const tx=t.getContext("2d");tx.drawImage(cv,0,0,w,h);const d=tx.getImageData(0,0,w,h).data,lum=new Float32Array(w*h);let sum=0;for(let i=0;i<w*h;i++){lum[i]=(d[i*4]+d[i*4+1]+d[i*4+2])/3;sum+=lum[i]}
+  const sorted=Array.from(lum).sort((a,b)=>a-b),thr=Math.max(sorted[Math.floor(w*h*0.35)],(sorted[Math.floor(w*h*0.9)]+sorted[Math.floor(w*h*0.1)])/2);
+  let tl=null,tr=null,br=null,bl=null,a=1e9,b2=-1e9,c=-1e9,e=1e9,n=0;
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){if(lum[y*w+x]<thr)continue;n++;if(x+y<a){a=x+y;tl=[x,y]}if(x-y>b2){b2=x-y;tr=[x,y]}if(x+y>c){c=x+y;br=[x,y]}if(x-y<e){e=x-y;bl=[x,y]}}
+  if(!tl||n<w*h*0.15)return null;const k=1/s,q=[tl,tr,br,bl].map(([x,y])=>[x*k,y*k]);
+  const area=Math.abs((q[0][0]*q[1][1]-q[1][0]*q[0][1])+(q[1][0]*q[2][1]-q[2][0]*q[1][1])+(q[2][0]*q[3][1]-q[3][0]*q[2][1])+(q[3][0]*q[0][1]-q[0][0]*q[3][1]))/2;
+  return area>cv.width*cv.height*0.2?q:null}
 function cropImage(blob,title,big){return new Promise(resolve=>{
   const url=URL.createObjectURL(blob),img=new Image();
   img.onerror=()=>{URL.revokeObjectURL(url);resolve(blob)};
-  img.onload=()=>{
-    let rot=0,src=img;const ov=document.createElement("div");ov.id="cropOv";
-    ov.innerHTML=`<div class="cropbox">${big?`<div class="dobig" style="margin-bottom:4px">DO ${esc(big)}</div>`:""}<div class="crophead"><b>${esc(title||L("预览 / 裁切","Preview / crop"))}</b><span class="mute">${big?L("确认照片上的 DO 号码一样，再拉四个角只留 DO 单","Check the DO number on the photo matches, then crop to the slip"):L("拉四个角或拖动框，只留 DO 单","Drag the corners or the frame to keep only the DO slip")}</span></div>
-      <div class="cropstage"><canvas></canvas><div class="cropsel"><i data-h="nw"></i><i data-h="ne"></i><i data-h="sw"></i><i data-h="se"></i></div></div>
-      <div class="actions"><button class="btn sec" data-a="rl">⟲ ${L("左转","Rotate left")}</button><button class="btn sec" data-a="rr">⟳ ${L("右转","Rotate right")}</button><button class="btn sec" data-a="full">${L("全图","Full image")}</button>
-        <span style="flex:1"></span><button class="btn sec" data-a="skip">${L("不要这张","Discard")}</button><button class="btn" data-a="ok">✓ ${L("确定","Use this")}</button></div></div>`;
+  img.onload=()=>{let rot=0,mode=getPref("scanMode")||"scan",Q=null,full=null,k=1;const ov=document.createElement("div");ov.id="cropOv";
+    ov.innerHTML=`<div class="cropbox">${big?`<div class="dobig" style="margin-bottom:4px">DO ${esc(big)}</div>`:""}<div class="crophead"><b>${esc(title||L("预览 / 裁切","Preview / crop"))}</b><span class="mute">${L("把四个黄点拖到纸的四个角，系统会拉直成 A4","Drag the 4 yellow dots to the paper corners; it will be straightened to A4")}${big?L("；确认照片上的 DO 号码一样","; check the DO number matches"):""}</span></div>
+      <div class="cropstage"><canvas></canvas><svg class="quad"><polygon></polygon></svg>${["0","1","2","3"].map(i=>`<i class="qh" data-i="${i}"></i>`).join("")}</div>
+      <div class="actions" style="flex-wrap:wrap"><button class="btn sec" data-a="rl">⟲</button><button class="btn sec" data-a="rr">⟳</button><button class="btn sec" data-a="auto">🔍 ${L("自动找纸边","Auto edges")}</button><button class="btn sec" data-a="full">${L("全图","Full image")}</button>
+        <span class="seg" style="display:inline-flex">${[["orig",L("原色","Original")],["scan",L("扫描白底","Scan")],["bw",L("黑白","B/W")]].map(([v,t])=>`<button class="btn sm ${v===mode?"":"sec"}" data-m="${v}">${t}</button>`).join("")}</span>
+        <span style="flex:1"></span><button class="btn sec" data-a="skip">${L("不要这张","Discard")}</button><button class="btn" data-a="ok">✓ ${L("确定","Use this")}</button></div>
+      <p class="mute" style="font-size:12px;margin:4px 0 0">${L("拍照小技巧：光线够、纸放平、纸占满画面、手机跟纸平行。","Tips: good light, paper flat, fill the frame, hold the phone parallel.")}</p></div>`;
     document.body.appendChild(ov);
-    const cv=ov.querySelector("canvas"),sel=ov.querySelector(".cropsel"),stage=ov.querySelector(".cropstage");let k=1,R;
-    const draw=()=>{const w=rot%180?src.naturalHeight:src.naturalWidth,h=rot%180?src.naturalWidth:src.naturalHeight;
-      const maxW=Math.min(stage.clientWidth||900,900),maxH=Math.max(260,window.innerHeight-230);k=Math.min(maxW/w,maxH/h,1);
-      cv.width=Math.round(w*k);cv.height=Math.round(h*k);const cx=cv.getContext("2d");cx.save();cx.translate(cv.width/2,cv.height/2);cx.rotate(rot*Math.PI/180);
-      cx.drawImage(src,-src.naturalWidth*k/2,-src.naturalHeight*k/2,src.naturalWidth*k,src.naturalHeight*k);cx.restore();
-      R={x:cv.width*.03,y:cv.height*.03,w:cv.width*.94,h:cv.height*.94};place()};
-    const place=()=>{Object.assign(sel.style,{left:cv.offsetLeft+R.x+"px",top:cv.offsetTop+R.y+"px",width:R.w+"px",height:R.h+"px"})};
+    const cv=ov.querySelector("canvas"),stage=ov.querySelector(".cropstage"),poly=ov.querySelector("polygon"),svg=ov.querySelector("svg.quad"),hs=[...ov.querySelectorAll(".qh")];
+    const buildFull=()=>{const fw=rot%180?img.naturalHeight:img.naturalWidth,fh=rot%180?img.naturalWidth:img.naturalHeight;full=document.createElement("canvas");full.width=fw;full.height=fh;
+      const fx=full.getContext("2d");fx.translate(fw/2,fh/2);fx.rotate(rot*Math.PI/180);fx.drawImage(img,-img.naturalWidth/2,-img.naturalHeight/2)};
+    const draw=()=>{buildFull();const maxW=Math.min(stage.clientWidth-16||900,900),maxH=Math.max(260,window.innerHeight-260);k=Math.min(maxW/full.width,maxH/full.height,1);
+      cv.width=Math.round(full.width*k);cv.height=Math.round(full.height*k);const cx=cv.getContext("2d");cx.drawImage(full,0,0,cv.width,cv.height);
+      if(!Q){const a=autoQuad(full);Q=a||[[full.width*.03,full.height*.03],[full.width*.97,full.height*.03],[full.width*.97,full.height*.97],[full.width*.03,full.height*.97]]}place()};
+    const place=()=>{const ox=cv.offsetLeft,oy=cv.offsetTop;Object.assign(svg.style,{left:ox+"px",top:oy+"px",width:cv.width+"px",height:cv.height+"px"});svg.setAttribute("viewBox",`0 0 ${cv.width} ${cv.height}`);
+      poly.setAttribute("points",Q.map(([x,y])=>`${x*k},${y*k}`).join(" "));hs.forEach((h,i)=>{h.style.left=ox+Q[i][0]*k+"px";h.style.top=oy+Q[i][1]*k+"px"})};
     let drag=null;
-    sel.addEventListener("pointerdown",e=>{e.preventDefault();sel.setPointerCapture(e.pointerId);drag={h:e.target.dataset.h||"move",x:e.clientX,y:e.clientY,r:{...R}}});
-    sel.addEventListener("pointermove",e=>{if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y,o=drag.r,W=cv.width,H=cv.height,m=30;let{x,y,w,h}=o;
-      if(drag.h==="move"){x=Math.min(Math.max(0,o.x+dx),W-o.w);y=Math.min(Math.max(0,o.y+dy),H-o.h)}
-      else{if(drag.h.includes("w")){x=Math.min(Math.max(0,o.x+dx),o.x+o.w-m);w=o.x+o.w-x}if(drag.h.includes("e"))w=Math.min(Math.max(m,o.w+dx),W-o.x);
-        if(drag.h.includes("n")){y=Math.min(Math.max(0,o.y+dy),o.y+o.h-m);h=o.y+o.h-y}if(drag.h.includes("s"))h=Math.min(Math.max(m,o.h+dy),H-o.y)}
-      R={x,y,w,h};place()});
-    sel.addEventListener("pointerup",()=>drag=null);
+    hs.forEach(h=>{h.addEventListener("pointerdown",e=>{e.preventDefault();h.setPointerCapture(e.pointerId);drag={i:+h.dataset.i,x:e.clientX,y:e.clientY,p:[...Q[+h.dataset.i]]}});
+      h.addEventListener("pointermove",e=>{if(!drag)return;const nx=drag.p[0]+(e.clientX-drag.x)/k,ny=drag.p[1]+(e.clientY-drag.y)/k;Q[drag.i]=[Math.min(full.width,Math.max(0,nx)),Math.min(full.height,Math.max(0,ny))];place()});
+      h.addEventListener("pointerup",()=>drag=null)});
     const finish=async ok=>{if(!ok){ov.remove();URL.revokeObjectURL(url);return resolve(null)}
-      const full=document.createElement("canvas"),fw=rot%180?src.naturalHeight:src.naturalWidth,fh=rot%180?src.naturalWidth:src.naturalHeight;full.width=fw;full.height=fh;
-      const fx=full.getContext("2d");fx.translate(fw/2,fh/2);fx.rotate(rot*Math.PI/180);fx.drawImage(src,-src.naturalWidth/2,-src.naturalHeight/2);
-      const s=1/k,out=document.createElement("canvas");out.width=Math.round(R.w*s);out.height=Math.round(R.h*s);
-      const ox=out.getContext("2d");ox.fillStyle="#fff";ox.fillRect(0,0,out.width,out.height);ox.drawImage(full,R.x*s,R.y*s,R.w*s,R.h*s,0,0,out.width,out.height);
-      const b=await canvasJpeg(out,0.8);ov.remove();URL.revokeObjectURL(url);resolve(b)};
-    ov.querySelector(".actions").addEventListener("click",e=>{const a=e.target.closest("button")?.dataset.a;if(!a)return;
-      if(a==="rl"){rot=(rot+270)%360;draw()}else if(a==="rr"){rot=(rot+90)%360;draw()}else if(a==="full"){R={x:0,y:0,w:cv.width,h:cv.height};place()}
+      const btn=ov.querySelector('[data-a="ok"]');if(btn){btn.disabled=true;btn.textContent=L("处理中…","Processing…")}await new Promise(r=>setTimeout(r,30));
+      const dist=(a,b)=>Math.hypot(a[0]-b[0],a[1]-b[1]),qw=(dist(Q[0],Q[1])+dist(Q[3],Q[2]))/2,qh=(dist(Q[0],Q[3])+dist(Q[1],Q[2]))/2,r=qh/qw;
+      let W,H;if(r>1.25&&r<1.6){W=1654;H=2340}else if(r<0.8&&r>0.62){W=2340;H=1654}else{const s=2340/Math.max(qw,qh);W=Math.round(qw*Math.min(s,1.6));H=Math.round(qh*Math.min(s,1.6))}
+      const isRect=Q[0][0]===Q[3][0]&&Q[0][1]===Q[1][1]&&Q[1][0]===Q[2][0]&&Q[3][1]===Q[2][1];
+      let out=warpQuad(full,Q,W,H);out=scanFilter(out,mode);
+      const b=await canvasJpeg(out,0.85);ov.remove();URL.revokeObjectURL(url);resolve(b)};
+    ov.querySelector(".actions").addEventListener("click",e=>{const bt=e.target.closest("button");if(!bt)return;const m=bt.dataset.m;
+      if(m){mode=m;setPref("scanMode",m);ov.querySelectorAll("[data-m]").forEach(x=>x.classList.toggle("sec",x.dataset.m!==m));return}
+      const a=bt.dataset.a;if(!a)return;
+      if(a==="rl"||a==="rr"){rot=(rot+(a==="rl"?270:90))%360;Q=null;draw()}
+      else if(a==="full"){Q=[[0,0],[full.width,0],[full.width,full.height],[0,full.height]];place()}
+      else if(a==="auto"){const q=autoQuad(full);if(q){Q=q;place()}else toast(L("找不到纸边，请自己拖四个角","Could not find the edges; drag the corners"))}
       else finish(a==="ok")});
-    requestAnimationFrame(draw)};
+    window.addEventListener("resize",place,{once:true});requestAnimationFrame(draw)};
   img.src=url})}
 
 /* ================= 打印 ================= */
