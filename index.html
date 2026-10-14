@@ -1080,7 +1080,10 @@ async function previewInv(ids){const list=sortInvIds(ids);if(!list.length)return
       <button class="btn sm sec" onclick="pvClose()">✕ ${L("关闭","Close")}</button>`;
     document.body.appendChild(bar);box.scrollTop=0}catch(e){toast(e.message)}}
 function pvClose(){const box=$("#print");box.classList.remove("pv");box.innerHTML="";$("#pvBar")?.remove()}
-async function multiPdf(ids){const list=sortInvIds(ids);if(!list.length)return;try{let html="";for(const inv of list)html+=(await invPagesHTML(inv)).html;$("#print").innerHTML=html;
+async function multiPdf(ids){const list=sortInvIds(ids);if(!list.length)return;
+  if(list.some(invOrig)){try{const items=[];for(const inv of list){const o=invOrig(inv);items.push(o?{att:o,label:inv.invoice_no}:{html:(await invPagesHTML(inv)).html})}
+      await buildPdf(items,list.length===1?fileBase(list[0]):`${S.company}_Invoices_${fileBase(list[0])}_to_${fileBase(list.at(-1))}`)}catch(e){toast(e.message)}return}
+  try{let html="";for(const inv of list)html+=(await invPagesHTML(inv)).html;$("#print").innerHTML=html;
   await makePdf(list.length===1?fileBase(list[0]):`${S.company}_Invoices_${fileBase(list[0])}_to_${fileBase(list.at(-1))}`)}catch(e){toast(e.message)}}
 async function multiCust(ids){const list=sortInvIds(ids);for(const inv of list){await custCopy(inv.id);await new Promise(r=>setTimeout(r,400))}}
 
@@ -1796,7 +1799,7 @@ function invView(){
     <label class="f">${L("客户","Customer")}<select onchange="S.invF.customer=this.value;render()">${optList(S.d.customers.map(c=>[c.id,c.name]),F.customer,L("全部","All"))}</select></label>
     <label class="f">${L("状态","Status")}<select onchange="S.invF.status=this.value;render()">${optList([["Unpaid",L("未付","Unpaid")],["Partial",L("部分付款","Partial")],["Paid",L("已付","Paid")],["Overdue",L("逾期","Overdue")],["CN","CN"]],F.status,L("全部","All"))}</select></label>
     ${sqBox("inv",L("Invoice No / 客户 / Project / 金额 / 日期","invoice no / customer / project / amount / date"))}
-    <button class="btn" onclick="openInvForm()">${L("新增 Invoice","New invoice")}</button><button class="btn sec" onclick="projBoard()">📊 ${L("Project 进度","Project progress")}</button><button class="btn sec" onclick="bulkPay()">💰 ${L("批量补记收款","Bulk record payments")}</button><button class="btn sec" onclick="monthEnd()">📦 ${L("月底文件包","Month-end pack")}</button><button class="btn sec" onclick="exportInv()">⬇ Excel</button></div>
+    <button class="btn" onclick="openInvForm()">${L("新增 Invoice","New invoice")}</button><button class="btn sec" onclick="projBoard()">📊 ${L("Project 进度","Project progress")}</button><button class="btn sec" onclick="suUp()">⬆ ${L("上传 Sales Invoice（PDF / zip）","Upload sales invoices")}</button><button class="btn sec" onclick="bulkPay()">💰 ${L("批量补记收款","Bulk record payments")}</button><button class="btn sec" onclick="monthEnd()">📦 ${L("月底文件包","Month-end pack")}</button><button class="btn sec" onclick="exportInv()">⬇ Excel</button></div>
   ${dfBar("inv",yearsOf(S.d.invoices,"invoice_date"))}${invSelBar()}
   ${rows.length?`<div class="tw"><table><thead><tr><th onclick="event.stopPropagation()"><input type="checkbox" ${rows.length&&rows.every(i=>S.invSel.has(i.id))?"checked":""} onchange="invSelAll(this.checked)"></th><th>No</th>${thS("inv","date","Invoice Date")}${thS("inv","no","Invoice No")}${thS("inv","cust",L("客户","Customer"))}<th>Description</th>
     ${thS("inv","sub","Amt before GST","num")}${thS("inv","gst","GST","num")}${thS("inv","total","Total","num")}${thS("inv","paid",L("已付","Paid"),"num")}${thS("inv","bal",L("余额","Balance"),"num")}
@@ -1807,7 +1810,7 @@ function invView(){
     <td>${i.checked?`<span class="tag ok">✓</span>`:`<span class="tag warn">${L("未检查","Not checked")}</span>`}</td>
     <td>${signedOf(i)?`<span class="tag ok">✓</span>`:i.sent_at?"":`<span class="tag warn">${L("未签","Unsigned")}</span>`}</td>
     <td>${i.sent_at?`${dmy(i.sent_at)} ${esc(i.sent_via||"")}`:`<span class="tag mute">${L("未发","Not sent")}</span>`}</td><td>${dmy(lastPayDate(i))}</td>
-    <td onclick="event.stopPropagation()" style="white-space:nowrap"><button class="btn sec sm" title="${L("预览","Preview")}" onclick="previewInv(['${i.id}'])">👁</button> <button class="btn sec sm" title="${L("下载 PDF","Download PDF")}" onclick="printInv('${i.id}')">⬇</button></td></tr>`).join("")}</tbody>
+    <td onclick="event.stopPropagation()" style="white-space:nowrap"><button class="btn sec sm" title="${L("预览","Preview")}" onclick="invPv('${i.id}')">👁</button> <button class="btn sec sm" title="${L("下载 PDF","Download PDF")}" onclick="invDl('${i.id}')">⬇</button></td></tr>`).join("")}</tbody>
   <tfoot><tr><td colspan="6">${L("合计","Total")} ${rows.length}</td><td class="num">${money(sum(rows,i=>i.amount_before_gst))}</td><td class="num">${money(sum(rows,i=>i.gst_amount))}</td>
     <td class="num">${money(sum(rows,i=>i.total))}</td><td class="num">${money(sum(rows,paidOf))}</td><td class="num">${money(sum(rows,balOf))}</td><td colspan="7"></td></tr></tfoot></table></div>`
   :`<div class="panel empty">${L("还没有 invoice。按「新增 Invoice」，选客户和期间，系统会带出未开单的 DO。","No invoices yet. Press New invoice, pick a customer and period, and unbilled DOs will load.")}</div>`}`;
@@ -1969,7 +1972,7 @@ function invDetailView(id){
     <tr><td colspan="3">Total</td><td class="num">${money(i.total)}</td></tr><tr><td colspan="3">${L("已付","Paid")}</td><td class="num">${money(paidOf(i))}</td></tr>
     <tr><td colspan="3">${L("余额","Balance")}</td><td class="num">${money(bal)}</td></tr>${intr?`<tr><td colspan="3">Interest（${od}${L("天","d")} × 1.5%/30）</td><td class="num">${money(intr)}</td></tr>`:""}</tfoot></table></div>
   <div class="actions">
-    <button class="btn sec" onclick="previewInv(['${id}'])">👁 ${L("预览","Preview")}</button><button class="btn" onclick="printInv('${id}')">⬇ ${L("下载 PDF","Download PDF")}</button><button class="btn sec" onclick="printInv('${id}','print')">🖨 ${L("打印","Print")}</button><button class="btn sec" onclick="invXlsx('${id}')">⬇ Excel · Invoice</button><button class="btn sec" onclick="sumXlsx('${id}')">⬇ Excel · Summary</button>
+    <button class="btn sec" onclick="invPv('${id}')">👁 ${L("预览","Preview")}</button><button class="btn" onclick="invDl('${id}')">⬇ ${L("下载 PDF","Download PDF")}</button>${invOrig(invById(id))?`<span class="tag ok" title="${L("导入的旧单，用你上传的原本 PDF","Imported invoice: your uploaded original is used")}">${L("用原本 PDF","Original PDF")}</span>`:""}<button class="btn sec" onclick="printInv('${id}','print')">🖨 ${L("打印","Print")}</button><button class="btn sec" onclick="invXlsx('${id}')">⬇ Excel · Invoice</button><button class="btn sec" onclick="sumXlsx('${id}')">⬇ Excel · Summary</button>
     <button class="btn ${i.checked?"sec":""}" onclick="toggleChecked('${id}')">${i.checked?L("✓ 已检查（按取消）","✓ Checked (undo)"):L("标记金额已检查","Mark amount checked")}</button>
     <button class="btn sec" onclick="sendInv('${id}','WhatsApp')">WhatsApp</button><button class="btn sec" onclick="sendInv('${id}','Email')">Email</button>
     <button class="btn sec" onclick="openPayForm({customer_id:'${i.customer_id}',invoice_id:'${id}'})">${L("记录收款","Record payment")}</button>
@@ -2442,6 +2445,64 @@ async function siPreview(ids){const list=siSorted(ids),items=[];for(const si of 
       <button class="btn sm" onclick="siDownload(${J},'pdf')">⬇ ${L("下载合并 PDF","Download merged PDF")}</button><button class="btn sec sm" onclick="siDownload(${J},'zip')">⬇ zip</button><button class="btn sec sm" data-a="x">✕</button></div>
       <iframe src="${SIPV}" style="width:100%;height:78vh;border:0;background:#fff;border-radius:6px"></iframe>`)}
   catch(e){toast(e.message||String(e));$("#photoOv")?.remove()}}
+
+/* ---- 导入的旧单：用上传的原本 PDF ---- */
+const invOrig=i=>i&&i.sent_via==="Imported"?signedOf(i):null;
+function invPv(id){const i=invById(id),o=invOrig(i);if(o)return attPreview(id,o.id);previewInv([id])}
+async function invDl(id){const i=invById(id),o=invOrig(i);if(!o)return printInv(id);
+  try{const{data,error}=await sb.storage.from("attachments").download(o.file_path);if(error)throw error;const ext=(String(o.file_name||o.file_path).match(/\.[a-z0-9]{2,5}$/i)||[".pdf"])[0].toLowerCase();
+    saveBlob(data,fileBase(i)+ext);toast(fileBase(i)+ext)}catch(e){toast(e.message||String(e))}}
+/* ---- ⬆ 上传 Sales Invoice（PDF / zip）→ 配对 invoice，存成签名页 ---- */
+let SU=null;
+function suUp(){SU={files:[],take:new Set()};suRender()}
+async function suFiles(input){const fs=[...input.files];input.value="";const add=[];const pg=$("#suProg");if(pg)pg.textContent=L("读取中…","Reading…");
+  for(const f of fs){if(/\.zip$/i.test(f.name)){try{await loadJSZip();const z=await JSZip.loadAsync(await f.arrayBuffer());
+        for(const e of Object.values(z.files)){if(e.dir||!/\.(pdf|jpe?g|png)$/i.test(e.name)||/(^|\/)__MACOSX\//.test(e.name))continue;const nm=e.name.split("/").pop();add.push(new File([await e.async("blob")],nm,{type:/\.pdf$/i.test(nm)?"application/pdf":"image/jpeg"}))}}
+      catch(e){alert(f.name+": "+e.message)}}
+    else if(/\.(pdf|jpe?g|png)$/i.test(f.name))add.push(f)}
+  for(const f of add)if(!SU.files.some(x=>x.name===f.name))SU.files.push({name:f.name,file:f});
+  suAnalyse();suRender();suRead()}
+const suAn=s=>String(s??"").toUpperCase().replace(/[^A-Z0-9]/g,"");
+function suFind(text){const b=suAn(text);if(b.length<4)return null;let best=null,bl=0,tie=false;
+  for(const i of S.d.invoices){const k=suAn(i.invoice_no);if(k.length<5)continue;const kk=k.replace(new RegExp("^"+S.company),"");
+    const hit=b===k||b.includes(k)||(kk.length>=5&&b.includes(kk)&&/\d/.test(kk));if(!hit)continue;const len=b.includes(k)?k.length+10:kk.length;
+    if(len>bl){best=i;bl=len;tie=false}else if(len===bl&&best&&best.id!==i.id)tie=true}
+  return tie?null:best}
+function suAnalyse(){for(const x of SU.files){
+    if(x.manual){const i=S.d.invoices.find(v=>suAn(v.invoice_no)===suAn(x.manual));x.inv=i||null}
+    else if(x.inv===undefined){const i=suFind(x.name);if(i)x.inv=i;else if(/\.pdf$/i.test(x.name)){x.inv=null;x.reading=true}else x.inv=null}
+    const i=x.inv;x.st=x.reading?"reading":!i?"none":S.d.attachments.some(a=>a.entity_type==="invoice"&&a.entity_id===i.id&&a.kind===SIGNED_KIND&&a.file_name===x.name)?"same":signedOf(i)?"has":"ok";
+    if(!x._init&&x.st!=="reading"){if(x.st==="ok")SU.take.add(x.name);x._init=1}}}
+async function suRead(){for(const x of SU.files.filter(f=>f.reading)){try{const lines=await pdfLines(x.file,1),r=parseInvText(lines);
+      let i=r.no?suFind(r.no):null;if(!i){const hit=lines.join(" ").match(new RegExp(S.company+"\\s*[\\/\\-]\\s*(INV\\s*[\\/\\-]\\s*)?\\d{4}\\s*[\\/\\-]\\s*\\d{1,3}","i"));if(hit)i=suFind(hit[0])}
+      x.inv=i||null;x.readNo=r.no||""}catch(e){x.inv=null}
+    x.reading=false;suAnalyse();if($("#suGo")||$("#photoOv"))suRender()}}
+function suSet(name,v){const x=SU.files.find(f=>f.name===name);if(!x)return;x.manual=String(v||"").trim();x._init=0;suAnalyse();suRender()}
+const SU_ST={ok:["ok",["配对到","Matched"]],has:["warn",["已经有签名页（要换就打勾）","Has a signed page (tick to replace)"]],same:["mute",["已经上传过","Already uploaded"]],none:["bad",["配不到","No match"]],reading:["mute",["读取中…","Reading…"]]};
+function suRender(){const F=SU.files,cnt=k=>F.filter(x=>x.st===k).length,go=F.filter(x=>SU.take.has(x.name)&&["ok","has"].includes(x.st));
+  const order={reading:0,none:1,has:2,ok:3,same:4},rows=[...F].sort((a,b)=>order[a.st]-order[b.st]||String(a.inv?.invoice_no||a.name).localeCompare(String(b.inv?.invoice_no||b.name)));
+  pvOv(`<div class="pvhead"><h3 style="margin:0">⬆ ${L("上传 Sales Invoice","Upload sales invoices")} · ${S.company}</h3><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
+  <p class="mute" style="font-size:13px;margin-top:0">${L("你以前做好的 Sales Invoice（签好的或原本的 PDF / 照片）。可以一次选很多个，或直接选整包 zip。系统先看文件名里的单号（例：ETK-INV-2609-17.pdf、L3H_2607_32.pdf），没有就读 PDF 里的 Invoice No。放进去当作那张 invoice 的签名页：月底签名第一页合并、寄客户版本都会用到；导入的旧单按 👁 / ⬇ 会直接打开这个原本的 PDF。","Your earlier sales invoices (PDF / photo). Matched by invoice no in the file name, else read from the PDF. Saved as the signed page.")}</p>
+  <label class="btn file">⬆ ${L("选 PDF / 照片 / zip","Choose PDF / photo / zip")}<input type="file" accept=".pdf,.zip,.jpg,.jpeg,.png" multiple hidden onchange="suFiles(this)"></label>
+  ${F.length?`<ul style="margin:8px 0 4px 18px;font-size:14px"><li>${L("配对到","Matched")}: <b>${cnt("ok")}</b></li><li>${L("已经有签名页","Already has a signed page")}: ${cnt("has")}</li><li>${L("已经上传过，跳过","Already uploaded")}: ${cnt("same")}</li>
+    ${cnt("reading")?`<li>${L("读取 PDF 中","Reading")}: ${cnt("reading")}</li>`:""}${cnt("none")?`<li><b style="color:var(--bad)">${L("配不到（可以在旁边打单号）","No match (type the invoice no.)")}: ${cnt("none")}</b></li>`:""}</ul>
+  <p style="font-size:13px;margin:6px 0"><a href="#" onclick="event.preventDefault();SU.files.forEach(x=>{if(['ok','has'].includes(x.st))SU.take.add(x.name)});suRender()">${L("全选","All")}</a> · <a href="#" onclick="event.preventDefault();SU.take.clear();suRender()">${L("全不选","None")}</a></p>
+  <div class="tw" style="max-height:50vh;overflow:auto"><table><thead><tr><th></th><th>${L("状态","Status")}</th><th>${L("文件","File")}</th><th>Invoice No</th><th>${L("客户","Customer")}</th><th>${L("日期","Date")}</th><th class="num">Total</th></tr></thead><tbody>
+  ${rows.map(x=>{const[t,l]=SU_ST[x.st],N=esc(JSON.stringify(x.name)),can=["ok","has"].includes(x.st),i=x.inv;
+    return `<tr><td>${can?`<input type="checkbox" ${SU.take.has(x.name)?"checked":""} onchange="SU.take[this.checked?'add':'delete'](${N});suRender()">`:""}</td><td><span class="tag ${t}">${L(...l)}</span></td>
+    <td><a href="#" onclick="window.open(URL.createObjectURL(SU.files.find(f=>f.name===${N}).file));return false">👁 ${esc(x.name.slice(0,36))}</a></td>
+    <td>${x.st==="reading"?"":`<input class="tiin${i?"":" miss"}" list="suNos" style="width:170px" value="${esc(i?i.invoice_no:(x.manual||x.readNo||""))}" onchange="suSet(${N},this.value)">`}</td>
+    <td>${i?esc(custName(i.customer_id)):""}</td><td>${i?dmy(i.invoice_date):""}</td><td class="num">${i?money(i.total):""}</td></tr>`}).join("")}</tbody></table></div>
+  <datalist id="suNos">${S.d.invoices.map(i=>`<option value="${esc(i.invoice_no)}">`).join("")}</datalist>
+  <div class="actions" style="margin-top:10px"><button class="btn" id="suGo" ${go.length?"":"disabled"} onclick="suApply()">${L(`上传 ${go.length} 个`,`Upload ${go.length}`)}</button></div>`:""}<p id="suProg" class="mute"></p>`)}
+async function suApply(){const go=SU.files.filter(x=>SU.take.has(x.name)&&["ok","has"].includes(x.st));if(!go.length)return;
+  if(!confirm(L(`上传 ${go.length} 个 Sales Invoice，存成签名页？`,`Upload ${go.length}?`)))return;const b=$("#suGo");if(b)b.disabled=true;let done=0;const fail=[],q=[...go];
+  const worker=async()=>{while(q.length){const x=q.shift();try{const safe=x.name.replace(/[^\w.\-]+/g,"_"),path=`${S.user.id}/invoice/${x.inv.id}/${Date.now()}_${safe}`;
+      const up=await sb.storage.from("attachments").upload(path,x.file,{contentType:x.file.type||"application/pdf"});if(up.error)throw up.error;
+      const{data,error}=await sb.from("attachments").insert({entity_type:"invoice",entity_id:x.inv.id,kind:SIGNED_KIND,file_path:path,file_name:x.name}).select().single();if(error)throw error;S.d.attachments.push(data)}
+    catch(e){fail.push(`${x.name}: ${e.message}`)}done++;const p=$("#suProg");if(p)p.textContent=`${L("上传中","Uploading")} ${done}/${go.length}`}};
+  await Promise.all([0,1,2,3].map(worker));await loadAll();suAnalyse();suRender();render();
+  alert(L(`完成：上传 ${go.length-fail.length} 个${fail.length?`\n\n失败 ${fail.length} 个（可以再上传一次）：\n`+fail.slice(0,15).join("\n"):""}`,`Uploaded ${go.length-fail.length}`))}
 
 /* ---- 👁 附件预览 ---- */
 async function attPreview(eid,aid){const list=S.d.attachments.filter(a=>a.entity_id===eid).sort((a,b)=>(b.kind==="Tax Invoice")-(a.kind==="Tax Invoice"));if(!list.length)return;
