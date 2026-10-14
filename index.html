@@ -53,7 +53,7 @@ nav.tabs button{border:0;background:none;padding:10px 12px;cursor:pointer;color:
 nav.tabs button.on{color:var(--ink);border-bottom-color:var(--amber)}
 nav.tabs .badge{display:inline-block;min-width:18px;padding:0 5px;margin-left:4px;border-radius:9px;background:var(--bad);color:#fff;font-size:11px;line-height:18px;text-align:center}
 
-main{max-width:1280px;margin:0 auto;padding:16px}
+main{max-width:1800px;margin:0 auto;padding:16px}
 h2{font-size:18px;margin:4px 0 12px} h3{font-size:15px;margin:16px 0 8px}
 .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
@@ -91,6 +91,7 @@ main .tw thead th{z-index:2}
 #undoT b{font-size:12px;opacity:.6;min-width:16px}
 #toTop{position:fixed;right:18px;bottom:18px;z-index:120;width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:var(--panel2);color:inherit;font-size:18px;cursor:pointer;display:none;box-shadow:0 6px 18px rgba(0,0,0,.3)}
 #toTop.show{display:block}
+.tiin{background:color-mix(in srgb,#f5a623 14%,var(--panel));border:1px solid var(--line);border-radius:6px;padding:3px 6px;color:inherit}.tiin.miss{background:color-mix(in srgb,var(--bad) 18%,var(--panel))}
 @media (max-width:700px){
   main .tw{max-height:none;overflow:visible;border:0}
   main .tw table,main .tw tbody,main .tw tfoot,main .tw tr,main .tw td{display:block;width:100%}
@@ -426,7 +427,7 @@ function statusTag(inv){const s=statusOf(inv);if(s==="CN")return `<span class="t
 function nextInvNo(date){const s=settingsOf(S.company);const[y,m]=date.split("-");const base=`${s.inv_prefix||""}${y.slice(2)}${m}/`;let max=0;
   for(const i of S.d.invoices)if(i.invoice_no.startsWith(base)){const n=parseInt(i.invoice_no.slice(base.length),10);if(n>max)max=n}
   return base+z2(max+1)}
-function apStatus(si){if(si.payment_date)return `<span class="tag ok">${L("已付","Paid")}</span>`;{const p=typeof pvOfSI==="function"?pvOfSI(si):null;if(p)return `<span class="tag Day">PV · ${L(PV_ST[p.status]?.[0]||"待批准",PV_ST[p.status]?.[1]||"Pending")}</span>`}
+function apStatus(si){if(si.payment_date)return `<span class="tag ok">${L("已付","Paid")} ${dmy(si.payment_date)}</span>`;{const p=typeof pvOfSI==="function"?pvOfSI(si):null;if(p)return `<span class="tag Day">PV · ${L(PV_ST[p.status]?.[0]||"待批准",PV_ST[p.status]?.[1]||"Pending")}</span>`}
   if(si.due_date&&si.due_date<today())return `<span class="tag bad">${L("逾期","Overdue")}</span>`;return `<span class="tag mute">${L("未付","Unpaid")}</span>`}
 function surchargeCheck(si){
   const act=S.d.diesel_surcharges.filter(d=>d.supplier_id===si.supplier_id&&inRange(si.invoice_date,d.start_date,d.end_date)).sort((a,b)=>b.start_date.localeCompare(a.start_date))[0];
@@ -505,7 +506,7 @@ function afterRender(prevTab,prevScr){
 function toTopVis(){const b=$("#toTop");if(!b)return;b.classList.toggle("show",window.scrollY>400||[...document.querySelectorAll("main .tw")].some(e=>e.scrollTop>400))}
 function toTop(){window.scrollTo({top:0,behavior:"smooth"});document.querySelectorAll("main .tw").forEach(e=>e.scrollTo({top:0,behavior:"smooth"}))}
 document.addEventListener("scroll",()=>toTopVis(),{capture:true,passive:true});
-const UI_KEYS=["tab","sub","df","sort","invF","payF","doF","siQuick","colHide","doPerPage"];
+const UI_KEYS=["tab","sub","df","sort","invF","payF","doF","siQuick","colHide","doPerPage","siAll"];
 function saveUI(){try{const o={SQ};for(const k of UI_KEYS)o[k]=S[k];localStorage.setItem("uiState",JSON.stringify(o))}catch(e){}}
 function loadUI(){try{const o=JSON.parse(localStorage.getItem("uiState")||"null");if(!o)return;if(o.SQ)Object.assign(SQ,o.SQ);
     for(const k of UI_KEYS)if(o[k]!=null&&typeof o[k]===typeof S[k]||o[k]!=null&&S[k]==null)S[k]=(o[k]&&typeof o[k]==="object"&&!Array.isArray(o[k])&&S[k]&&typeof S[k]==="object")?{...S[k],...o[k]}:o[k];
@@ -1024,7 +1025,7 @@ function craneSummaryHTML(inv,dos){const c=custOf(inv.customer_id),rows=dos.map(
 
 /* ================= 第 1 批：日期筛选 / 排序 / 预览 / Excel / 多选 ================= */
 /* ---- 日期筛选（年 / 月 / 自定） ---- */
-S.df=S.df||{};S.sort=S.sort||{};S.invSel=S.invSel||new Set();S.siSel=S.siSel||new Set();S.colHide=S.colHide||{};S.scr=S.scr||{};
+S.df=S.df||{};S.sort=S.sort||{};S.invSel=S.invSel||new Set();S.siSel=S.siSel||new Set();S.colHide=S.colHide||{};S.siAll=!!S.siAll;S.scr=S.scr||{};
 const lastDay=(y,m)=>new Date(y,m,0).getDate();
 function dfRange(key){const f=S.df[key]||{p:"all"},t=today(),y=+t.slice(0,4),m=+t.slice(5,7);
   const mr=(yy,mm)=>[`${yy}-${z2(mm)}-01`,`${yy}-${z2(mm)}-${z2(lastDay(yy,mm))}`];
@@ -2134,19 +2135,21 @@ async function sendSOA(via){const cid=S.soaCust,c=custOf(cid),s=settingsOf(S.com
 /* ================= AR / AP 总表 ================= */
 function actionLists(){const td=today(),inv=S.d.invoices.filter(i=>i.status!=="Cancelled"),m=td.slice(0,7)+"-01";
   return{overdue:inv.filter(i=>overdueDays(i)>0).sort((a,b)=>overdueDays(b)-overdueDays(a)),
-    apOver:S.d.supplier_invoices.filter(s=>!s.payment_date&&s.due_date&&s.due_date<td),
-    mism:S.d.supplier_invoices.filter(s=>!surchargeCheck(s).ok),
+    apOver:S.d.supplier_invoices.filter(s=>siMine(s)&&!s.payment_date&&s.due_date&&s.due_date<td),
+    mism:S.d.supplier_invoices.filter(s=>siMine(s)&&!surchargeCheck(s).ok),
     unchecked:inv.filter(i=>!i.checked),unsent:inv.filter(i=>i.checked&&!i.sent_at),
     unsigned:inv.filter(i=>i.checked&&!signedOf(i)&&!i.sent_at),signedUnsent:inv.filter(i=>signedOf(i)&&!i.sent_at),
     noPhoto:S.d.delivery_orders.filter(d=>!doPhotos(d.id).length),
     mfPend:S.d.monthly_fix.filter(mfApplies(m)).filter(c=>!["Billed","Skipped"].includes(mfLog(c.id,m)?.status)),
-    apSoon:S.d.supplier_invoices.filter(s=>!s.payment_date&&s.due_date&&s.due_date>=td&&s.due_date<=addDays(td,7))}}
+    apSoon:S.d.supplier_invoices.filter(s=>siMine(s)&&!s.payment_date&&s.due_date&&s.due_date>=td&&s.due_date<=addDays(td,7))}}
+const siMine=x=>!x.charged_to||x.charged_to===S.company;
 function dataIssues(){const out=[],td=today(),lo="2015-01-01",hi=addDays(td,60),co=S.company;
   const odd=d=>d&&(d<lo||d>hi),why=d=>d<lo?L(`日期太早 ${dmy(d)}`,`too early ${dmy(d)}`):L(`未来日期 ${dmy(d)}`,`future ${dmy(d)}`);
   const sis=S.d.supplier_invoices.filter(x=>!x.charged_to||x.charged_to===co),seen=new Map();
   for(const x of sis){const go=`S.tab='sup';S.sub.sup='supplier_invoices';gEdit('supplier_invoices','${x.id}')`,t=`${supName(x.supplier_id)} · ${x.invoice_no}`;
     if(odd(x.invoice_date))out.push({t,why:why(x.invoice_date),go});
     if(!(Number(x.total)>0)&&!(Number(x.total)<0))out.push({t,why:L("金额是 0","zero amount"),go});
+    if(!x.charged_to)out.push({t,why:L("To 谁 空白","no company"),go});
     const k=x.supplier_id+"|"+sqComp(x.invoice_no);if(seen.has(k))out.push({t,why:L("重复单号","duplicate no."),go});else seen.set(k,1)}
   const seenI=new Map();
   for(const i of S.d.invoices){const go=`openInv('${i.id}')`,t=`${i.invoice_no} · ${custName(i.customer_id)}`;
@@ -2161,7 +2164,7 @@ function sumView(){
   const invLi=i=>`<li onclick="openInv('${i.id}')"><span>${esc(i.invoice_no)} · ${esc(custName(i.customer_id))}</span><span>$${money(balOf(i))}</span></li>`;
   const apLi=s=>`<li onclick="S.tab='sup';S.sub.sup='supplier_invoices';render()"><span>${esc(supName(s.supplier_id))} · ${esc(s.invoice_no)}</span><span>${dmy(s.due_date)}</span></li>`;
   const ar={};for(const i of S.d.invoices){const b=balOf(i);if(b<=0.005||!dfIn("arap",i.invoice_date))continue;const r=ar[i.customer_id]=ar[i.customer_id]||{bal:0,over:0,intr:0,n:0};r.bal+=b;r.n++;if(overdueDays(i))r.over+=b;r.intr+=interestOf(i)}
-  const ap={};for(const s of S.d.supplier_invoices){if(s.payment_date||!dfIn("arap",s.invoice_date))continue;const r=ap[s.supplier_id]=ap[s.supplier_id]||{bal:0,over:0,n:0,next:""};r.bal+=Number(s.total)||0;r.n++;
+  const ap={};for(const s of S.d.supplier_invoices){if(s.payment_date||!siMine(s)||!dfIn("arap",s.invoice_date))continue;const r=ap[s.supplier_id]=ap[s.supplier_id]||{bal:0,over:0,n:0,next:""};r.bal+=Number(s.total)||0;r.n++;
     if(s.due_date&&s.due_date<today())r.over+=Number(s.total)||0;else if(s.due_date&&(!r.next||s.due_date<r.next))r.next=s.due_date}
   for(const k of Object.keys(ar))if(!sqHit(SQ.arap,[custName(k),ar[k].bal]))delete ar[k];for(const k of Object.keys(ap))if(!sqHit(SQ.arap,[supName(k),ap[k].bal]))delete ap[k];
   const arR=sortRows("ar",Object.entries(ar),{c:([k])=>custName(k),n:([,r])=>r.n,bal:([,r])=>r.bal,over:([,r])=>r.over,intr:([,r])=>r.intr}),apR=sortRows("ap",Object.entries(ap),{c:([k])=>supName(k),n:([,r])=>r.n,bal:([,r])=>r.bal,over:([,r])=>r.over,next:([,r])=>r.next});
@@ -2187,7 +2190,7 @@ function sumView(){
   ${apR.length?`<div class="tw"><table><thead><tr>${thS("ap","c","Supplier")}${thS("ap","n",L("张数","Invoices"),"num")}${thS("ap","bal",L("未付","Outstanding"),"num")}${thS("ap","over",L("逾期","Overdue"),"num")}${thS("ap","next",L("下一个到期","Next due"))}</tr></thead><tbody>
     ${apR.map(([sid,r])=>`<tr><td>${esc(supName(sid))}</td><td class="num">${r.n}</td><td class="num">${money(r.bal)}</td><td class="num">${r.over?`<span class="tag bad">${money(r.over)}</span>`:""}</td><td>${dmy(r.next)}</td></tr>`).join("")}</tbody>
     <tfoot><tr><td>${L("合计","Total")}</td><td class="num">${sum(apR,([,r])=>r.n)}</td><td class="num">${money(sum(apR,([,r])=>r.bal))}</td><td class="num">${money(sum(apR,([,r])=>r.over))}</td><td></td></tr></tfoot></table></div>`:`<div class="panel empty">${L("没有未付的 supplier invoice","No unpaid supplier invoices")}</div>`}
-  <p class="mute" style="font-size:13px">${L("Invoice 和收款一有改动，这里自动更新。AR 只显示目前选的公司；AP 显示全部 supplier。","Updates automatically when invoices or payments change. AR shows the selected company; AP shows all suppliers.")}</p>
+  <p class="mute" style="font-size:13px">${L("Invoice 和收款一有改动，这里自动更新。AR 和 AP 都只算目前选的公司（AP 按「To 谁」；空白的两边都算）。","Updates automatically. AR and AP show the selected company only (AP by Charged to; blank counts for both).")}</p>
   ${aparPanel()}${APAR?(setTimeout(()=>{if($("#aparOut")&&!$("#aparOut").innerHTML)aparShow()}),""):""}`;
 }
 
@@ -2257,7 +2260,7 @@ const ENT={
     F("description","text",0,["Description","Description"]),F("amount_before_gst","money",0,["Amt before GST","Amt before GST"]),F("gst_amount","money",0,["GST（空白自动 9%）","GST (auto 9% if blank)"]),
     F("total","money",0,["Total（空白自动算）","Total (auto if blank)"]),F("trips","number",0,["趟数","Trips"]),F("surcharge_charged","money",0,["收了多少 Diesel Surcharge","Diesel surcharge charged"]),
     F("payment_date","date",0,["付款日期","Payment date"]),F("remark","text",0,["Remark","Remark"])],
-    cols:["_att","invoice_date","supplier_id","invoice_no","charged_to","total","due_date","payment_date","_apstatus","_check"],
+    cols:["_att","invoice_date","supplier_id","invoice_no","charged_to","total","due_date","_apstatus","_check"],
     before(row){{const dup=S.d.supplier_invoices.find(x=>x.id!==S.gEdit?.id&&x.supplier_id===row.supplier_id&&normNo(x.invoice_no)===normNo(row.invoice_no));
         if(dup)return L(`这个供应商的 Invoice No 已经有了：${dup.invoice_no}（${dmy(dup.invoice_date)} · $${money(dup.total)}）`,`Duplicate supplier invoice: ${dup.invoice_no}`)}
       if(row.gst_amount==null&&row.amount_before_gst!=null)row.gst_amount=r2(row.amount_before_gst*0.09);
@@ -2274,28 +2277,29 @@ const ENT={
     cols:["customer_id","description","amount","start_month","end_month","active","remark"],
     before(row){if(row.active===false&&!row.remark)return L("停止合约必须填 Remark 说明原因","A remark is required to stop a contract")}}
 };
-const SPECIAL={_apstatus:["状态","Status"],_check:["Surcharge 检查","Surcharge check"],_att:["附件","Files"]};
+const SPECIAL={_apstatus:["状态 / 付款日期","Status / paid"],_check:["Surcharge","Surcharge"],_att:["附件","Files"]};
 const fieldsOf=cfg=>cfg.fields.filter(f=>!f.only||f.only===S.company);
 const colsOf=cfg=>cfg.cols.filter(c=>SPECIAL[c]||fieldsOf(cfg).some(f=>f.k===c));
 function genView(keys,sk){
   const ent=S.sub[sk],cfg=ENT[ent],e=S.gEdit,dk=ent==="supplier_invoices"?"sup":null,dcol=dk?"invoice_date":null,si=ent==="supplier_invoices";
   const gget=c=>{const f=cfg.fields.find(x=>x.k===c);if(!f)return r=>"";if(f.type==="customer")return r=>custName(r[c]);if(f.type==="supplier")return r=>supName(r[c]);if(["money","number","terms"].includes(f.type))return r=>r[c]==null?null:Number(r[c]);return r=>r[c]};
-  const sk2="g_"+ent,base=S.d[ent].filter(r=>!dk||dfIn(dk,r[dcol])),hit0=SQ[sk2]?base.filter(r=>sqHit(SQ[sk2],[...sqRow(r),...colsOf(cfg).filter(c=>!SPECIAL[c]).map(c=>gget(c)(r))])):base;
+  const coF=(ent==="supplier_invoices"||ent==="diesel_surcharges")&&!S.siAll,sk2="g_"+ent,base=S.d[ent].filter(r=>(!dk||dfIn(dk,r[dcol]))&&(!coF||siMine(r))),hit0=SQ[sk2]?base.filter(r=>sqHit(SQ[sk2],[...sqRow(r),...colsOf(cfg).filter(c=>!SPECIAL[c]).map(c=>gget(c)(r))])):base;
   const qk=si?(S.siQuick||""):"",hit=qk?hit0.filter(SIQ[qk].f):hit0;
   const rows=sortRows("g_"+ent,hit,Object.fromEntries(colsOf(cfg).map(c=>[c,gget(c)])));
   const hid=new Set(S.colHide[ent]||[]),vc=colsOf(cfg).filter(c=>!hid.has(c));
   const tabs=keys.length>1?`<div class="sub">${keys.map(k=>`<button class="${k===ent?"on":""}" onclick="S.sub['${sk}']='${k}';S.gEdit=null;S.dirty=false;render()">${L(...ENT[k].label)}</button>`).join("")}</div>`:"";
-  const head=c=>{if(SPECIAL[c])return L(...SPECIAL[c]);const f=cfg.fields.find(f=>f.k===c);return L(...(isL3()&&f.labelL3||f.label))};
+  const head=c=>{if(SPECIAL[c])return L(...SPECIAL[c]);const f=cfg.fields.find(f=>f.k===c);return L(...(isL3()&&f.labelL3||f.label)).replace(/\s*（[^）]*）|\s*\([^)]*\)/g,"").trim()};
   const isNum=c=>["money","number","terms"].includes(cfg.fields.find(f=>f.k===c)?.type);
+  if(si&&!S.siAll&&!rows.some(r=>!r.charged_to)){const i=vc.indexOf("charged_to");if(i>=0)vc.splice(i,1)}
   const chips=si?`<div class="chips">${Object.entries(SIQ).map(([k,q])=>`<button class="${qk===k?"on":""}" onclick="S.siQuick='${k}';render()">${L(...q.l)} <b>${k?hit0.filter(q.f).length:hit0.length}</b></button>`).join("")}</div>`:"";
   const colBtn=`<details class="colpick"><summary class="btn sec sm">☰ ${L("栏位","Columns")}${hid.size?` (${vc.length}/${colsOf(cfg).length})`:""}</summary><div class="colbox">${colsOf(cfg).map(c=>`<label class="chk"><input type="checkbox" ${hid.has(c)?"":"checked"} onchange="colToggle('${ent}','${c}',this.checked)">${head(c)}</label>`).join("")}</div></details>`;
   return tabs+(cfg.note?`<p class="mute" style="font-size:13px">${L(...cfg.note)}</p>`:"")+
     (e?genForm(ent,cfg,e,sk):`<div class="actions" style="margin:0 0 12px"><button class="btn" onclick="S.gEdit={};S.dirty=true;render()">${L("新增","Add")}</button><button class="btn sec" onclick="exportEnt('${ent}')">⬇ Excel</button></div>`)+
-    `<div class="filters" style="margin:0 0 6px">${sqBox(sk2)}${colBtn}</div>`+(dk?dfBar(dk,yearsOf(S.d[ent],dcol)):"")+chips+sqNote(sk2,rows.length,base.length)+
+    `<div class="filters" style="margin:0 0 6px">${sqBox(sk2)}${colBtn}${ent==="supplier_invoices"||ent==="diesel_surcharges"?`<label class="chk" style="align-self:end"><input type="checkbox" ${S.siAll?"checked":""} onchange="S.siAll=this.checked;S.siSel.clear();render()">${L("显示两间公司","Show both companies")}</label>`:""}</div>`+(dk?dfBar(dk,yearsOf(S.d[ent],dcol)):"")+chips+sqNote(sk2,rows.length,base.length)+
     (si?siSelBar(rows):"")+
     (rows.length?`<div class="tw"><table><thead><tr>${si?`<th onclick="event.stopPropagation()"><input type="checkbox" ${rows.every(r=>S.siSel.has(r.id))?"checked":""} onchange="siSelAll(${esc(JSON.stringify(rows.map(r=>r.id)))},this.checked)"></th>`:""}${vc.map(c=>SPECIAL[c]?`<th>${head(c)}</th>`:thS("g_"+ent,c,head(c),isNum(c)?"num":"")).join("")}</tr></thead><tbody>
       ${rows.map(r=>{const bad=si&&(!surchargeCheck(r).ok||(!r.payment_date&&r.due_date&&r.due_date<today()));
-        return `<tr class="click ${bad?"red":""}${si&&S.siSel.has(r.id)?" sel":""}" onclick="gEdit('${ent}','${r.id}')">${si?`<td onclick="event.stopPropagation()"><input type="checkbox" ${S.siSel.has(r.id)?"checked":""} onchange="siSelToggle('${r.id}',this.checked)"></td>`:""}${vc.map(c=>`<td class="${isNum(c)?"num":""}">${genCell(cfg,c,r)}</td>`).join("")}</tr>`}).join("")}</tbody>
+        return `<tr class="click ${bad?"red":""}${si&&S.siSel.has(r.id)?" sel":""}" onclick="gEdit('${ent}','${r.id}')">${si?`<td onclick="event.stopPropagation()"><input type="checkbox" ${S.siSel.has(r.id)?"checked":""} onchange="siSelToggle('${r.id}',this.checked)"></td>`:""}${vc.map(c=>`<td class="${isNum(c)?"num":""}"${c==="supplier_id"||c==="description"||c==="remark"?' style="white-space:normal;min-width:140px;max-width:280px"':""}>${genCell(cfg,c,r)}</td>`).join("")}</tr>`}).join("")}</tbody>
       ${si?`<tfoot><tr><td>${L("合计","Total")} ${rows.length}</td>${vc.map(c=>`<td class="${isNum(c)?"num":""}">${c==="total"?money(sum(rows,r=>r.total)):""}</td>`).join("")}</tr></tfoot>`:""}</table></div>`
     :`<div class="panel empty">${SQ[sk2]||qk?L("搜不到。","No match."):L("还没有资料，按「新增」开始。","Nothing here yet. Press Add to start.")}</div>`);
 }
@@ -2308,7 +2312,8 @@ function siDupCheck(){const fm=$("#gForm"),box=$("#siDup");if(!fm||!box)return;c
 function colToggle(ent,c,on){const h=new Set(S.colHide[ent]||[]);on?h.delete(c):h.add(c);S.colHide[ent]=[...h];render()}
 function genCell(cfg,c,r){
   if(c==="_apstatus")return apStatus(r);
-  if(c==="_check"){const x=surchargeCheck(r);return x.ok?esc(x.t):`<span class="tag bad">${esc(x.t)}</span>`}
+  if(c==="_check"){const x=surchargeCheck(r);return x.ok?`<span class="mute" title="${esc(x.t)}">${x.t&&x.t!=="—"?"✓":"—"}</span>`:`<span class="tag bad">${esc(x.t)}</span>`}
+  if(c==="charged_to"&&!r.charged_to&&(cfg===ENT.supplier_invoices||cfg===ENT.diesel_surcharges))return `<span class="tag warn">${L("未分公司","No company")}</span>`;
   if(c==="_att"){const n=S.d.attachments.filter(a=>a.entity_id===r.id).length;return n?`<span style="white-space:nowrap">📎 ${n} <button class="btn sec sm" title="${L("预览","Preview")}" onclick="event.stopPropagation();attPreview('${r.id}')">👁</button>${cfg===ENT.supplier_invoices?` <button class="btn sec sm" title="${L("下载","Download")}" onclick="event.stopPropagation();siDownload(['${r.id}'],'one')">⬇</button>`:""}</span>`:""}
   const f=cfg.fields.find(x=>x.k===c),v=r[c];
   if(cfg===ENT.rates&&isL3()){if(c==="service")return esc(svcLabel(v));
@@ -2460,11 +2465,15 @@ async function tiFiles(input){const fs=[...input.files];input.value="";const add
       catch(e){alert(f.name+": "+e.message)}}
     else if(/\.pdf$/i.test(f.name))add.push(f)}
   for(const f of add)if(!TI.files.some(x=>x.name===f.name))TI.files.push({name:f.name,file:f});
-  tiAnalyse();tiRender()}
+  tiAnalyse();tiRender();tiReadPdfs()}
 function tiAnalyse(){const an=s=>String(s??"").toUpperCase().replace(/[^A-Z0-9]/g,""),nz=s=>s.replace(/(^|[A-Z])0+(?=\d)/g,"$1");
   const sis=S.d.supplier_invoices,byAn=new Map();for(const si of sis){const k=an(si.invoice_no);if(!byAn.has(k))byAn.set(k,[]);byAn.get(k).push(si)}
-  for(const x of TI.files){const m=x.name.match(TI_RX);x.si=null;x.warn="";x.st="bad";
-    if(m){x.date=m[1];x.sup=m[2].trim();x.no=m[3].trim();x.total=r2(numOr(m[4],0));const k=an(x.no),ck=normCo(x.sup);
+  for(const x of TI.files){x.si=null;x.warn="";
+    if(x.src==null){const m=x.name.match(TI_RX);if(m){x.src="name";x.date=m[1];x.sup=m[2].trim();x.no=m[3].trim();x.total=r2(numOr(m[4],0))}
+      else if(/\.pdf$/i.test(x.name)){const h=tiHint(x.name,sis,an);if(h){x.src="hint";x.date=h.invoice_date;x.sup=supName(h.supplier_id);x.no=h.invoice_no;x.total=r2(Number(h.total)||0)}else{x.src="pdf";x.reading=true}}else x.src="bad"}
+    x.std=x.date&&x.sup&&x.no&&x.total!=null?`${x.date}_${x.sup}_${String(x.no).replace(/[\\/:*?"<>|]+/g,"-")}_${Number(x.total).toFixed(2)}.pdf`.replace(/\s+/g," "):"";
+    x.st=x.src==="bad"?"bad":x.reading?"reading":!x.std?"fill":"";
+    if(!x.st){const k=an(x.no),ck=normCo(x.sup);
       const supOk=si=>simCo(ck,normCo(supName(si.supplier_id)))>=0.8,totOk=si=>Math.abs(Number(si.total)-x.total)<0.02;
       const pick=arr=>{const c=arr.filter(si=>supOk(si)||totOk(si));if(!c.length)return null;const sc=si=>(supOk(si)?2:0)+(totOk(si)?2:0)+(si.charged_to===S.company?1:0);return c.sort((a,b)=>sc(b)-sc(a))[0]};
       let si=pick(byAn.get(k)||[]);
@@ -2472,23 +2481,66 @@ function tiAnalyse(){const an=s=>String(s??"").toUpperCase().replace(/[^A-Z0-9]/
       if(!si)si=pick(sis.filter(s=>an(s.invoice_no)!==k&&nz(an(s.invoice_no))===nz(k)));
       if(!si){x.st="new";if((byAn.get(k)||[]).length)x.warn=L("系统有同号码，但供应商和金额都不同","Same number exists with different supplier and amount")}
       else{x.si=si;const atts=S.d.attachments.filter(a=>a.entity_id===si.id);
-        x.st=atts.some(a=>a.file_name===x.name)?"same":atts.some(a=>a.kind==="Tax Invoice")?"has":"ok";
+        x.st=atts.some(a=>a.file_name===x.name||a.file_name===x.std)?"same":atts.some(a=>a.kind==="Tax Invoice")?"has":"ok";
         x.warn=[!supOk(si)&&L(`系统供应商：${supName(si.supplier_id)}`,`System supplier: ${supName(si.supplier_id)}`),!totOk(si)&&L(`系统金额 $${money(si.total)}`,`System amount $${money(si.total)}`)].filter(Boolean).join("；")}}
-    if(!x._init){if(x.st==="ok"||x.st==="new")TI.take.add(x.name);x._init=1}}}
-const TI_ST={ok:["ok",["配对到","Matched"]],has:["warn",["已经有 Tax Invoice 附件","Already has a tax invoice"]],same:["mute",["已经上传过（同文件名）","Already uploaded"]],new:["warn",["系统没有 → 新增","Not in system → create"]],bad:["bad",["文件名看不懂","Unreadable name"]]};
+    if(!x._init&&!["reading","fill"].includes(x.st)){if(x.st==="ok"||x.st==="new")TI.take.add(x.name);x._init=1}}}
+/* 文件名里有单号（例：CHC-2609-15.pdf、26-02585-PING SIONG.pdf）→ 直接用系统里那张的资料 */
+function tiHint(name,sis,an){const b=an(name.replace(/\.pdf$/i,""));if(b.length<4)return null;let best=null,bl=0,tie=false;
+  for(const si of sis){const k=an(si.invoice_no);if(k.length<5)continue;if(b===k||b.includes(k)||(b.length>=7&&/\d/.test(b)&&k.endsWith(b))){if(k.length>bl){best=si;bl=k.length;tie=false}else if(k.length===bl&&best&&best.id!==si.id&&an(best.invoice_no)!==k)tie=true}}
+  return tie?null:best}
+/* 读 PDF 里的字（电脑开的 PDF 才有字；扫描 / 拍照的没有） */
+async function pdfLines(file,maxPages=2){await loadPdfJs();const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise,out=[];
+  for(let n=1;n<=Math.min(maxPages,pdf.numPages);n++){const tc=await(await pdf.getPage(n)).getTextContent(),rows=new Map();
+    for(const it of tc.items){const t=String(it.str||"");if(!t.trim())continue;const y=Math.round(it.transform[5]/3);(rows.get(y)||rows.set(y,[]).get(y)).push({x:it.transform[4],t})}
+    [...rows.entries()].sort((a,b)=>b[0]-a[0]).forEach(([,r])=>out.push(r.sort((a,b)=>a.x-b.x).map(z=>z.t).join(" ").replace(/\s+/g," ").trim()))}
+  return out}
+const MONN={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,sept:9,oct:10,nov:11,dec:12};
+function dateIn2(s){const y4=y=>y.length===2?"20"+y:y,ok=(y,m,d)=>+m>=1&&+m<=12&&+d>=1&&+d<=31?`${y4(y)}-${z2(m)}-${z2(d)}`:null;let m;
+  if((m=s.match(/\b(\d{4})-(\d{1,2})-(\d{1,2})\b/)))return ok(m[1],m[2],m[3]);
+  if((m=s.match(/\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4}|\d{2})\b/)))return ok(m[3],m[2],m[1]);
+  if((m=s.match(/\b(\d{1,2})(?:st|nd|rd|th)?[\s\-]*(jan|feb|mar|apr|may|jun|jul|aug|sept?|oct|nov|dec)[a-z]*\.?[\s\-,]*(\d{4}|\d{2})\b/i)))return ok(m[3],MONN[m[2].toLowerCase()],m[1]);
+  if((m=s.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sept?|oct|nov|dec)[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})\b/i)))return ok(m[3],MONN[m[1].toLowerCase()],m[2]);
+  return null}
+function parseInvText(lines){const own=/L3H\s*RESOURCES|ETK\s*(RESOURCES|TRAFFIC)/i,NO=/([A-Z0-9][A-Z0-9\/\-._]*\d[A-Z0-9\/\-._]*)/i;
+  let date=null;for(const l of lines)if(/\bdate\b/i.test(l)&&!/due|delivery|service|period|print|expiry/i.test(l.split(/date/i)[0].slice(-12))){const d=dateIn2(l.slice(l.search(/date/i)));if(d){date=d;break}}
+  if(!date)for(const l of lines){const d=dateIn2(l);if(d){date=d;break}}
+  let no=null;const lab=[/(?:tax\s*)?invoice\s*(?:no|number|#)\.?\s*[:：#]?\s*/i,/\b(?:inv|bill|document|doc|debit\s*note)\.?\s*(?:no|number|#)\.?\s*[:：#]?\s*/i,/(?:^|\s)No\.?\s*[:：]\s*/i];
+  const NOG=new RegExp(NO.source,"gi"),good=v=>v&&(/[A-Z]/i.test(v)&&/\d/.test(v)||/[\/\-]/.test(v));
+  outer:for(const rx of lab)for(let i=0;i<lines.length;i++){const l=lines[i],m=l.match(rx);if(!m)continue;const rest=l.slice(m.index+m[0].length).trim();
+    let v=(rest.match(NO)||[])[1];
+    if(!v&&!rest.replace(/[−\-–:]/g,"").trim()){const prev=i>0?(lines[i-1].match(NOG)||[]).at(-1):null,next=i+1<lines.length?(lines[i+1].match(NOG)||[])[0]:null;v=[prev,next].find(good)||next||prev}
+    if(v){no=v.replace(/[.:_-]+$/,"");break outer}}
+  const amts=l=>(l.match(/-?\d{1,3}(?:,\d{3})+\.\d{2}\b|-?\d+\.\d{2}\b/g)||[]).map(x=>Number(x.replace(/,/g,"")));
+  let total=null;const pri=[/grand\s*total|total\s*(amount\s*)?(payable|due)|amount\s*(payable|due)|balance\s*due|total\s*\(?\s*(incl|inclusive|sgd|s\$)/i,/\btotal\b/i];
+  for(const rx of pri){let best=null;for(const l of lines)if(rx.test(l)&&!/sub\s*-?\s*total/i.test(l)){const a=amts(l);if(a.length){const v=a[a.length-1];if(best==null||v>best)best=v}}if(best!=null){total=best;break}}
+  if(total==null){const a=amts(lines.join(" "));if(a.length)total=Math.max(...a)}
+  let sup="",bs=0;const T=normCo(lines.join(" ").slice(0,4000));
+  for(const x of S.d.suppliers){const n=normCo(x.name);if(n.length<3||own.test(x.name))continue;if((" "+T+" ").includes(" "+n+" ")&&n.length>bs){bs=n.length;sup=x.name}}
+  if(!sup){const l=lines.slice(0,15).find(l=>/(pte\.?\s*ltd|p\/l|limited|sdn\.?\s*bhd|\bllp\b|co\.?\s*ltd)/i.test(l)&&!own.test(l));if(l)sup=l.replace(/^(to|from)\s*[:：]?\s*/i,"").slice(0,80)}
+  return{date,no,total:total==null?null:r2(total),sup}}
+async function tiReadPdfs(){for(const x of TI.files.filter(f=>f.reading)){try{const lines=await pdfLines(x.file);const r=parseInvText(lines);x.textless=lines.join("").replace(/\s/g,"").length<30;
+      for(const k of ["date","no","total","sup"])if(r[k]!=null&&r[k]!=="")x[k]=r[k]}catch(e){x.textless=true}
+    x.reading=false;tiAnalyse();if($("#tiGo")||$("#photoOv"))tiRender()}}
+function tiSet(name,k,v){const x=TI.files.find(f=>f.name===name);if(!x)return;v=String(v??"").trim();x[k]=k==="total"?(v===""?null:r2(numOr(v,0))):k==="date"?(toYMD(v)||null):(v||null);tiAnalyse();tiRender()}
+const TI_ST={ok:["ok",["配对到","Matched"]],has:["warn",["已经有 Tax Invoice 附件","Already has a tax invoice"]],same:["mute",["已经上传过（同文件名）","Already uploaded"]],new:["warn",["系统没有 → 新增","Not in system → create"]],bad:["bad",["不是 PDF","Not a PDF"]],reading:["mute",["读取中…","Reading…"]],fill:["bad",["要补资料","Fill in"]]};
 function tiRender(){const F=TI.files,cnt=k=>F.filter(x=>x.st===k).length,go=F.filter(x=>TI.take.has(x.name)&&["ok","has","new"].includes(x.st));
-  const order={bad:0,new:1,has:2,ok:3,same:4},rows=[...F].sort((a,b)=>order[a.st]-order[b.st]||String(a.date).localeCompare(String(b.date)));
+  const order={reading:0,fill:1,bad:2,new:3,has:4,ok:5,same:6},rows=[...F].sort((a,b)=>order[a.st]-order[b.st]||String(a.date).localeCompare(String(b.date)));
   pvOv(`<div class="pvhead"><h3 style="margin:0">⬆ ${L("上传 Tax Invoice","Upload tax invoices")} · ${S.company}</h3><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
-  <p class="mute" style="font-size:13px;margin-top:0">${L("可以一次选很多个 PDF，或直接选整包 zip（分好的那几包）。文件名要是「日期_供应商_Invoice No_金额.pdf」。系统按 Invoice No（不管 / - 空格）+ 供应商或金额自动配对，存成那张 supplier invoice 的「Tax Invoice」附件。同一个文件上传两次不会重复。","Pick many PDFs or whole zip packs. File names: date_supplier_invoiceNo_total.pdf. Each is matched by invoice no + supplier or amount and saved as that supplier invoice's Tax Invoice attachment.")}</p>
+  <p class="mute" style="font-size:13px;margin-top:0">${L("可以一次选很多个 PDF，或直接选整包 zip（分好的那几包）。文件名要是「日期_供应商_Invoice No_金额.pdf」。文件名不是这个格式也可以：系统会读 PDF 里的字，帮你填日期、供应商、单号、金额，你核对一下就好（扫描 / 拍照的读不到字，要自己填）。系统按 Invoice No（不管 / - 空格）+ 供应商或金额自动配对，存成那张 supplier invoice 的「Tax Invoice」附件。同一个文件上传两次不会重复。","Pick many PDFs or whole zip packs. File names: date_supplier_invoiceNo_total.pdf. Each is matched by invoice no + supplier or amount and saved as that supplier invoice's Tax Invoice attachment.")}</p>
   <label class="btn file">⬆ ${L("选 PDF / zip","Choose PDF / zip")}<input type="file" accept=".pdf,.zip" multiple hidden onchange="tiFiles(this)"></label>
   ${F.length?`<ul style="margin:8px 0 4px 18px;font-size:14px"><li>${L("配对到","Matched")}: <b>${cnt("ok")}</b></li><li>${L("系统没有这张（打勾的会用文件名资料新增）","Not in system (ticked = create from file name)")}: ${cnt("new")}</li>
-    <li>${L("那张已经有 Tax Invoice 附件（要再放就打勾）","Already has a tax invoice (tick to add anyway)")}: ${cnt("has")}</li><li>${L("已经上传过，跳过","Already uploaded, skipped")}: ${cnt("same")}</li><li>${L("文件名看不懂","Unreadable name")}: ${cnt("bad")}</li></ul>
+    <li>${L("那张已经有 Tax Invoice 附件（要再放就打勾）","Already has a tax invoice (tick to add anyway)")}: ${cnt("has")}</li><li>${L("已经上传过，跳过","Already uploaded, skipped")}: ${cnt("same")}</li>${cnt("reading")?`<li>${L("读取 PDF 中","Reading PDFs")}: ${cnt("reading")}</li>`:""}${cnt("fill")?`<li><b style="color:var(--bad)">${L("要你补资料（读不到字的扫描件）","Need details (scans without text)")}: ${cnt("fill")}</b></li>`:""}${cnt("bad")?`<li>${L("不是 PDF","Not PDF")}: ${cnt("bad")}</li>`:""}
+    ${F.some(x=>x.src==="pdf"||x.src==="hint")?`<li>${L("黄色格子是从 PDF 读到的，请核对，可以直接改","Yellow fields were read from the PDF — check and edit")}</li>`:""}</ul>
   ${cnt("new")?`<label style="font-size:14px"><input type="checkbox" ${TI.paidNew?"checked":""} onchange="TI.paidNew=this.checked"> ${L("新增的当作已付（付款日期 = invoice 日期）","Mark created ones as paid (payment date = invoice date)")}</label>`:""}
   <p style="font-size:13px;margin:6px 0"><a href="#" onclick="event.preventDefault();TI.files.forEach(x=>{if(['ok','new','has'].includes(x.st))TI.take.add(x.name)});tiRender()">${L("全选","All")}</a> · <a href="#" onclick="event.preventDefault();TI.take.clear();tiRender()">${L("全不选","None")}</a></p>
   <div class="tw" style="max-height:50vh;overflow:auto"><table><thead><tr><th></th><th>${L("状态","Status")}</th><th>${L("日期","Date")}</th><th>${L("供应商","Supplier")}</th><th>Invoice No</th><th class="num">Total</th><th>${L("系统里的","In system")}</th></tr></thead><tbody>
   ${rows.map(x=>{const[t,l]=TI_ST[x.st],can=["ok","has","new"].includes(x.st);return `<tr><td>${can?`<input type="checkbox" ${TI.take.has(x.name)?"checked":""} onchange="TI.take[this.checked?'add':'delete'](${esc(JSON.stringify(x.name))});tiRender()">`:""}</td>
-    <td><span class="tag ${t}">${L(...l)}</span></td><td>${x.date?dmy(x.date):""}</td><td>${esc(x.sup||"")}</td><td>${esc(x.no||x.name)}</td><td class="num">${x.total!=null?money(x.total):""}</td>
+    <td><span class="tag ${t}">${L(...l)}</span>${x.src==="hint"?`<div class="mute" style="font-size:12px">${L("用文件名里的单号配对到","Matched by number in file name")}</div>`:""}${x.src==="pdf"||x.src==="hint"?`<div><a href="#" onclick="window.open(URL.createObjectURL(TI.files.find(f=>f.name===${esc(JSON.stringify(x.name))}).file));return false" style="font-size:12px">👁 ${esc(x.name.slice(0,28))}</a></div>`:""}</td>
+    ${(x.src==="pdf"||x.src==="hint")&&!x.reading?(()=>{const N=esc(JSON.stringify(x.name)),inp=(k,v,attr)=>`<input class="tiin${v==null||v===""?" miss":""}" ${attr} value="${esc(v??"")}" onchange="tiSet(${N},'${k}',this.value)">`;
+      return `<td>${inp("date",x.date,'type="date" style="width:140px"')}</td><td>${inp("sup",x.sup,'list="tiSups" style="width:200px"')}</td><td>${inp("no",x.no,'style="width:170px"')}</td><td class="num">${inp("total",x.total,'type="number" step="0.01" style="width:110px;text-align:right"')}</td>`})()
+    :`<td>${x.date?dmy(x.date):""}</td><td>${esc(x.sup||"")}</td><td>${esc(x.no||x.name)}</td><td class="num">${x.total!=null?money(x.total):""}</td>`}
     <td>${x.si?`${esc(x.si.invoice_no)} · ${esc(supName(x.si.supplier_id))}`:""}${x.warn?` <span class="tag warn">${esc(x.warn)}</span>`:""}</td></tr>`}).join("")}</tbody></table></div>
+  <datalist id="tiSups">${S.d.suppliers.map(x=>`<option value="${esc(x.name)}">`).join("")}</datalist>
   <div class="actions" style="margin-top:10px"><button class="btn" id="tiGo" ${go.length?"":"disabled"} onclick="tiApply()">${L(`上传 ${go.length} 个`,`Upload ${go.length}`)}</button></div>`:""}<p id="tiProg" class="mute"></p>`)}
 async function tiApply(){const go=TI.files.filter(x=>TI.take.has(x.name)&&["ok","has","new"].includes(x.st));if(!go.length)return;const nw=go.filter(x=>x.st==="new");
   if(!confirm(L(`上传 ${go.length} 个 Tax Invoice？${nw.length?`\n其中 ${nw.length} 张系统没有，会新增 supplier invoice`:""}`,`Upload ${go.length}?`)))return;
@@ -2505,7 +2557,7 @@ async function tiApply(){const go=TI.files.filter(x=>TI.take.has(x.name)&&["ok",
     const worker=async()=>{while(q.length){const x=q.shift();
       try{const safe=x.name.replace(/[^\w.\-]+/g,"_"),path=`${S.user.id}/supplier_invoices/${x.si.id}/${Date.now()}_${safe}`;
         const up=await sb.storage.from("attachments").upload(path,x.file,{contentType:"application/pdf"});if(up.error)throw up.error;
-        const{data,error}=await sb.from("attachments").insert({entity_type:"supplier_invoices",entity_id:x.si.id,kind:"Tax Invoice",file_path:path,file_name:x.name}).select().single();if(error)throw error;
+        const{data,error}=await sb.from("attachments").insert({entity_type:"supplier_invoices",entity_id:x.si.id,kind:"Tax Invoice",file_path:path,file_name:x.src==="name"?x.name:x.std}).select().single();if(error)throw error;
         S.d.attachments.push(data)}catch(e){fail.push(`${x.name}: ${e.message}`)}
       done++;const p=prog();if(p)p.textContent=`${L("上传中","Uploading")} ${done}/${go.length}`}};
     await Promise.all([0,1,2,3].map(worker));
@@ -2870,7 +2922,7 @@ function exportARAP(){const td=today();
   const custs=[...new Set(arInv.map(i=>i.customer_id))];
   const arSum=custs.map(cid=>{const l=arInv.filter(i=>i.customer_id===cid),b=k=>sum(l.filter(i=>bucket(i)===k),balOf);
     return[custName(cid),l.length,sum(l,balOf),b("Current"),b("1-30"),b("31-60"),b("61-90"),b(">90"),sum(l,i=>interestOf(i))]});
-  const ap=S.d.supplier_invoices.filter(x=>!x.payment_date).sort((a,b)=>(a.due_date||"").localeCompare(b.due_date||""));
+  const ap=S.d.supplier_invoices.filter(x=>!x.payment_date&&siMine(x)).sort((a,b)=>(a.due_date||"").localeCompare(b.due_date||""));
   const tot=(rows,i)=>sum(rows,r=>r[i]);
   const arList=S.d.invoices.filter(i=>i.status!=="Cancelled"&&balOf(i)>0.005).sort((a,b)=>a.invoice_date.localeCompare(b.invoice_date)||a.invoice_no.localeCompare(b.invoice_no));
   const apList=S.d.supplier_invoices.filter(x=>!x.payment_date).sort((a,b)=>(a.invoice_date||"").localeCompare(b.invoice_date||"")||String(a.invoice_no).localeCompare(String(b.invoice_no)));
