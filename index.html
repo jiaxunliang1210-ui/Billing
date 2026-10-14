@@ -80,6 +80,28 @@ label.chk{display:flex;gap:8px;align-items:center;font-size:14px;cursor:pointer}
 .filters{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:12px}
 .filters label.f{min-width:150px}
 .tw{overflow-x:auto;border:1px solid var(--line);border-radius:10px;margin-bottom:16px}
+main .tw{max-height:calc(100vh - 140px);overflow:auto}
+main .tw tfoot td{position:sticky;bottom:0;z-index:1}
+main .tw thead th{z-index:2}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 8px}.chips button{border:1px solid var(--line);background:var(--panel);color:var(--text,inherit);border-radius:999px;padding:4px 12px;font-size:13px;cursor:pointer}
+.chips button.on{background:var(--accent,#f5a623);color:#111;border-color:transparent}.chips b{font-weight:600;opacity:.75;margin-left:2px}
+.colpick{position:relative;align-self:end}.colpick summary{list-style:none;cursor:pointer}.colpick summary::-webkit-details-marker{display:none}
+.colpick .colbox{position:absolute;z-index:30;top:110%;left:0;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px 12px;display:grid;gap:4px;min-width:200px;box-shadow:0 8px 24px rgba(0,0,0,.3)}
+#undoT{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:300;background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:8px 10px 8px 16px;display:flex;gap:12px;align-items:center;box-shadow:0 8px 24px rgba(0,0,0,.35)}
+#undoT b{font-size:12px;opacity:.6;min-width:16px}
+#toTop{position:fixed;right:18px;bottom:18px;z-index:120;width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:var(--panel2);color:inherit;font-size:18px;cursor:pointer;display:none;box-shadow:0 6px 18px rgba(0,0,0,.3)}
+#toTop.show{display:block}
+@media (max-width:700px){
+  main .tw{max-height:none;overflow:visible;border:0}
+  main .tw table,main .tw tbody,main .tw tfoot,main .tw tr,main .tw td{display:block;width:100%}
+  main .tw thead{display:none}
+  main .tw tr{border:1px solid var(--line);border-radius:10px;margin:0 0 8px;padding:6px 0;background:var(--panel)}
+  main .tw td{border:0;white-space:normal;display:flex;gap:10px;justify-content:space-between;align-items:flex-start;padding:3px 12px;text-align:right;min-width:0}
+  main .tw td.wrap{min-width:0}
+  main .tw td::before{content:attr(data-l);color:var(--mute);text-align:left;font-size:12px;flex:0 0 auto;max-width:45%}
+  main .tw td:empty{display:none}
+  main .tw tfoot td{position:static}
+}
 table{border-collapse:collapse;width:100%;font-size:14px;background:var(--panel)}
 th,td{padding:8px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap;vertical-align:top}
 th{position:sticky;top:0;background:var(--panel2);color:var(--mute);font-weight:500;font-size:13px}
@@ -334,6 +356,10 @@ const esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&
 const $=s=>document.querySelector(s);
 const pref=(k,d)=>{try{return localStorage.getItem(k)||d}catch(e){return d}};
 const setPref=(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}};const getPref=k=>{try{return localStorage.getItem(k)}catch(e){return null}};
+function undoToast(msg,fn){let u=$("#undoT");if(u)u.remove();u=document.createElement("div");u.id="undoT";
+  u.innerHTML=`<span>${esc(msg)}</span><button class="btn sm">↶ ${L("撤销","Undo")}</button><b>10</b>`;document.body.appendChild(u);let n=10;
+  const t=setInterval(()=>{n--;const b=u.querySelector("b");if(b)b.textContent=n;if(n<=0){clearInterval(t);u.remove()}},1000);
+  u.querySelector("button").onclick=async()=>{clearInterval(t);u.remove();await fn()}}
 function toast(m){const e=$("#toast");e.textContent=m;e.classList.add("show");clearTimeout(e._t);e._t=setTimeout(()=>e.classList.remove("show"),2600)}
 const inRange=(d,from,to)=>d&&from&&from<=d&&(!to||to>=d);
 const sum=(a,f)=>r2(a.reduce((s,x)=>s+(Number(f(x))||0),0));
@@ -452,7 +478,7 @@ function done(){S.dirty=false;S.gEdit=null;if(S.pending){S.pending=false}}
 const TABS=[["do","Key in DO","Key in DO"],["inv","Invoice","Invoice"],["exc","Excavator","Excavator"],["pay","收款","Payments"],["soa","SOA","SOA"],["sum","AR / AP 总表","AR / AP"],
   ["mf","Monthly Fix","Monthly Fix"],["sup","Supplier","Supplier"],["master","Master List","Master List"],["set","设定","Settings"]];
 function render(){
-  const app=$("#app");
+  const app=$("#app"),prevTab=render._tab,prevScr=prevTab?scrSnap():null;render._tab=S.tab;
   if(!S.user){app.innerHTML=loginView();return}
   const urgent=urgentCount();
   const V={exc:excView,do:doView,inv:invView,pay:payView,soa:soaView,sum:sumView,mf:mfView,sup:supView,master:masterView,set:setView};
@@ -465,9 +491,31 @@ function render(){
     <button class="ghost" onclick="toggleTheme()">${S.theme==="dark"?L("☀️ 浅色","☀️ Light"):L("🌙 深色","🌙 Dark")}</button>
     <button class="ghost" onclick="logout()">${L("登出","Log out")}</button></header>
   <nav class="tabs">${TABS.filter(([k])=>k!=="exc"||isL3()).map(([k,zh,en])=>`<button class="${S.tab===k?"on":""}" onclick="setTab('${k}')">${L(zh,en)}${k==="sum"&&urgent?`<span class="badge">${urgent}</span>`:""}</button>`).join("")}</nav>
-  <main>${V[S.tab]()}</main>${S.modal?modalView():""}`;
-  updSync();
+  <main>${V[S.tab]()}</main>${S.modal?modalView():""}<button id="toTop" title="${L("回到顶部","Back to top")}" onclick="toTop()">⬆</button>`;
+  updSync();afterRender(prevTab,prevScr);
 }
+/* 画面更新后：表格卷动位置保持、手机卡片标签、记住设定 */
+function scrSnap(){return{y:window.scrollY,t:[...document.querySelectorAll("main .tw")].map(e=>e.scrollTop),l:[...document.querySelectorAll("main .tw")].map(e=>e.scrollLeft)}}
+function scrApply(x){if(!x)return;const tws=[...document.querySelectorAll("main .tw")];tws.forEach((e,i)=>{if(x.t[i])e.scrollTop=x.t[i];if(x.l?.[i])e.scrollLeft=x.l[i]});if(x.y!=null&&Math.abs(window.scrollY-x.y)>2)window.scrollTo(0,x.y)}
+function afterRender(prevTab,prevScr){
+  for(const t of document.querySelectorAll("main .tw table")){const hs=[...t.querySelectorAll("thead th")].map(th=>th.innerText.replace(/[↕↑↓]/g,"").trim());if(!hs.length)continue;
+    for(const tr of t.querySelectorAll("tbody tr"))[...tr.children].forEach((td,i)=>{if(!td.hasAttribute("colspan"))td.dataset.l=hs[i]||""})}
+  if(prevTab===S.tab&&prevScr)scrApply(prevScr);else if(S.scr[S.tab])scrApply(S.scr[S.tab]);
+  toTopVis();saveUI()}
+function toTopVis(){const b=$("#toTop");if(!b)return;b.classList.toggle("show",window.scrollY>400||[...document.querySelectorAll("main .tw")].some(e=>e.scrollTop>400))}
+function toTop(){window.scrollTo({top:0,behavior:"smooth"});document.querySelectorAll("main .tw").forEach(e=>e.scrollTo({top:0,behavior:"smooth"}))}
+document.addEventListener("scroll",()=>toTopVis(),{capture:true,passive:true});
+const UI_KEYS=["tab","sub","df","sort","invF","payF","doF","siQuick","colHide","doPerPage"];
+function saveUI(){try{const o={SQ};for(const k of UI_KEYS)o[k]=S[k];localStorage.setItem("uiState",JSON.stringify(o))}catch(e){}}
+function loadUI(){try{const o=JSON.parse(localStorage.getItem("uiState")||"null");if(!o)return;if(o.SQ)Object.assign(SQ,o.SQ);
+    for(const k of UI_KEYS)if(o[k]!=null&&typeof o[k]===typeof S[k]||o[k]!=null&&S[k]==null)S[k]=(o[k]&&typeof o[k]==="object"&&!Array.isArray(o[k])&&S[k]&&typeof S[k]==="object")?{...S[k],...o[k]}:o[k];
+    if(S.tab==="exc"&&S.company!=="L3H")S.tab="do"}catch(e){}}
+/* 快捷键：Esc 关窗口，Enter 保存，Ctrl+K 搜索 */
+document.addEventListener("keydown",e=>{if(!S.user||e.isComposing||e.keyCode===229)return;
+  if(e.key==="Escape"){const ov=$("#photoOv");if(ov){ov.remove();return}if(S.modal){if(confirmLeave()){S.dirty=false;closeModal()}return}if(S.gEdit){if(confirmLeave()){done();render()}return}return}
+  if(e.key==="Enter"&&!e.shiftKey){const el=e.target;if(!el||el.tagName==="TEXTAREA"||el.tagName==="BUTTON"||el.tagName==="A")return;if(el.tagName==="INPUT"&&/^(search|checkbox|radio|file)$/i.test(el.type))return;
+    if(!(el.tagName==="INPUT"||el.tagName==="SELECT"))return;const box=el.closest("#photoOv .pvbox")||el.closest(".modal .box")||el.closest("section.panel")||el.closest(".panel")||el.closest("form");if(!box)return;
+    const btn=[...box.querySelectorAll("button")].find(b=>/^\s*(save|pvSave|saveGen|saveInv|savePay|saveDO|excSave)/.test(b.getAttribute("onclick")||""));if(btn&&!btn.disabled){e.preventDefault();btn.click()}}});
 function loginView(){return `<div class="login"><form class="panel" onsubmit="doLogin(event)">
   <div class="brand" style="margin-bottom:14px"><span class="stripe"></span>ETK · L3H</div>
   <h1>${L("登录","Log in")}</h1><p>${L("用 Supabase 建立的账号登录","Use the account you created in Supabase")}</p>
@@ -976,7 +1024,7 @@ function craneSummaryHTML(inv,dos){const c=custOf(inv.customer_id),rows=dos.map(
 
 /* ================= 第 1 批：日期筛选 / 排序 / 预览 / Excel / 多选 ================= */
 /* ---- 日期筛选（年 / 月 / 自定） ---- */
-S.df=S.df||{};S.sort=S.sort||{};S.invSel=S.invSel||new Set();S.siSel=S.siSel||new Set();
+S.df=S.df||{};S.sort=S.sort||{};S.invSel=S.invSel||new Set();S.siSel=S.siSel||new Set();S.colHide=S.colHide||{};S.scr=S.scr||{};
 const lastDay=(y,m)=>new Date(y,m,0).getDate();
 function dfRange(key){const f=S.df[key]||{p:"all"},t=today(),y=+t.slice(0,4),m=+t.slice(5,7);
   const mr=(yy,mm)=>[`${yy}-${z2(mm)}-01`,`${yy}-${z2(mm)}-${z2(lastDay(yy,mm))}`];
@@ -2041,7 +2089,11 @@ async function savePay(){const f=S.modal.f,w=$("#payWarn");
   if(!f.id){openPayForm(S.d.payments.find(p=>p.id===id));toast(L("已保存，现在可以上传收据","Saved. You can upload the receipt now."))}else render()}
 async function syncStatuses(ids){for(const id of new Set(ids)){const i=invById(id);if(!i)continue;const s=statusOf(i);if(s==="CN")continue;if(s!==i.status){await sb.from("invoices").update({status:s}).eq("id",id);i.status=s}}}
 async function delPay(id){if(!confirm(L("确定删除这笔收款？","Delete this payment?")))return;const ids=S.d.payment_allocations.filter(a=>a.payment_id===id).map(a=>a.invoice_id);
-  const{error}=await sb.from("payments").delete().eq("id",id);if(error)return toast(error.message);await loadAll();await syncStatuses(ids);toast(L("已删除","Deleted"));closeModal()}
+  const keep=JSON.parse(JSON.stringify(S.d.payments.find(p=>p.id===id)||null)),keepA=JSON.parse(JSON.stringify(S.d.payment_allocations.filter(a=>a.payment_id===id)));
+  const{error}=await sb.from("payments").delete().eq("id",id);if(error)return toast(error.message);await loadAll();await syncStatuses(ids);await closeModal();
+  if(keep)undoToast(L("收款已删除","Payment deleted"),async()=>{const r1=await sb.from("payments").insert(keep);if(r1.error)return toast(r1.error.message);
+    if(keepA.length){await sb.from("payment_allocations").delete().eq("payment_id",id);const r2=await sb.from("payment_allocations").insert(keepA);if(r2.error)return toast(r2.error.message)}
+    await loadAll();await syncStatuses(ids);render();toast(L("已恢复","Restored"))})}
 
 /* ================= SOA ================= */
 function soaData(cid,asOf){
@@ -2089,6 +2141,20 @@ function actionLists(){const td=today(),inv=S.d.invoices.filter(i=>i.status!=="C
     noPhoto:S.d.delivery_orders.filter(d=>!doPhotos(d.id).length),
     mfPend:S.d.monthly_fix.filter(mfApplies(m)).filter(c=>!["Billed","Skipped"].includes(mfLog(c.id,m)?.status)),
     apSoon:S.d.supplier_invoices.filter(s=>!s.payment_date&&s.due_date&&s.due_date>=td&&s.due_date<=addDays(td,7))}}
+function dataIssues(){const out=[],td=today(),lo="2015-01-01",hi=addDays(td,60),co=S.company;
+  const odd=d=>d&&(d<lo||d>hi),why=d=>d<lo?L(`日期太早 ${dmy(d)}`,`too early ${dmy(d)}`):L(`未来日期 ${dmy(d)}`,`future ${dmy(d)}`);
+  const sis=S.d.supplier_invoices.filter(x=>!x.charged_to||x.charged_to===co),seen=new Map();
+  for(const x of sis){const go=`S.tab='sup';S.sub.sup='supplier_invoices';gEdit('supplier_invoices','${x.id}')`,t=`${supName(x.supplier_id)} · ${x.invoice_no}`;
+    if(odd(x.invoice_date))out.push({t,why:why(x.invoice_date),go});
+    if(!(Number(x.total)>0)&&!(Number(x.total)<0))out.push({t,why:L("金额是 0","zero amount"),go});
+    const k=x.supplier_id+"|"+sqComp(x.invoice_no);if(seen.has(k))out.push({t,why:L("重复单号","duplicate no."),go});else seen.set(k,1)}
+  const seenI=new Map();
+  for(const i of S.d.invoices){const go=`openInv('${i.id}')`,t=`${i.invoice_no} · ${custName(i.customer_id)}`;
+    if(odd(i.invoice_date))out.push({t,why:why(i.invoice_date),go});
+    if(!(Number(i.total)>0)&&!(Number(i.total)<0)&&i.status!=="Cancelled")out.push({t,why:L("金额是 0","zero amount"),go});
+    const k=normNo(i.invoice_no);if(seenI.has(k))out.push({t,why:L("重复单号","duplicate no."),go});else seenI.set(k,1)}
+  for(const p of S.d.payments)if(odd(p.payment_date))out.push({t:`${L("收款","Payment")} · ${custName(p.customer_id)} · $${money(p.amount)}`,why:why(p.payment_date),go:`S.tab='pay';render();openPayForm(S.d.payments.find(x=>x.id==='${p.id}'))`});
+  return out}
 function urgentCount(){if(!S.user)return 0;const a=actionLists();return a.overdue.length+a.apOver.length+a.mism.length}
 function sumView(){
   const A=actionLists(),li=(arr,f)=>arr.length?`<ul>${arr.slice(0,12).map(f).join("")}</ul>${arr.length>12?`<p class="mute">+${arr.length-12}</p>`:""}`:`<p class="mute">${L("没有","None")}</p>`;
@@ -2111,6 +2177,7 @@ function sumView(){
     <div class="card follow"><h3>${L("DO 没有照片（这个月）","DOs without photo (this month)")} (${A.noPhoto.length})</h3>${li(A.noPhoto,d=>`<li onclick="setTab('do');editDO('${d.id}')"><span>${esc(d.do_no)} · ${esc(custName(d.customer_id))}</span><span>${dmy(d.do_date)}</span></li>`)}</div>
     <div class="card follow"><h3>${L("本月 Monthly Fix 未开单","Monthly fix not billed this month")} (${A.mfPend.length})</h3>${li(A.mfPend,c=>`<li onclick="setTab('mf')"><span>${esc(custName(c.customer_id))} · ${esc(c.description)}</span><span>${money(c.amount)}</span></li>`)}</div>
     <div class="card follow"><h3>${L("7 天内要付 Supplier","Payables due within 7 days")} (${A.apSoon.length})</h3>${li(A.apSoon,apLi)}</div>
+    <div class="card follow"><h3>${L("资料检查（可能打错）","Data check (possible typos)")} (${dataIssues().length})</h3>${li(dataIssues(),x=>`<li onclick="${x.go}"><span>${esc(x.t)}</span><span class="tag warn" style="white-space:nowrap">${esc(x.why)}</span></li>`)}</div>
     ${(backupAge()==null||backupAge()>7)?`<div class="card follow"><h3>${L("该备份了","Time to back up")}</h3><ul><li onclick="setTab('set')"><span>${backupAge()==null?L("这台设备还没备份过","Never backed up on this device"):L(`上次备份 ${backupAge()} 天前`,`Last backup ${backupAge()} days ago`)}</span><span>${L("去备份","Back up")}</span></li></ul></div>`:""}</div>
   <h2>AR · ${L("客户欠款","Receivables")}</h2><div class="filters" style="margin:0 0 6px">${sqBox("arap",L("客户 / 供应商名字","customer / supplier name"))}</div>${dfBar("arap",yearsOf(S.d.invoices,"invoice_date"))}<p class="mute" style="font-size:12px;margin:-4px 0 8px">${L("日期筛选用在下面 AR / AP 两个表（按 invoice 日期）。","The date filter applies to the AR / AP tables below (by invoice date).")}</p>
   ${arR.length?`<div class="tw"><table><thead><tr>${thS("ar","c",L("客户","Customer"))}${thS("ar","n",L("张数","Invoices"),"num")}${thS("ar","bal",L("未付","Outstanding"),"num")}${thS("ar","over",L("逾期","Overdue"),"num")}${thS("ar","intr","Interest","num")}</tr></thead><tbody>
@@ -2190,7 +2257,7 @@ const ENT={
     F("description","text",0,["Description","Description"]),F("amount_before_gst","money",0,["Amt before GST","Amt before GST"]),F("gst_amount","money",0,["GST（空白自动 9%）","GST (auto 9% if blank)"]),
     F("total","money",0,["Total（空白自动算）","Total (auto if blank)"]),F("trips","number",0,["趟数","Trips"]),F("surcharge_charged","money",0,["收了多少 Diesel Surcharge","Diesel surcharge charged"]),
     F("payment_date","date",0,["付款日期","Payment date"]),F("remark","text",0,["Remark","Remark"])],
-    cols:["invoice_date","supplier_id","invoice_no","charged_to","total","due_date","payment_date","_apstatus","_check","_att"],
+    cols:["_att","invoice_date","supplier_id","invoice_no","charged_to","total","due_date","payment_date","_apstatus","_check"],
     before(row){{const dup=S.d.supplier_invoices.find(x=>x.id!==S.gEdit?.id&&x.supplier_id===row.supplier_id&&normNo(x.invoice_no)===normNo(row.invoice_no));
         if(dup)return L(`这个供应商的 Invoice No 已经有了：${dup.invoice_no}（${dmy(dup.invoice_date)} · $${money(dup.total)}）`,`Duplicate supplier invoice: ${dup.invoice_no}`)}
       if(row.gst_amount==null&&row.amount_before_gst!=null)row.gst_amount=r2(row.amount_before_gst*0.09);
@@ -2211,23 +2278,34 @@ const SPECIAL={_apstatus:["状态","Status"],_check:["Surcharge 检查","Surchar
 const fieldsOf=cfg=>cfg.fields.filter(f=>!f.only||f.only===S.company);
 const colsOf=cfg=>cfg.cols.filter(c=>SPECIAL[c]||fieldsOf(cfg).some(f=>f.k===c));
 function genView(keys,sk){
-  const ent=S.sub[sk],cfg=ENT[ent],e=S.gEdit,dk=ent==="supplier_invoices"?"sup":null,dcol=dk?"invoice_date":null;
+  const ent=S.sub[sk],cfg=ENT[ent],e=S.gEdit,dk=ent==="supplier_invoices"?"sup":null,dcol=dk?"invoice_date":null,si=ent==="supplier_invoices";
   const gget=c=>{const f=cfg.fields.find(x=>x.k===c);if(!f)return r=>"";if(f.type==="customer")return r=>custName(r[c]);if(f.type==="supplier")return r=>supName(r[c]);if(["money","number","terms"].includes(f.type))return r=>r[c]==null?null:Number(r[c]);return r=>r[c]};
-  const sk2="g_"+ent,base=S.d[ent].filter(r=>!dk||dfIn(dk,r[dcol])),hit=SQ[sk2]?base.filter(r=>sqHit(SQ[sk2],[...sqRow(r),...colsOf(cfg).filter(c=>!SPECIAL[c]).map(c=>gget(c)(r))])):base;
+  const sk2="g_"+ent,base=S.d[ent].filter(r=>!dk||dfIn(dk,r[dcol])),hit0=SQ[sk2]?base.filter(r=>sqHit(SQ[sk2],[...sqRow(r),...colsOf(cfg).filter(c=>!SPECIAL[c]).map(c=>gget(c)(r))])):base;
+  const qk=si?(S.siQuick||""):"",hit=qk?hit0.filter(SIQ[qk].f):hit0;
   const rows=sortRows("g_"+ent,hit,Object.fromEntries(colsOf(cfg).map(c=>[c,gget(c)])));
+  const hid=new Set(S.colHide[ent]||[]),vc=colsOf(cfg).filter(c=>!hid.has(c));
   const tabs=keys.length>1?`<div class="sub">${keys.map(k=>`<button class="${k===ent?"on":""}" onclick="S.sub['${sk}']='${k}';S.gEdit=null;S.dirty=false;render()">${L(...ENT[k].label)}</button>`).join("")}</div>`:"";
   const head=c=>{if(SPECIAL[c])return L(...SPECIAL[c]);const f=cfg.fields.find(f=>f.k===c);return L(...(isL3()&&f.labelL3||f.label))};
   const isNum=c=>["money","number","terms"].includes(cfg.fields.find(f=>f.k===c)?.type);
+  const chips=si?`<div class="chips">${Object.entries(SIQ).map(([k,q])=>`<button class="${qk===k?"on":""}" onclick="S.siQuick='${k}';render()">${L(...q.l)} <b>${k?hit0.filter(q.f).length:hit0.length}</b></button>`).join("")}</div>`:"";
+  const colBtn=`<details class="colpick"><summary class="btn sec sm">☰ ${L("栏位","Columns")}${hid.size?` (${vc.length}/${colsOf(cfg).length})`:""}</summary><div class="colbox">${colsOf(cfg).map(c=>`<label class="chk"><input type="checkbox" ${hid.has(c)?"":"checked"} onchange="colToggle('${ent}','${c}',this.checked)">${head(c)}</label>`).join("")}</div></details>`;
   return tabs+(cfg.note?`<p class="mute" style="font-size:13px">${L(...cfg.note)}</p>`:"")+
     (e?genForm(ent,cfg,e,sk):`<div class="actions" style="margin:0 0 12px"><button class="btn" onclick="S.gEdit={};S.dirty=true;render()">${L("新增","Add")}</button><button class="btn sec" onclick="exportEnt('${ent}')">⬇ Excel</button></div>`)+
-    `<div class="filters" style="margin:0 0 6px">${sqBox(sk2)}</div>`+(dk?dfBar(dk,yearsOf(S.d[ent],dcol)):"")+sqNote(sk2,rows.length,base.length)+
-    (ent==="supplier_invoices"?siSelBar(rows):"")+
-    (rows.length?`<div class="tw"><table><thead><tr>${ent==="supplier_invoices"?`<th onclick="event.stopPropagation()"><input type="checkbox" ${rows.every(r=>S.siSel.has(r.id))?"checked":""} onchange="siSelAll(${esc(JSON.stringify(rows.map(r=>r.id)))},this.checked)"></th>`:""}${colsOf(cfg).map(c=>SPECIAL[c]?`<th>${head(c)}</th>`:thS("g_"+ent,c,head(c),isNum(c)?"num":"")).join("")}</tr></thead><tbody>
-      ${rows.map(r=>{const bad=ent==="supplier_invoices"&&(!surchargeCheck(r).ok||(!r.payment_date&&r.due_date&&r.due_date<today()));
-        return `<tr class="click ${bad?"red":""}${ent==="supplier_invoices"&&S.siSel.has(r.id)?" sel":""}" onclick="gEdit('${ent}','${r.id}')">${ent==="supplier_invoices"?`<td onclick="event.stopPropagation()"><input type="checkbox" ${S.siSel.has(r.id)?"checked":""} onchange="siSelToggle('${r.id}',this.checked)"></td>`:""}${colsOf(cfg).map(c=>`<td class="${isNum(c)?"num":""}">${genCell(cfg,c,r)}</td>`).join("")}</tr>`}).join("")}</tbody>
-      ${ent==="supplier_invoices"?`<tfoot><tr><td></td>${colsOf(cfg).map((c,i)=>`<td class="${isNum(c)?"num":""}">${i===0?L("合计","Total")+" "+rows.length:c==="total"?money(sum(rows,r=>r.total)):""}</td>`).join("")}</tr></tfoot>`:""}</table></div>`
-    :`<div class="panel empty">${SQ[sk2]?L("搜不到。","No match."):L("还没有资料，按「新增」开始。","Nothing here yet. Press Add to start.")}</div>`);
+    `<div class="filters" style="margin:0 0 6px">${sqBox(sk2)}${colBtn}</div>`+(dk?dfBar(dk,yearsOf(S.d[ent],dcol)):"")+chips+sqNote(sk2,rows.length,base.length)+
+    (si?siSelBar(rows):"")+
+    (rows.length?`<div class="tw"><table><thead><tr>${si?`<th onclick="event.stopPropagation()"><input type="checkbox" ${rows.every(r=>S.siSel.has(r.id))?"checked":""} onchange="siSelAll(${esc(JSON.stringify(rows.map(r=>r.id)))},this.checked)"></th>`:""}${vc.map(c=>SPECIAL[c]?`<th>${head(c)}</th>`:thS("g_"+ent,c,head(c),isNum(c)?"num":"")).join("")}</tr></thead><tbody>
+      ${rows.map(r=>{const bad=si&&(!surchargeCheck(r).ok||(!r.payment_date&&r.due_date&&r.due_date<today()));
+        return `<tr class="click ${bad?"red":""}${si&&S.siSel.has(r.id)?" sel":""}" onclick="gEdit('${ent}','${r.id}')">${si?`<td onclick="event.stopPropagation()"><input type="checkbox" ${S.siSel.has(r.id)?"checked":""} onchange="siSelToggle('${r.id}',this.checked)"></td>`:""}${vc.map(c=>`<td class="${isNum(c)?"num":""}">${genCell(cfg,c,r)}</td>`).join("")}</tr>`}).join("")}</tbody>
+      ${si?`<tfoot><tr><td>${L("合计","Total")} ${rows.length}</td>${vc.map(c=>`<td class="${isNum(c)?"num":""}">${c==="total"?money(sum(rows,r=>r.total)):""}</td>`).join("")}</tr></tfoot>`:""}</table></div>`
+    :`<div class="panel empty">${SQ[sk2]||qk?L("搜不到。","No match."):L("还没有资料，按「新增」开始。","Nothing here yet. Press Add to start.")}</div>`);
 }
+const SIQ={"":{l:["全部","All"],f:()=>true},unpaid:{l:["未付","Unpaid"],f:r=>!r.payment_date},over:{l:["逾期","Overdue"],f:r=>!r.payment_date&&r.due_date&&r.due_date<today()},
+  paid:{l:["已付","Paid"],f:r=>!!r.payment_date},noscan:{l:["没扫描件","No scan"],f:r=>!siAtts(r).length}};
+function siDupCheck(){const fm=$("#gForm"),box=$("#siDup");if(!fm||!box)return;const no=fm.invoice_no?.value||"",sup=fm.supplier_id?.value||"",k=sqComp(no);
+  if(k.length<3){box.innerHTML="";return}const me=S.gEdit?.id;
+  const same=S.d.supplier_invoices.filter(x=>x.id!==me&&sqComp(x.invoice_no)===k&&(!sup||x.supplier_id===sup));
+  box.innerHTML=same.length?`<p class="tag bad" style="display:inline-block;margin:4px 0">⚠ ${L("这张已经有了","Already exists")}：${same.slice(0,3).map(x=>`${esc(x.invoice_no)} · ${esc(supName(x.supplier_id))} · ${dmy(x.invoice_date)} · $${money(x.total)}`).join("；")}</p>`:""}
+function colToggle(ent,c,on){const h=new Set(S.colHide[ent]||[]);on?h.delete(c):h.add(c);S.colHide[ent]=[...h];render()}
 function genCell(cfg,c,r){
   if(c==="_apstatus")return apStatus(r);
   if(c==="_check"){const x=surchargeCheck(r);return x.ok?esc(x.t):`<span class="tag bad">${esc(x.t)}</span>`}
@@ -2258,10 +2336,10 @@ function genInput(f,v){const lab=L(...(isL3()&&f.labelL3||f.label))+(f.req?" *":
     default:return `<label class="f">${lab}<input type="${f.type}" name="${f.k}" value="${esc(v)}"></label>`}}
 function genForm(ent,cfg,e,sk){
   return `<section class="panel"><h2>${e.id?L("修改","Edit"):L("新增","Add")} · ${L(...cfg.label)}</h2>
-  <form id="gForm" class="grid" oninput="S.dirty=true" onsubmit="event.preventDefault();saveGen('${ent}')">${fieldsOf(cfg).map(f=>`<div data-gk="${f.k}" style="display:contents">${genInput(f,e[f.k])}</div>`).join("")}</form>${ent==="rates"&&isL3()?`<p class="mute" id="rateHint" style="font-size:13px;margin:4px 0 0"></p>`:""}
+  <form id="gForm" class="grid" oninput="S.dirty=true${ent==="supplier_invoices"?";siDupCheck()":""}" onsubmit="event.preventDefault();saveGen('${ent}')">${fieldsOf(cfg).map(f=>`<div data-gk="${f.k}" style="display:contents">${genInput(f,e[f.k])}</div>`).join("")}</form>${ent==="rates"&&isL3()?`<p class="mute" id="rateHint" style="font-size:13px;margin:4px 0 0"></p>`:""}
   ${ent==="supplier_invoices"&&e.id?`<p>${L("Surcharge 检查","Surcharge check")}：${genCell(cfg,"_check",e)}</p>`:""}
   ${cfg.att&&e.id?attBox(ent,e.id,cfg.att):cfg.att?`<p class="mute">${L("保存后可以上传附件。","Upload attachments after saving.")}</p>`:""}
-  <div class="warn" id="gWarn"></div>${ent==="rates"&&isL3()?(setTimeout(rateVis),""):""}
+  ${ent==="supplier_invoices"?`<div id="siDup">${(setTimeout(siDupCheck),"")}</div>`:""}<div class="warn" id="gWarn"></div>${ent==="rates"&&isL3()?(setTimeout(rateVis),""):""}
   <div class="actions"><button class="btn" onclick="saveGen('${ent}')">${L("保存","Save")}</button><button class="btn sec" onclick="done();render()">${L("取消","Cancel")}</button>
   ${e.id&&!cfg.noDelete?`<button class="btn del" onclick="delGen('${ent}','${e.id}')">${L("删除","Delete")}</button>`:""}</div></section>`}
 /* L3H 价钱表：选了 Service 只显示要填的格子 */
@@ -2283,9 +2361,10 @@ async function saveGen(ent){const cfg=ENT[ent],fd=new FormData($("#gForm")),row=
   if(error)return $("#gWarn").textContent=error.message;
   toast(L("已保存","Saved"));await loadAll();
   if(wasNew&&cfg.att){S.gEdit={...data};S.dirty=true;toast(L("已保存，现在可以上传附件","Saved. You can upload attachments now."))}else done();render()}
-async function delGen(ent,id){if(!confirm(L("确定删除？","Delete this record?")))return;const{error}=await sb.from(ent).delete().eq("id",id);
+async function delGen(ent,id){if(!confirm(L("确定删除？","Delete this record?")))return;const keep=JSON.parse(JSON.stringify(S.d[ent].find(r=>r.id===id)||null));const{error}=await sb.from(ent).delete().eq("id",id);
   if(error)return toast(error.message.includes("foreign key")?L("还有其他资料在用这笔，不能删除。","Other records still use this; can't delete."):error.message);
-  toast(L("已删除","Deleted"));done();await loadAll();render()}
+  done();await loadAll();render();
+  if(keep)undoToast(L("已删除","Deleted"),async()=>{const{error}=await sb.from(ent).insert(keep);if(error)return toast(error.message);await loadAll();render();toast(L("已恢复","Restored"))})}
 
 /* ================= 附件 ================= */
 function attBox(type,id,kinds){const list=S.d.attachments.filter(a=>a.entity_type===type&&a.entity_id===id);
@@ -2313,9 +2392,24 @@ function siSelBar(rows){const ids=[...S.siSel].filter(id=>S.d.supplier_invoices.
   return `<div class="panel" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 12px;margin:0 0 8px">
     <b>${L(`已选 ${ids.length} 张`,`${ids.length} selected`)}</b><span class="mute">$${money(sum(sel,x=>x.total))}</span>${noScan?`<span class="tag warn">${L(`${noScan} 张没有扫描件`,`${noScan} without scan`)}</span>`:""}<span style="flex:1"></span>
     <button class="btn sm" onclick="siPreview(${J})">👁 ${L("一起预览","Preview together")}</button>
+    <button class="btn sec sm" onclick="siMarkPaid(${J})">✓ ${L("标已付","Mark paid")}</button><button class="btn sec sm" onclick="siMakePV(${J})">💳 ${L("开 PV","New PV")}</button>
     <button class="btn sec sm" onclick="siDownload(${J},'pdf')">⬇ ${L("合并成一个 PDF","One merged PDF")}</button>
     <button class="btn sec sm" onclick="siDownload(${J},'zip')">⬇ ${L("打包 zip（每张一个 PDF）","Zip (one PDF each)")}</button>
     <button class="btn sec sm" onclick="S.siSel.clear();render()">✕ ${L("取消勾选","Clear")}</button></div>`}
+async function siMarkPaid(ids){const list=S.d.supplier_invoices.filter(x=>ids.includes(x.id)&&!x.payment_date);
+  if(!list.length)return toast(L("勾选的都已经付了","All selected are already paid"));
+  const d=prompt(L(`${list.length} 张标已付（$${money(sum(list,x=>x.total))}）。\n付款日期（例：14/10/2026）：`,`Mark ${list.length} paid. Payment date:`),dmy(today()));if(d==null)return;
+  const ymd=toYMD(d);if(!ymd)return toast(L("日期看不懂","Invalid date"));
+  for(const x of list){const{error}=await sb.from("supplier_invoices").update({payment_date:ymd,status:"Paid"}).eq("id",x.id);if(error)return toast(error.message)}
+  const back=list.map(x=>({id:x.id,payment_date:x.payment_date??null,status:x.status??null}));
+  S.siSel.clear();await loadAll();render();
+  undoToast(L(`已标 ${list.length} 张已付（${dmy(ymd)}）`,`${list.length} marked paid`),async()=>{for(const b of back)await sb.from("supplier_invoices").update({payment_date:b.payment_date,status:b.status||"Unpaid"}).eq("id",b.id);await loadAll();render()})}
+function siMakePV(ids){if(!S.d._pvOK)return toast(L("还没跑付款 PV 的 SQL","Run the PV SQL first"));const list=S.d.supplier_invoices.filter(x=>ids.includes(x.id));
+  const sups=[...new Set(list.map(x=>x.supplier_id))];if(sups.length>1)return alert(L("开 PV 要同一个供应商。你勾了不同的供应商，请只勾一个供应商的单。","Pick invoices from one supplier only."));
+  const used=new Set((S.d.pvl||[]).map(l=>l.supplier_invoice_id).filter(Boolean)),ok=list.filter(x=>!x.payment_date&&!used.has(x.id)),skip=list.length-ok.length;
+  if(!ok.length)return toast(L("勾选的都已付或已经在 PV 里","All selected are paid or already in a PV"));
+  if(skip)toast(L(`${skip} 张已付或已在别的 PV，没放进去`,`${skip} skipped`));
+  pvForm();PVF.supplier_id=sups[0];PVF.account=supAcct(supById(sups[0]));PVF.sel=new Set(ok.map(x=>x.id));pvFormRender()}
 const siSorted=ids=>S.d.supplier_invoices.filter(x=>ids.includes(x.id)).sort((a,b)=>String(a.invoice_date).localeCompare(String(b.invoice_date))||String(a.invoice_no).localeCompare(String(b.invoice_no)));
 function siFileName(si,a,k,n){const ext=(String(a.file_name||a.file_path).match(/\.[a-z0-9]{2,5}$/i)||[".pdf"])[0].toLowerCase();
   const base=`${si.invoice_date||""}_${supName(si.supplier_id)}_${si.invoice_no}_${Number(si.total||0).toFixed(2)}`.replace(/[\\/:*?"<>|]+/g,"-").replace(/\s+/g," ").trim();return base+(n>1?`_${k+1}`:"")+ext}
@@ -3354,7 +3448,7 @@ async function doLogin(e){e.preventDefault();const fd=new FormData(e.target);con
   if(error)toast(L("登录失败：","Login failed: ")+error.message)}
 async function logout(){await sb.auth.signOut()}
 function confirmLeave(){return !S.dirty||confirm(L("还没保存，确定离开？","You have unsaved changes. Leave anyway?"))}
-function setTab(x){if(!confirmLeave())return;S.tab=x;S.doForm=null;done();if(S.pending){S.pending=false;reload()}else render()}
+function setTab(x){if(!confirmLeave())return;S.scr[S.tab]=scrSnap();S.tab=x;S.doForm=null;done();if(S.pending){S.pending=false;reload()}else render()}
 async function setCompany(c){if(!confirmLeave())return;S.company=c;if(c!=="L3H"&&S.tab==="exc")S.tab="do";setPref("company",c);S.doForm=null;S.modal=null;done();await reload()}
 async function setMonth(m){S.month=m;await loadDO();render()}
 function toggleLang(){S.lang=S.lang==="zh"?"en":"zh";setPref("lang",S.lang);document.documentElement.lang=S.lang;render()}
@@ -3362,7 +3456,7 @@ function toggleTheme(){S.theme=S.theme==="dark"?"light":"dark";setPref("theme",S
 sb.auth.onAuthStateChange((_ev,session)=>{const was=S.user?.id;S.user=session?.user||null;
   if(S.user&&S.user.id!==was){setTimeout(async()=>{await reload();startRealtime()},0)}
   if(!S.user){if(rt)sb.removeChannel(rt);render()}});
-render();
+loadUI();render();
 </script>
 </body>
 </html>
