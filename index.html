@@ -327,7 +327,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-14";
+const APP_VER="2026-10-14b";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -412,7 +412,7 @@ function findSurcharge(c,svc,date){const s=S.d.customer_surcharges.filter(x=>x.c
   .sort((a,b)=>(b.service?1:0)-(a.service?1:0)||b.start_date.localeCompare(a.start_date))[0];return s?Number(s.amount_per_do):0}
 const isDayRate=r=>!!r&&/8\s*hrs?|day|天/i.test(r.unit||"");
 const baseHrsOf=r=>Number(r?.min_hours)||8;
-function recompute(f){if(isL3())return recomputeL3(f);{const d=svcDef(f.service);if(d&&svcKind(d)!=="time")return recomputeSvc(f,d)}
+function recompute(f){{const d=cSvc(f.service);if(d)return recomputeSvc(f,d)}if(isL3())return recomputeL3(f);
   f.shift=f.service==="TMA"?shiftOf(f.start_time):null;
   const rs=f.service==="TMA"?(f.shift?`TMA ${f.shift}`:null):f.service;
   const rate=rs?findRate(f.customer_id,rs,f.do_date):null; f._rateRow=rate;
@@ -562,22 +562,22 @@ function doView(){
     ${fld("do_no",L("DO 号码","DO No"),f.do_no)}
     ${fld("customer_po",L("客户 PO","Customer PO"),f.customer_po)}
     <div style="grid-column:1/-1;height:0;margin:-6px 0"></div>
-    ${(()=>{const sd=!isL3()&&svcDef(f.service),k=svcKind(sd);if(!sd||k==="time")return `${fld("start_time",L("开始时间","Start time"),f.start_time,"text",'inputmode="numeric" placeholder="2100"')}
+    ${(()=>{const sd=cSvc(f.service),k=svcKind(sd);if(!sd)return `${fld("start_time",L("开始时间","Start time"),f.start_time,"text",'inputmode="numeric" placeholder="2100"')}
     ${fld("end_time",L("结束时间","End time"),f.end_time,"text",'inputmode="numeric" placeholder="0500"')}
     <div class="pair">${fld("from_loc","From",f.from_loc)}${fld("to_loc","To",f.to_loc)}</div>`;
       if(k==="rent")return `${fld("units",L("台数","Units"),f.units??1,"number",'step="1" min="1"')}${fld("end_date",L(`结束日期（${nightsOf(f)} 晚）`,`End date (${nightsOf(f)} nights)`),f.end_date||"","date")}
     <div class="pair">${fld("from_loc","Location",f.from_loc)}${fld("to_loc",L("到（可空白）","To (optional)"),f.to_loc)}</div>`;
       return `${fld("units",k==="trip"?L("趟数","Trips"):L("次数","Qty"),f.units??1,"number",'step="1" min="1"')}${k==="trip"?`<div class="pair">${fld("from_loc","From",f.from_loc)}${fld("to_loc","To",f.to_loc)}</div>`:""}
-    ${sd.partner?fld("partner_do_no",L("L3H DO 号码","L3H DO No"),f.partner_do_no||""):""}`})()}
+    ${sd.partner&&!isL3()?fld("partner_do_no",L("L3H DO 号码","L3H DO No"),f.partner_do_no||""):""}`})()}
     <label class="f wide">Description<input name="description" class="${f._descTouched?"":"auto"}" value="${esc(f.description)}"></label>
-    ${!isL3()&&svcDef(f.service)&&svcKind(svcDef(f.service))!=="time"?"":fld("billable_hours",L("计费小时","Billable hrs"),f.billable_hours??"","number",'step="0.25"',"")}
+    ${cSvc(f.service)?"":fld("billable_hours",L("计费小时","Billable hrs"),f.billable_hours??"","number",'step="0.25"',"")}
     ${fld("rate","Rate",f.rate??"","number",'step="0.01"')}
     ${fld("surcharge","Surcharge",f.surcharge??0,"number",'step="0.01"')}
     ${fld("remark","Remark",f.remark)}
     ${isL3()&&f.service==="Tipper"?fld("loads",L("Load 数量（没写时间才按 load 算）","Loads (if no time)"),f.loads??"","number",'step="0.5"'):""}
     ${isL3()?fld("price_note",L("改价原因（价钱跟 Master List 不一样才要填）","Price change reason"),f.price_note||"","text","",f._priceChanged?"need":""):""}
     ${isL3()?`<div class="wide l3chk">${f.service==="Lorry Crane"?`<label class="chk"><input type="checkbox" name="lifting_sup" ${f.lifting_sup?"checked":""}>${L("有 Lifting Supervisor","With lifting supervisor")} <small class="mute">${f._supTouched?L("手动","manual"):L("自动：司机 / 17:00 前开工","auto: driver / start before 17:00")}</small></label>`:""}
-      <label class="chk"><input type="checkbox" name="hourly" ${f.hourly!==false?"checked":""}>${L("按小时收（价钱 × 小时）","Charge by the hour")}</label>
+      ${cSvc(f.service)?"":`<label class="chk"><input type="checkbox" name="hourly" ${f.hourly!==false?"checked":""}>${L("按小时收（价钱 × 小时）","Charge by the hour")}</label>`}
       <label class="chk"><input type="checkbox" name="record_only" ${f.record_only?"checked":""}>${L("只记录 NIL，不收钱（例：Samwoh 的料）","Record only (NIL)")}</label></div>`:""}
   </div>
   <div class="calc" id="calc">${calcView(f)}</div>
@@ -591,8 +591,8 @@ function doView(){
     ${f.id?`<button class="btn del" onclick="delDO('${f.id}')">${L("删除","Delete")}</button>`:""}</div></section>
   ${doList()}`;
 }
-const noRateMsg=f=>isL3()?noRateL3(f):(f.customer_id&&f.service&&(f.service!=="TMA"||f.start_time)&&!f._rateRow&&!f._rateTouched)?L("找不到这个客户 / service 在这个日期的价钱，请先到 Master List → 价钱 设定。","No rate for this customer / service on this date. Set it in Master List → Rates."):"";
-function calcView(f){if(isL3())return calcViewL3(f);{const d=svcDef(f.service);if(d&&svcKind(d)!=="time")return calcSvc(f,d)}return `<div>Day/Night<b>${f.shift?`<span class="tag ${f.shift}">${f.shift}</span>`:"—"}</b></div>
+const noRateMsg=f=>isL3()&&!cSvc(f.service)?noRateL3(f):(f.customer_id&&f.service&&(f.service!=="TMA"||f.start_time)&&!f._rateRow&&!f._rateTouched)?L("找不到这个客户 / service 在这个日期的价钱，请先到 Master List → 价钱 设定。","No rate for this customer / service on this date. Set it in Master List → Rates."):"";
+function calcView(f){{const d=cSvc(f.service);if(d)return calcSvc(f,d)}if(isL3())return calcViewL3(f);return `<div>Day/Night<b>${f.shift?`<span class="tag ${f.shift}">${f.shift}</span>`:"—"}</b></div>
   <div>${L("实际小时","Actual hrs")}<b>${f.actual_hours??"—"}</b></div>
   <div>${L("计费小时","Billable hrs")}<b>${f.billable_hours??"—"}${f.hours_overridden?` <small class="mute" style="font-size:12px">${L("手动","manual")}</small>`:""}</b></div>
   ${f._otHours!=null?`<div>OT<b>${f._otHours} hr × $${money(f._otRate)}</b></div>`:""}
@@ -608,7 +608,7 @@ function doInput(e){
   const g=n=>document.querySelector(`.grid [name="${n}"]`);
   for(const[n,val,touched]of[["description",f.description,f._descTouched],["billable_hours",f.billable_hours??"",f.hours_overridden],["rate",f.rate??"",f._rateTouched],["surcharge",f.surcharge??0,f._surTouched]]){
     const x=g(n);if(!x)continue;if(document.activeElement!==x)x.value=val;x.classList.toggle("auto",!touched)}
-  if(!isL3()&&(el.name==="service"||(el.name==="end_date"||el.name==="do_date")&&svcDef(f.service))){if(el.name==="service"){f._descTouched=false;f._rateTouched=false}recompute(f);render();return}
+  if((!isL3()||cSvc(f.service)||el.name==="service")&&(el.name==="service"||(el.name==="end_date"||el.name==="do_date")&&cSvc(f.service))){if(el.name==="service"){f._descTouched=false;f._rateTouched=false}recompute(f);render();return}
   $("#calc").innerHTML=calcView(f);$("#noRate").textContent=noRateMsg(f);
   const sup=g("lifting_sup");if(sup)sup.checked=!!f.lifting_sup;
   if(isL3()){if(["service","customer_id","record_only"].includes(el.name)||(e.type==="change"&&["start_time","end_time"].includes(el.name)&&f.service==="Tipper")){render();return}
@@ -617,7 +617,7 @@ function doInput(e){
 }
 async function saveDO(){
   const f=S.doForm,w=$("#doWarn");
-  {const sd=!isL3()&&svcDef(f.service),k=svcKind(sd);if(sd&&(k==="rent"||k==="ls")&&!String(f.do_no||"").trim())f.do_no=`${k==="rent"?"VMS":"LS"}-${f.do_date.slice(2).replace(/-/g,"")}-${Math.random().toString(36).slice(2,6).toUpperCase()}`;
+  {const sd=cSvc(f.service),k=svcKind(sd);if(sd&&(k==="rent"||k==="ls")&&!String(f.do_no||"").trim())f.do_no=`${k==="rent"?"VMS":"LS"}-${f.do_date.slice(2).replace(/-/g,"")}-${Math.random().toString(36).slice(2,6).toUpperCase()}`;
     if(sd&&k==="rent"&&f.end_date&&f.end_date<f.do_date){w.textContent=L("结束日期不能比开始日期早","End date is before start date");return}}
   const miss=[["do_date",L("日期","Date")],["customer_id",L("客户","Customer")],["service","Service"],["do_no",L("DO 号码","DO No")]].filter(([k])=>!f[k]).map(([,l])=>l);
   if(miss.length){w.textContent=L("请填写：","Please fill in: ")+miss.join(", ");return}
@@ -634,7 +634,7 @@ async function saveDO(){
     do_no:f.do_no.trim(),customer_po:f.customer_po||null,start_time:f.start_time||null,end_time:f.end_time||null,from_loc:f.from_loc||null,to_loc:f.to_loc||null,
     description:f.description||null,actual_hours:f.actual_hours,billable_hours:f.billable_hours,hours_overridden:!!f.hours_overridden,rate:f.rate,
     surcharge:Number(f.surcharge)||0,amount:f.amount,remark:f.remark||null};
-  if(!isL3()&&svcDef(f.service)&&svcKind(svcDef(f.service))!=="time")Object.assign(row,{units:Number(f.units)>0?Number(f.units):1,end_date:svcKind(svcDef(f.service))==="rent"?(f.end_date||f.do_date):null,partner_do_no:f.partner_do_no||null,start_time:null,end_time:null,shift:null});
+  if(cSvc(f.service))Object.assign(row,{units:Number(f.units)>0?Number(f.units):1,end_date:svcKind(svcDef(f.service))==="rent"?(f.end_date||f.do_date):null,partner_do_no:f.partner_do_no||null,start_time:null,end_time:null,shift:null});
   if(isL3())Object.assign(row,{driver:f.driver||null,lifting_sup:f.service==="Lorry Crane"?!!f.lifting_sup:null,hourly:f.hourly!==false,
     charges:(f.charges||[]).map(({item,material,desc,qty,uom,rate,amount,_rt,_qt})=>({item,material:material||null,desc:desc||null,qty,uom,rate,amount,_rt:!!_rt,_qt:!!_qt})),
     loads:f.service==="Tipper"&&f.loads!=null&&f.loads!==""?Number(f.loads):null,record_only:!!f.record_only,price_note:f._priceChanged?(f.price_note||null):null});
@@ -1941,13 +1941,13 @@ async function buildLines(f0,opt){opt=opt||{};const f=f0||S.modal.f;f._fail=null
     f.description=`PROJECT: ${f.project}\nPROVIDE MACHINERY / EQUIPMENT RENTAL FOR ${monthUpper(f.period_from)}`;f.lines=machineLines(rows);f._mchosen=rows;if(!f.summary_no)f.summary_no=projOf(f.project)?.no||"";R();return}
   const chosen=f.dos.filter(d=>f.sel.has(d.id));if(!chosen.length)return T(L("还没选 DO","No DOs selected"));
   if(!opt.noReprice){const plan=repricePlan(chosen);if(plan.length){try{await repriceApply(plan);T(L(`${plan.length} 张 DO 用的是旧价钱，已自动换成 Master List 的价钱`,`${plan.length} DOs re-priced from Master List`))}catch(e){T(e.message)}}}
-  if(isL3()){chosen.sort((a,b)=>a.do_date.localeCompare(b.do_date));const np=noPriceList(chosen);
+  if(isL3()){chosen.sort((a,b)=>a.do_date.localeCompare(b.do_date));const csv=chosen.filter(d=>cSvc(d.service)),std=chosen.filter(d=>!cSvc(d.service)),cl=svcLines(csv).out;const np=noPriceList(std);
     if(np.length){f._chk={noPrice:np};R();T(L(`有 ${np.length} 张 DO 没有价钱，先到 Master List 设好价钱，或打开那张 DO 填价钱。`,`${np.length} DO(s) have no price.`));return}
     const from=f.period_from||chosen[0].do_date;
-    if(f.project){f.description=`PROJECT: ${f.project}\nPROVIDE TRANSPORT SERVICES FOR ${monthUpper(from)}`;f.lines=l3LinesLS(chosen);if(!f.summary_no)f.summary_no=projOf(f.project)?.no||""}
-    else{f.description="";f.lines=l3LinesDetail(chosen)}
+    if(f.project){f.description=`PROJECT: ${f.project}\nPROVIDE TRANSPORT SERVICES FOR ${monthUpper(from)}`;f.lines=[...(std.length?l3LinesLS(std):[]),...cl];if(!f.summary_no)f.summary_no=projOf(f.project)?.no||""}
+    else{f.description="";f.lines=[...(std.length?l3LinesDetail(std):[]),...cl]}
     const pos=[...new Set(chosen.map(d=>d.customer_po).filter(Boolean))];if(!f.customer_po&&pos.length===1)f.customer_po=pos[0];
-    f._chk=null;if(opt.quiet)return;R();f._chk=await l3Checklist(f,chosen);if(S.modal?.f===f)R();return}
+    f._chk=null;if(opt.quiet)return;R();f._chk=await l3Checklist(f,std);if(S.modal?.f===f)R();return}
   const from=f.period_from||chosen[0].do_date,to=f.period_to||chosen.at(-1).do_date;const groups={};for(const d of chosen)(groups[d.service]=groups[d.service]||[]).push(d);
   if(S.company==="ETK"){f.description=f.project?`Project : ${f.project}`:"";const sv=svcLines(chosen);
     f.lines=[...sv.out,...Object.entries(groups).filter(([svc])=>!svcDef(svc)).map(([svc,l])=>{const a=sum(l,d=>d.amount);return{description:`${svc==="TMA"?"TMA Transport Charges":svc+" Charges"}\n${longDate(from)} to ${longDate(to)}`,qty:1,unit:"LS",unit_price:a,amount:a}})]}
@@ -2474,14 +2474,16 @@ function rateVis(){const fm=$("#gForm");if(!fm||!isL3()||!fm.querySelector('[dat
   const svc=fm.service?.value,mat=!!MAT_SVC[svc],time=TIME_SVC.includes(svc),per8=time&&/8/.test(fm.unit?.value||"");
   const show={material:mat,plate:time||svc==="Tipper Load",unit:time,price_night:time,ot_rate:per8,ot_rate_night:per8,break_after_hours:time,break_hours:time,min_hours:time};
   for(const[k,v]of Object.entries(show)){const w=fm.querySelector(`[data-gk="${k}"]`);if(w)w.style.display=v?"contents":"none"}
-  const pl=fm.querySelector('[data-gk="price"] label');if(pl&&pl.firstChild)pl.firstChild.textContent=mat?(MAT_SVC[svc]==="per trip"?L("每趟运费（per trip）","Price per trip"):L("每车价钱（per load）","Price per load"))+" *":svc==="Tipper Load"?L("每车价钱（per load）","Price per load")+" *":per8?L("白天 8 小时价（17:00 前开工）","Day price for 8 hrs (start before 17:00)")+" *":L("白天每小时价（17:00 前开工）","Day price per hr (start before 17:00)")+" *";
-  const h=$("#rateHint");if(h)h.textContent=mat?L(`${svcLabel(svc)}：按 ${MAT_SVC[svc]} 计。${svc==="Transfer"?"所有客户同一个价就把客户留空。":"可以按材料分开价钱。"}`,`${svcLabel(svc)}: charged ${MAT_SVC[svc]}.`)
+  const cd=cSvc(svc),cw=cd?({rent:L("每晚 / 每天价钱","Price per night/day"),trip:L("每趟价钱","Price per trip"),ls:L("每次价钱（LS）","Price per job (LS)")}[svcKind(cd)]||L("价钱","Price"))+`（${cd.unit}）`:"";
+  const pl=fm.querySelector('[data-gk="price"] label');if(pl&&pl.firstChild)pl.firstChild.textContent=cd?cw+" *":mat?(MAT_SVC[svc]==="per trip"?L("每趟运费（per trip）","Price per trip"):L("每车价钱（per load）","Price per load"))+" *":svc==="Tipper Load"?L("每车价钱（per load）","Price per load")+" *":per8?L("白天 8 小时价（17:00 前开工）","Day price for 8 hrs (start before 17:00)")+" *":L("白天每小时价（17:00 前开工）","Day price per hr (start before 17:00)")+" *";
+  const h=$("#rateHint");if(h)h.textContent=cd?L(`${svc}：照 Service 设定 ${cd.unit} 计，金额 = ${svcKind(cd)==="rent"?"台数 × 晚数":"趟数 / 次数"} × 价钱，不按小时。所有客户同一个价就把客户留空。`,`${svc}: charged ${cd.unit}, not by the hour.`):mat?L(`${svcLabel(svc)}：按 ${MAT_SVC[svc]} 计。${svc==="Transfer"?"所有客户同一个价就把客户留空。":"可以按材料分开价钱。"}`,`${svcLabel(svc)}: charged ${MAT_SVC[svc]}.`)
     :per8?L("8 小时一个价：超过 8 小时的部分按下面的 OT 每小时价算。","8-hr rate: hours over 8 use the OT rate."):time?L("按小时：每小时 × 计费小时，没有 OT。","Hourly: rate × billable hours, no OT."):""}
 function gEdit(ent,id){S.gEdit={...S.d[ent].find(r=>r.id===id)};S.dirty=true;render();window.scrollTo({top:0,behavior:"smooth"})}
 async function saveGen(ent){const cfg=ENT[ent],fd=new FormData($("#gForm")),row={},miss=[];if(cfg.scoped)row.company=S.company;
   for(const f of fieldsOf(cfg)){let v=fd.get(f.k);if(v===""||v==null)v=null;else if(["number","money","terms"].includes(f.type))v=Number(v);else if(f.type==="bool"||f.type==="yesno")v=v==="true";else if(f.type==="month")v=v+"-01";
     row[f.k]=v;if(f.req&&v==null)miss.push(L(...f.label))}
   if(miss.length)return $("#gWarn").textContent=L("请填写：","Please fill in: ")+miss.join(", ");
+  if(ent==="rates"){const cd=cSvc(row.service);if(cd&&"unit" in row)row.unit=cd.unit}
   const err=cfg.before?.(row,S.gEdit);if(typeof err==="string")return $("#gWarn").textContent=err;
   const wasNew=!S.gEdit.id;
   const{data,error}=S.gEdit.id?await sb.from(ent).update(row).eq("id",S.gEdit.id).select().single():await sb.from(ent).insert(row).select().single();
@@ -2867,6 +2869,8 @@ async function rateChanged(r){try{const svc=/^TMA/.test(r.service)?"TMA":r.servi
 const SVC_UNITS=["per night","per day","per trip","LS","per hr","per 8 hrs","per load"];
 const svcDefs=()=>(S.d.services||[]).filter(s=>s.company===S.company&&s.active!==false);
 const svcDef=name=>svcDefs().find(s=>s.name===name)||null;
+const L3_BUILT=new Set([...SERVICES.L3H,...RATE_SERVICES.L3H]);
+const cSvc=name=>{const d=svcDef(name);if(!d||svcKind(d)==="time"||(isL3()&&L3_BUILT.has(name)))return null;return d};
 const svcKind=d=>!d?null:/night|day/i.test(d.unit)?"rent":/trip/i.test(d.unit)?"trip":/^ls$|job|time/i.test(d.unit)?"ls":/load/i.test(d.unit)?"trip":"time";
 const svcNames=()=>[...new Set([...SERVICES[S.company],...svcDefs().map(s=>s.name)])];
 const rateSvcNames=()=>[...new Set([...RATE_SERVICES[S.company],...svcDefs().map(s=>s.name)])];
@@ -2875,7 +2879,7 @@ const nightsOf=f=>f.do_date&&f.end_date?Math.max(1,daysBetween(f.do_date,f.end_d
 const unitWord=d=>/night/i.test(d.unit)?"Night":/day/i.test(d.unit)?"Day":/trip/i.test(d.unit)?"Trip":/load/i.test(d.unit)?"Load":"LS";
 const NOUL="\u200B";const noUl=t=>String(t||"").startsWith(NOUL);
 const svcTitle=(d,n)=>String(d.line_title||d.name).replace(/\{n\}/g,n??1);
-function recomputeSvc(f,d){const k=svcKind(d),rate=findRate(f.customer_id,f.service,f.do_date);f._rateRow=rate;f.shift=null;f._otHours=null;f._otRate=null;
+function recomputeSvc(f,d){const k=svcKind(d),rate=findRate(f.customer_id,f.service,f.do_date)||(isL3()?findRate(null,f.service,f.do_date):null);f._priceChanged=false;f._tipLoad=false;f._rateRow=rate;f.shift=null;f._otHours=null;f._otRate=null;
   if(!f._rateTouched)f.rate=rate?Number(rate.price):null;if(!f._surTouched)f.surcharge=0;
   const u=Number(f.units)>0?Number(f.units):1;
   if(!f._descTouched)f.description=k==="rent"?svcTitle(d,u):svcTitle(d,u);
@@ -3963,7 +3967,7 @@ function sumMonth(inv,list){const a=inv.period_from||list[0].do_date,b=inv.perio
 function sumHead(lines){return `<div class="sumh">${lines.map((t,i)=>i===0?`<div class="t"><span class="ul">${esc(t)}</span></div>`:`<div>${esc(t)}</div>`).join("")}</div>`}
 function chunkPages(rows,per,make){const ch=[];for(let i=0;i<rows.length;i+=per)ch.push(rows.slice(i,i+per));
   return ch.map((r,pi)=>`<div class="doc pg land">${make(r,pi,pi===ch.length-1)}${ch.length>1?`<div class="pno">Page ${pi+1} of ${ch.length}</div>`:""}</div>`).join("")}
-function breakdownHTML(inv,dos){if(coOf(settingsOf(inv.company))==="L3H")return isMachInv(inv)?machineRecordsHTML(inv):l3RecordsHTML(inv,dos);const g={};for(const d of dos)(g[d.service]=g[d.service]||[]).push(d);const c=custOf(inv.customer_id);
+function breakdownHTML(inv,dos){if(coOf(settingsOf(inv.company))==="L3H"){if(isMachInv(inv))return machineRecordsHTML(inv);const cs=dos.filter(d=>cSvc(d.service)),st=dos.filter(d=>!cSvc(d.service)),cg={};for(const d of cs)(cg[d.service]=cg[d.service]||[]).push(d);const c0=custOf(inv.customer_id);return (st.length?l3RecordsHTML(inv,st):"")+Object.entries(cg).map(([svc,l])=>svcRecordsHTML(inv,svc,l,c0)).join("")}const g={};for(const d of dos)(g[d.service]=g[d.service]||[]).push(d);const c=custOf(inv.customer_id);
   return Object.entries(g).map(([svc,list])=>{const month=sumMonth(inv,list);
     if(svcDef(svc)&&svcKind(svcDef(svc))!=="time")return svcRecordsHTML(inv,svc,list,c);
     if(svc==="TMA"&&!inv.project){
