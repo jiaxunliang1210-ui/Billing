@@ -1932,6 +1932,7 @@ async function buildLines(){const f=S.modal.f;
     const np=rows.filter(r=>r.rate==null);if(np.length)return toast(L(`${np.map(r=>r.l.machine_code).join(", ")} 没有价钱，先到 Excavator → 机器 & 价钱 填好`,`No rate for ${np.map(r=>r.l.machine_code).join(", ")}`));
     f.description=`PROJECT: ${f.project}\nPROVIDE MACHINERY / EQUIPMENT RENTAL FOR ${monthUpper(f.period_from)}`;f.lines=machineLines(rows);f._mchosen=rows;if(!f.summary_no)f.summary_no=projOf(f.project)?.no||"";render();return}
   const chosen=f.dos.filter(d=>f.sel.has(d.id));if(!chosen.length)return toast(L("还没选 DO","No DOs selected"));
+  {const plan=repricePlan(chosen);if(plan.length){try{await repriceApply(plan);toast(L(`${plan.length} 张 DO 用的是旧价钱，已自动换成 Master List 的价钱`,`${plan.length} DOs re-priced from Master List`))}catch(e){toast(e.message)}}}
   if(isL3()){chosen.sort((a,b)=>a.do_date.localeCompare(b.do_date));const np=noPriceList(chosen);
     if(np.length){f._chk={noPrice:np};render();toast(L(`有 ${np.length} 张 DO 没有价钱，先到 Master List 设好价钱，或打开那张 DO 填价钱。`,`${np.length} DO(s) have no price.`));return}
     const from=f.period_from||chosen[0].do_date;
@@ -2412,7 +2413,7 @@ async function saveGen(ent){const cfg=ENT[ent],fd=new FormData($("#gForm")),row=
   const wasNew=!S.gEdit.id;
   const{data,error}=S.gEdit.id?await sb.from(ent).update(row).eq("id",S.gEdit.id).select().single():await sb.from(ent).insert(row).select().single();
   if(error)return $("#gWarn").textContent=error.message;
-  toast(L("已保存","Saved"));await loadAll();
+  toast(L("已保存","Saved"));await loadAll();if(ent==="rates")setTimeout(()=>rateChanged(data),300);
   if(wasNew&&cfg.att){S.gEdit={...data};S.dirty=true;toast(L("已保存，现在可以上传附件","Saved. You can upload attachments now."))}else done();render()}
 async function delGen(ent,id){if(!confirm(L("确定删除？","Delete this record?")))return;const keep=JSON.parse(JSON.stringify(S.d[ent].find(r=>r.id===id)||null));const{error}=await sb.from(ent).delete().eq("id",id);
   if(error)return toast(error.message.includes("foreign key")?L("还有其他资料在用这笔，不能删除。","Other records still use this; can't delete."):error.message);
@@ -2771,6 +2772,23 @@ function weekly(force){const k=weekKey()+"-"+S.company;if(!force&&getPref("weekl
 function afterLoadOnce(){if(S._afterLoad)return;S._afterLoad=1;setTimeout(()=>{if(!S.user)return;
   const ba=backupAge();if(ba==null||ba>7){toast(L("超过 7 天没备份，自动备份中…","Auto backup…"));backupNow()}
   if(!$("#photoOv"))weekly()},1200)}
+
+/* ---- DO 价钱跟 Master List 对齐：开单时 / 改价钱后自动更新旧 DO ---- */
+function repricePlan(dos){const out=[];for(const d of dos){if(d.record_only||d.price_note)continue;
+    const f=recompute({...d,start_time:d.start_time?.slice(0,5)||"",end_time:d.end_time?.slice(0,5)||"",_rateTouched:false,_surTouched:true,_descTouched:true,_supTouched:d.lifting_sup!=null,
+      charges:(d.charges||[]).map(x=>({...x,_rt:true,_qt:true}))});
+    if(f.rate==null||f.amount==null)continue;
+    if(Math.abs((Number(d.rate)||0)-Number(f.rate))>0.005||Math.abs((Number(d.amount)||0)-Number(f.amount))>0.005)out.push({d,rate:f.rate,amount:f.amount,hrs:f.billable_hours,shift:f.shift})}
+  return out}
+async function repriceApply(plan){for(const x of plan){const{error}=await sb.from("delivery_orders").update({rate:x.rate,amount:x.amount,billable_hours:x.hrs,shift:x.shift}).eq("id",x.d.id);if(error)throw error;
+    Object.assign(x.d,{rate:x.rate,amount:x.amount,billable_hours:x.hrs,shift:x.shift})}}
+async function rateChanged(r){try{const svc=/^TMA/.test(r.service)?"TMA":r.service,from=r.effective_from,to=r.effective_to||"9999-12-31";
+    let dos=await fetchAll(()=>{let q=sb.from("delivery_orders").select("*").eq("company",S.company).eq("service",svc).gte("do_date",from).lte("do_date",to);if(r.customer_id)q=q.eq("customer_id",r.customer_id);return q});
+    if(r.plate)dos=dos.filter(d=>d.plate===r.plate);
+    const sent=new Set(S.d.invoices.filter(i=>i.sent_at).map(i=>i.id)),open=dos.filter(d=>!d.invoice_id||!sent.has(d.invoice_id)),plan=repricePlan(open);if(!plan.length)return;
+    const ex=plan.slice(0,8).map(x=>`DO ${x.d.do_no} ${dmy(x.d.do_date)}: $${money(x.d.amount)} → $${money(x.amount)}`).join("\n"),inInv=plan.filter(x=>x.d.invoice_id).length;
+    if(!confirm(L(`有 ${plan.length} 张 DO 还是用旧价钱：\n${ex}${plan.length>8?"\n…":""}\n\n要全部换成新价钱吗？${inInv?`\n（其中 ${inInv} 张已开在还没发出的 invoice，换完要到 invoice 按「用已选 DO 生成明细」）`:""}`,`${plan.length} DOs use the old price. Update them?`)))return;
+    await repriceApply(plan);await loadDO();render();toast(L(`已更新 ${plan.length} 张 DO 的价钱`,`${plan.length} DOs updated`))}catch(e){toast(e.message)}}
 
 /* ================= Service 自己设定（VMS 租用 / Programming / Transport…） ================= */
 const SVC_UNITS=["per night","per day","per trip","LS","per hr","per 8 hrs","per load"];
