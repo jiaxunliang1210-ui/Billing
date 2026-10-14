@@ -976,7 +976,7 @@ function craneSummaryHTML(inv,dos){const c=custOf(inv.customer_id),rows=dos.map(
 
 /* ================= 第 1 批：日期筛选 / 排序 / 预览 / Excel / 多选 ================= */
 /* ---- 日期筛选（年 / 月 / 自定） ---- */
-S.df=S.df||{};S.sort=S.sort||{};S.invSel=S.invSel||new Set();
+S.df=S.df||{};S.sort=S.sort||{};S.invSel=S.invSel||new Set();S.siSel=S.siSel||new Set();
 const lastDay=(y,m)=>new Date(y,m,0).getDate();
 function dfRange(key){const f=S.df[key]||{p:"all"},t=today(),y=+t.slice(0,4),m=+t.slice(5,7);
   const mr=(yy,mm)=>[`${yy}-${z2(mm)}-01`,`${yy}-${z2(mm)}-${z2(lastDay(yy,mm))}`];
@@ -1229,7 +1229,7 @@ function pvHTML(p){const s=settingsOf(p.company||S.company),ls=pvLines(p.id),pad
   <div class="pvs"><div><span>Prepared by:</span><span class="u">${esc(p.prepared_by||"")}</span></div><div><span>Received by:</span><span class="u"></span></div>
     <div><span>Approved by:</span><span class="u">${p.approved_by?esc(p.approved_by)+" · "+dmy(p.approved_at):""}</span></div><div></div></div></div>`}
 /* 合成 PDF：项目可以是附件（扫描 / PDF）或 HTML 页 */
-async function buildPdf(items,filename){await loadPdfLibs();const{jsPDF}=window.jspdf,pdf=new jsPDF({orientation:"portrait",unit:"mm",format:"a4",compress:true}),box=$("#print"),warn=[];let first=true,n=0;
+async function buildPdf(items,filename,opt={}){await loadPdfLibs();const{jsPDF}=window.jspdf,pdf=new jsPDF({orientation:"portrait",unit:"mm",format:"a4",compress:true}),box=$("#print"),warn=[];let first=true,n=0;
   const keep=box.innerHTML,pv=box.classList.contains("pv");box.classList.remove("pv");
   try{for(const it of items){const pg=$("#pgProg");if(pg)pg.textContent=`${++n}/${items.length}`;
       if(it.att){try{for(const src of await attPages(it.att,it.max||20)){await addImagePage(pdf,first,src,0);first=false}continue}catch(e){warn.push(`${it.label||""}: ${e.message}`);if(!it.html)continue}}
@@ -1238,6 +1238,7 @@ async function buildPdf(items,filename){await loadPdfLibs();const{jsPDF}=window.
           if(!first)pdf.addPage("a4",land?"landscape":"portrait");first=false;let w=W,h=cv.height*W/cv.width;if(h>H){h=H;w=cv.width*H/cv.height}
           pdf.addImage(cv.toDataURL("image/jpeg",0.82),"JPEG",0,0,w,h,undefined,"FAST")}box.classList.remove("cap")}}
     if(first)throw new Error(L("没有内容","Nothing to include"));
+    if(opt.blob)return{blob:pdf.output("blob"),warn};
     const blob=pdf.output("blob"),a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=filename.replace(/[\\/:*?"<>|]+/g,"-")+".pdf";document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},2000);
     toast(`${a.download} · ${kb(blob.size)}${warn.length?" · ⚠ "+warn.length:""}`);return warn}
   finally{box.classList.remove("cap");box.innerHTML=keep;if(pv)box.classList.add("pv")}}
@@ -1750,15 +1751,16 @@ function invView(){
   ${dfBar("inv",yearsOf(S.d.invoices,"invoice_date"))}${invSelBar()}
   ${rows.length?`<div class="tw"><table><thead><tr><th onclick="event.stopPropagation()"><input type="checkbox" ${rows.length&&rows.every(i=>S.invSel.has(i.id))?"checked":""} onchange="invSelAll(this.checked)"></th><th>No</th>${thS("inv","date","Invoice Date")}${thS("inv","no","Invoice No")}${thS("inv","cust",L("客户","Customer"))}<th>Description</th>
     ${thS("inv","sub","Amt before GST","num")}${thS("inv","gst","GST","num")}${thS("inv","total","Total","num")}${thS("inv","paid",L("已付","Paid"),"num")}${thS("inv","bal",L("余额","Balance"),"num")}
-    ${thS("inv","due","Due")}${thS("inv","status",L("状态","Status"))}<th>Checked</th><th>${L("签名","Signed")}</th><th>${L("发送","Sent")}</th><th>${L("最新付款","Last paid")}</th></tr></thead><tbody>
+    ${thS("inv","due","Due")}${thS("inv","status",L("状态","Status"))}<th>Checked</th><th>${L("签名","Signed")}</th><th>${L("发送","Sent")}</th><th>${L("最新付款","Last paid")}</th><th>PDF</th></tr></thead><tbody>
   ${rows.map((i,n)=>`<tr class="click${S.invSel.has(i.id)?" sel":""}" onclick="openInv('${i.id}')"><td onclick="event.stopPropagation()"><input type="checkbox" ${S.invSel.has(i.id)?"checked":""} onchange="invSelToggle('${i.id}',this.checked)"></td><td>${n+1}</td><td>${dmy(i.invoice_date)}</td><td>${esc(i.invoice_no)}</td><td>${esc(custName(i.customer_id))}</td>
     <td class="wrap">${isMachInv(i)?`<span class="tag mute">${L("机械","Machinery")}</span> `:""}${esc(desc(i).slice(0,80))}</td><td class="num">${money(i.amount_before_gst)}</td><td class="num">${money(i.gst_amount)}</td><td class="num">${money(i.total)}</td>
     <td class="num">${money(paidOf(i))}</td><td class="num">${money(balOf(i))}</td><td>${dmy(i.due_date)}</td><td>${statusTag(i)}</td>
     <td>${i.checked?`<span class="tag ok">✓</span>`:`<span class="tag warn">${L("未检查","Not checked")}</span>`}</td>
     <td>${signedOf(i)?`<span class="tag ok">✓</span>`:i.sent_at?"":`<span class="tag warn">${L("未签","Unsigned")}</span>`}</td>
-    <td>${i.sent_at?`${dmy(i.sent_at)} ${esc(i.sent_via||"")}`:`<span class="tag mute">${L("未发","Not sent")}</span>`}</td><td>${dmy(lastPayDate(i))}</td></tr>`).join("")}</tbody>
+    <td>${i.sent_at?`${dmy(i.sent_at)} ${esc(i.sent_via||"")}`:`<span class="tag mute">${L("未发","Not sent")}</span>`}</td><td>${dmy(lastPayDate(i))}</td>
+    <td onclick="event.stopPropagation()" style="white-space:nowrap"><button class="btn sec sm" title="${L("预览","Preview")}" onclick="previewInv(['${i.id}'])">👁</button> <button class="btn sec sm" title="${L("下载 PDF","Download PDF")}" onclick="printInv('${i.id}')">⬇</button></td></tr>`).join("")}</tbody>
   <tfoot><tr><td colspan="6">${L("合计","Total")} ${rows.length}</td><td class="num">${money(sum(rows,i=>i.amount_before_gst))}</td><td class="num">${money(sum(rows,i=>i.gst_amount))}</td>
-    <td class="num">${money(sum(rows,i=>i.total))}</td><td class="num">${money(sum(rows,paidOf))}</td><td class="num">${money(sum(rows,balOf))}</td><td colspan="6"></td></tr></tfoot></table></div>`
+    <td class="num">${money(sum(rows,i=>i.total))}</td><td class="num">${money(sum(rows,paidOf))}</td><td class="num">${money(sum(rows,balOf))}</td><td colspan="7"></td></tr></tfoot></table></div>`
   :`<div class="panel empty">${L("还没有 invoice。按「新增 Invoice」，选客户和期间，系统会带出未开单的 DO。","No invoices yet. Press New invoice, pick a customer and period, and unbilled DOs will load.")}</div>`}`;
 }
 function prevMonthRange(){const d=new Date();return[ymd(new Date(d.getFullYear(),d.getMonth()-1,1)),ymd(new Date(d.getFullYear(),d.getMonth(),0))]}
@@ -2219,16 +2221,17 @@ function genView(keys,sk){
   return tabs+(cfg.note?`<p class="mute" style="font-size:13px">${L(...cfg.note)}</p>`:"")+
     (e?genForm(ent,cfg,e,sk):`<div class="actions" style="margin:0 0 12px"><button class="btn" onclick="S.gEdit={};S.dirty=true;render()">${L("新增","Add")}</button><button class="btn sec" onclick="exportEnt('${ent}')">⬇ Excel</button></div>`)+
     `<div class="filters" style="margin:0 0 6px">${sqBox(sk2)}</div>`+(dk?dfBar(dk,yearsOf(S.d[ent],dcol)):"")+sqNote(sk2,rows.length,base.length)+
-    (rows.length?`<div class="tw"><table><thead><tr>${colsOf(cfg).map(c=>SPECIAL[c]?`<th>${head(c)}</th>`:thS("g_"+ent,c,head(c),isNum(c)?"num":"")).join("")}</tr></thead><tbody>
+    (ent==="supplier_invoices"?siSelBar(rows):"")+
+    (rows.length?`<div class="tw"><table><thead><tr>${ent==="supplier_invoices"?`<th onclick="event.stopPropagation()"><input type="checkbox" ${rows.every(r=>S.siSel.has(r.id))?"checked":""} onchange="siSelAll(${esc(JSON.stringify(rows.map(r=>r.id)))},this.checked)"></th>`:""}${colsOf(cfg).map(c=>SPECIAL[c]?`<th>${head(c)}</th>`:thS("g_"+ent,c,head(c),isNum(c)?"num":"")).join("")}</tr></thead><tbody>
       ${rows.map(r=>{const bad=ent==="supplier_invoices"&&(!surchargeCheck(r).ok||(!r.payment_date&&r.due_date&&r.due_date<today()));
-        return `<tr class="click ${bad?"red":""}" onclick="gEdit('${ent}','${r.id}')">${colsOf(cfg).map(c=>`<td class="${isNum(c)?"num":""}">${genCell(cfg,c,r)}</td>`).join("")}</tr>`}).join("")}</tbody>
-      ${ent==="supplier_invoices"?`<tfoot><tr>${colsOf(cfg).map((c,i)=>`<td class="${isNum(c)?"num":""}">${i===0?L("合计","Total")+" "+rows.length:c==="total"?money(sum(rows,r=>r.total)):""}</td>`).join("")}</tr></tfoot>`:""}</table></div>`
+        return `<tr class="click ${bad?"red":""}${ent==="supplier_invoices"&&S.siSel.has(r.id)?" sel":""}" onclick="gEdit('${ent}','${r.id}')">${ent==="supplier_invoices"?`<td onclick="event.stopPropagation()"><input type="checkbox" ${S.siSel.has(r.id)?"checked":""} onchange="siSelToggle('${r.id}',this.checked)"></td>`:""}${colsOf(cfg).map(c=>`<td class="${isNum(c)?"num":""}">${genCell(cfg,c,r)}</td>`).join("")}</tr>`}).join("")}</tbody>
+      ${ent==="supplier_invoices"?`<tfoot><tr><td></td>${colsOf(cfg).map((c,i)=>`<td class="${isNum(c)?"num":""}">${i===0?L("合计","Total")+" "+rows.length:c==="total"?money(sum(rows,r=>r.total)):""}</td>`).join("")}</tr></tfoot>`:""}</table></div>`
     :`<div class="panel empty">${SQ[sk2]?L("搜不到。","No match."):L("还没有资料，按「新增」开始。","Nothing here yet. Press Add to start.")}</div>`);
 }
 function genCell(cfg,c,r){
   if(c==="_apstatus")return apStatus(r);
   if(c==="_check"){const x=surchargeCheck(r);return x.ok?esc(x.t):`<span class="tag bad">${esc(x.t)}</span>`}
-  if(c==="_att"){const n=S.d.attachments.filter(a=>a.entity_id===r.id).length;return n?`📎 ${n} <button class="btn sec sm" title="${L("预览","Preview")}" onclick="event.stopPropagation();attPreview('${r.id}')">👁</button>`:""}
+  if(c==="_att"){const n=S.d.attachments.filter(a=>a.entity_id===r.id).length;return n?`<span style="white-space:nowrap">📎 ${n} <button class="btn sec sm" title="${L("预览","Preview")}" onclick="event.stopPropagation();attPreview('${r.id}')">👁</button>${cfg===ENT.supplier_invoices?` <button class="btn sec sm" title="${L("下载","Download")}" onclick="event.stopPropagation();siDownload(['${r.id}'],'one')">⬇</button>`:""}</span>`:""}
   const f=cfg.fields.find(x=>x.k===c),v=r[c];
   if(cfg===ENT.rates&&isL3()){if(c==="service")return esc(svcLabel(v));
     if((c==="ot_rate"||c==="ot_rate_night")&&!isDayRate(r))return"";if((c==="price_night"||c==="plate")&&MAT_SVC[r.service])return"";if(c==="material"&&!MAT_SVC[r.service]&&!v)return""}
@@ -2301,6 +2304,45 @@ async function openAtt(aid){const a=S.d.attachments.find(x=>x.id===aid),w=window
 async function delAtt(aid){if(!confirm(L("确定删除这个附件？","Delete this file?")))return;const a=S.d.attachments.find(x=>x.id===aid);
   await sb.storage.from("attachments").remove([a.file_path]);const{error}=await sb.from("attachments").delete().eq("id",aid);if(error)return toast(error.message);
   S.d.attachments=S.d.attachments.filter(x=>x.id!==aid);render();if(a.entity_type==="pv"&&$("#photoOv"))pvOpen(a.entity_id)}
+
+/* ---- Supplier Invoice：勾选 → 一起预览 / 下载（合并 PDF 或 zip） ---- */
+function siSelToggle(id,on){on?S.siSel.add(id):S.siSel.delete(id);render()}
+function siSelAll(ids,on){ids.forEach(id=>on?S.siSel.add(id):S.siSel.delete(id));render()}
+function siSelBar(rows){const ids=[...S.siSel].filter(id=>S.d.supplier_invoices.some(x=>x.id===id));if(!ids.length)return"";
+  const sel=S.d.supplier_invoices.filter(x=>S.siSel.has(x.id)),noScan=sel.filter(x=>!siAtts(x).length).length,J=esc(JSON.stringify(ids));
+  return `<div class="panel" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 12px;margin:0 0 8px">
+    <b>${L(`已选 ${ids.length} 张`,`${ids.length} selected`)}</b><span class="mute">$${money(sum(sel,x=>x.total))}</span>${noScan?`<span class="tag warn">${L(`${noScan} 张没有扫描件`,`${noScan} without scan`)}</span>`:""}<span style="flex:1"></span>
+    <button class="btn sm" onclick="siPreview(${J})">👁 ${L("一起预览","Preview together")}</button>
+    <button class="btn sec sm" onclick="siDownload(${J},'pdf')">⬇ ${L("合并成一个 PDF","One merged PDF")}</button>
+    <button class="btn sec sm" onclick="siDownload(${J},'zip')">⬇ ${L("打包 zip（每张一个 PDF）","Zip (one PDF each)")}</button>
+    <button class="btn sec sm" onclick="S.siSel.clear();render()">✕ ${L("取消勾选","Clear")}</button></div>`}
+const siSorted=ids=>S.d.supplier_invoices.filter(x=>ids.includes(x.id)).sort((a,b)=>String(a.invoice_date).localeCompare(String(b.invoice_date))||String(a.invoice_no).localeCompare(String(b.invoice_no)));
+function siFileName(si,a,k,n){const ext=(String(a.file_name||a.file_path).match(/\.[a-z0-9]{2,5}$/i)||[".pdf"])[0].toLowerCase();
+  const base=`${si.invoice_date||""}_${supName(si.supplier_id)}_${si.invoice_no}_${Number(si.total||0).toFixed(2)}`.replace(/[\\/:*?"<>|]+/g,"-").replace(/\s+/g," ").trim();return base+(n>1?`_${k+1}`:"")+ext}
+async function siBlob(a){const{data,error}=await sb.storage.from("attachments").download(a.file_path);if(error)throw error;return data}
+function saveBlob(blob,name){const u=URL.createObjectURL(blob),x=document.createElement("a");x.href=u;x.download=name;document.body.appendChild(x);x.click();setTimeout(()=>{URL.revokeObjectURL(u);x.remove()},2000)}
+async function siDownload(ids,mode){const list=siSorted(ids),miss=list.filter(si=>!siAtts(si).length);
+  try{if(mode==="one"||(mode==="zip"&&list.length===1&&siAtts(list[0]).length===1)){const si=list[0],at=siAtts(si);if(!at.length)return toast(L("这张没有扫描件","No scan"));
+      toast(L("下载中…","Downloading…"));for(const [k,a] of at.entries())saveBlob(await siBlob(a),siFileName(si,a,k,at.length));return}
+    const items=[];for(const si of list)siAtts(si).forEach((a,k,arr)=>items.push({si,a,k,n:arr.length}));
+    if(!items.length)return toast(L("勾选的都没有扫描件","None of these has a scan"));
+    const tag=`${S.company} Tax Invoice ${list[0].invoice_date||""}${list.length>1?" to "+(list.at(-1).invoice_date||""):""} (${list.length})`;
+    if(mode==="pdf"){toast(L("合并中…","Merging…"));await buildPdf(items.map(x=>({att:x.a,label:x.si.invoice_no})),tag)}
+    else{await loadJSZip();const z=new JSZip();let n=0;for(const x of items){toast(`${L("打包中","Zipping")} ${++n}/${items.length}`);z.file(siFileName(x.si,x.a,x.k,x.n),await siBlob(x.a))}
+      const blob=await z.generateAsync({type:"blob"});saveBlob(blob,tag.replace(/[\\/:*?"<>|]+/g,"-")+".zip");toast(`${tag}.zip · ${kb(blob.size)}`)}
+    if(miss.length)alert(L(`这些没有扫描件，没放进去：\n${miss.map(si=>`${supName(si.supplier_id)} ${si.invoice_no}`).join("\n")}`,`No scan:\n${miss.map(si=>si.invoice_no).join("\n")}`))}
+  catch(e){toast(e.message||String(e))}}
+let SIPV=null;
+async function siPreview(ids){const list=siSorted(ids),items=[];for(const si of list)for(const a of siAtts(si))items.push({att:a,label:si.invoice_no});
+  if(!items.length)return toast(L("勾选的都没有扫描件","None of these has a scan"));
+  if(list.length===1&&items.length===1)return attPreview(list[0].id);
+  pvOv(`<div class="pvhead"><h3 style="margin:0">👁 ${L(`${list.length} 张 Tax Invoice`,`${list.length} tax invoices`)}</h3><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div><p class="mute">${L("合成中…","Building…")} <span id="pgProg"></span></p>`);
+  try{const{blob,warn}=await buildPdf(items,"preview",{blob:1});if(!$("#photoOv"))return;if(SIPV)URL.revokeObjectURL(SIPV);SIPV=URL.createObjectURL(blob);const J=esc(JSON.stringify(ids));
+    pvOv(`<div class="pvhead"><h3 style="margin:0">👁 ${L(`${list.length} 张 Tax Invoice`,`${list.length} tax invoices`)}</h3><span class="mute" style="font-size:13px">${kb(blob.size)}</span>${warn.length?`<span class="tag warn">⚠ ${warn.length}</span>`:""}<span style="flex:1"></span>
+      <a class="btn sec sm" href="${SIPV}" target="_blank" rel="noopener">↗ ${L("新视窗打开","Open in new tab")}</a>
+      <button class="btn sm" onclick="siDownload(${J},'pdf')">⬇ ${L("下载合并 PDF","Download merged PDF")}</button><button class="btn sec sm" onclick="siDownload(${J},'zip')">⬇ zip</button><button class="btn sec sm" data-a="x">✕</button></div>
+      <iframe src="${SIPV}" style="width:100%;height:78vh;border:0;background:#fff;border-radius:6px"></iframe>`)}
+  catch(e){toast(e.message||String(e));$("#photoOv")?.remove()}}
 
 /* ---- 👁 附件预览 ---- */
 async function attPreview(eid,aid){const list=S.d.attachments.filter(a=>a.entity_id===eid).sort((a,b)=>(b.kind==="Tax Invoice")-(a.kind==="Tax Invoice"));if(!list.length)return;
