@@ -505,7 +505,7 @@ function afterRender(prevTab,prevScr){
 function toTopVis(){const b=$("#toTop");if(!b)return;b.classList.toggle("show",window.scrollY>400||[...document.querySelectorAll("main .tw")].some(e=>e.scrollTop>400))}
 function toTop(){window.scrollTo({top:0,behavior:"smooth"});document.querySelectorAll("main .tw").forEach(e=>e.scrollTo({top:0,behavior:"smooth"}))}
 document.addEventListener("scroll",()=>toTopVis(),{capture:true,passive:true});
-const UI_KEYS=["tab","sub","df","sort","invF","payF","doF","siQuick","colHide","doPerPage"];
+const UI_KEYS=["tab","sub","df","sort","invF","payF","doF","siQuick","colHide","doPerPage","siAll"];
 function saveUI(){try{const o={SQ};for(const k of UI_KEYS)o[k]=S[k];localStorage.setItem("uiState",JSON.stringify(o))}catch(e){}}
 function loadUI(){try{const o=JSON.parse(localStorage.getItem("uiState")||"null");if(!o)return;if(o.SQ)Object.assign(SQ,o.SQ);
     for(const k of UI_KEYS)if(o[k]!=null&&typeof o[k]===typeof S[k]||o[k]!=null&&S[k]==null)S[k]=(o[k]&&typeof o[k]==="object"&&!Array.isArray(o[k])&&S[k]&&typeof S[k]==="object")?{...S[k],...o[k]}:o[k];
@@ -1024,7 +1024,7 @@ function craneSummaryHTML(inv,dos){const c=custOf(inv.customer_id),rows=dos.map(
 
 /* ================= 第 1 批：日期筛选 / 排序 / 预览 / Excel / 多选 ================= */
 /* ---- 日期筛选（年 / 月 / 自定） ---- */
-S.df=S.df||{};S.sort=S.sort||{};S.invSel=S.invSel||new Set();S.siSel=S.siSel||new Set();S.colHide=S.colHide||{};S.scr=S.scr||{};
+S.df=S.df||{};S.sort=S.sort||{};S.invSel=S.invSel||new Set();S.siSel=S.siSel||new Set();S.colHide=S.colHide||{};S.siAll=!!S.siAll;S.scr=S.scr||{};
 const lastDay=(y,m)=>new Date(y,m,0).getDate();
 function dfRange(key){const f=S.df[key]||{p:"all"},t=today(),y=+t.slice(0,4),m=+t.slice(5,7);
   const mr=(yy,mm)=>[`${yy}-${z2(mm)}-01`,`${yy}-${z2(mm)}-${z2(lastDay(yy,mm))}`];
@@ -2134,19 +2134,21 @@ async function sendSOA(via){const cid=S.soaCust,c=custOf(cid),s=settingsOf(S.com
 /* ================= AR / AP 总表 ================= */
 function actionLists(){const td=today(),inv=S.d.invoices.filter(i=>i.status!=="Cancelled"),m=td.slice(0,7)+"-01";
   return{overdue:inv.filter(i=>overdueDays(i)>0).sort((a,b)=>overdueDays(b)-overdueDays(a)),
-    apOver:S.d.supplier_invoices.filter(s=>!s.payment_date&&s.due_date&&s.due_date<td),
-    mism:S.d.supplier_invoices.filter(s=>!surchargeCheck(s).ok),
+    apOver:S.d.supplier_invoices.filter(s=>siMine(s)&&!s.payment_date&&s.due_date&&s.due_date<td),
+    mism:S.d.supplier_invoices.filter(s=>siMine(s)&&!surchargeCheck(s).ok),
     unchecked:inv.filter(i=>!i.checked),unsent:inv.filter(i=>i.checked&&!i.sent_at),
     unsigned:inv.filter(i=>i.checked&&!signedOf(i)&&!i.sent_at),signedUnsent:inv.filter(i=>signedOf(i)&&!i.sent_at),
     noPhoto:S.d.delivery_orders.filter(d=>!doPhotos(d.id).length),
     mfPend:S.d.monthly_fix.filter(mfApplies(m)).filter(c=>!["Billed","Skipped"].includes(mfLog(c.id,m)?.status)),
-    apSoon:S.d.supplier_invoices.filter(s=>!s.payment_date&&s.due_date&&s.due_date>=td&&s.due_date<=addDays(td,7))}}
+    apSoon:S.d.supplier_invoices.filter(s=>siMine(s)&&!s.payment_date&&s.due_date&&s.due_date>=td&&s.due_date<=addDays(td,7))}}
+const siMine=x=>!x.charged_to||x.charged_to===S.company;
 function dataIssues(){const out=[],td=today(),lo="2015-01-01",hi=addDays(td,60),co=S.company;
   const odd=d=>d&&(d<lo||d>hi),why=d=>d<lo?L(`日期太早 ${dmy(d)}`,`too early ${dmy(d)}`):L(`未来日期 ${dmy(d)}`,`future ${dmy(d)}`);
   const sis=S.d.supplier_invoices.filter(x=>!x.charged_to||x.charged_to===co),seen=new Map();
   for(const x of sis){const go=`S.tab='sup';S.sub.sup='supplier_invoices';gEdit('supplier_invoices','${x.id}')`,t=`${supName(x.supplier_id)} · ${x.invoice_no}`;
     if(odd(x.invoice_date))out.push({t,why:why(x.invoice_date),go});
     if(!(Number(x.total)>0)&&!(Number(x.total)<0))out.push({t,why:L("金额是 0","zero amount"),go});
+    if(!x.charged_to)out.push({t,why:L("To 谁 空白","no company"),go});
     const k=x.supplier_id+"|"+sqComp(x.invoice_no);if(seen.has(k))out.push({t,why:L("重复单号","duplicate no."),go});else seen.set(k,1)}
   const seenI=new Map();
   for(const i of S.d.invoices){const go=`openInv('${i.id}')`,t=`${i.invoice_no} · ${custName(i.customer_id)}`;
@@ -2161,7 +2163,7 @@ function sumView(){
   const invLi=i=>`<li onclick="openInv('${i.id}')"><span>${esc(i.invoice_no)} · ${esc(custName(i.customer_id))}</span><span>$${money(balOf(i))}</span></li>`;
   const apLi=s=>`<li onclick="S.tab='sup';S.sub.sup='supplier_invoices';render()"><span>${esc(supName(s.supplier_id))} · ${esc(s.invoice_no)}</span><span>${dmy(s.due_date)}</span></li>`;
   const ar={};for(const i of S.d.invoices){const b=balOf(i);if(b<=0.005||!dfIn("arap",i.invoice_date))continue;const r=ar[i.customer_id]=ar[i.customer_id]||{bal:0,over:0,intr:0,n:0};r.bal+=b;r.n++;if(overdueDays(i))r.over+=b;r.intr+=interestOf(i)}
-  const ap={};for(const s of S.d.supplier_invoices){if(s.payment_date||!dfIn("arap",s.invoice_date))continue;const r=ap[s.supplier_id]=ap[s.supplier_id]||{bal:0,over:0,n:0,next:""};r.bal+=Number(s.total)||0;r.n++;
+  const ap={};for(const s of S.d.supplier_invoices){if(s.payment_date||!siMine(s)||!dfIn("arap",s.invoice_date))continue;const r=ap[s.supplier_id]=ap[s.supplier_id]||{bal:0,over:0,n:0,next:""};r.bal+=Number(s.total)||0;r.n++;
     if(s.due_date&&s.due_date<today())r.over+=Number(s.total)||0;else if(s.due_date&&(!r.next||s.due_date<r.next))r.next=s.due_date}
   for(const k of Object.keys(ar))if(!sqHit(SQ.arap,[custName(k),ar[k].bal]))delete ar[k];for(const k of Object.keys(ap))if(!sqHit(SQ.arap,[supName(k),ap[k].bal]))delete ap[k];
   const arR=sortRows("ar",Object.entries(ar),{c:([k])=>custName(k),n:([,r])=>r.n,bal:([,r])=>r.bal,over:([,r])=>r.over,intr:([,r])=>r.intr}),apR=sortRows("ap",Object.entries(ap),{c:([k])=>supName(k),n:([,r])=>r.n,bal:([,r])=>r.bal,over:([,r])=>r.over,next:([,r])=>r.next});
@@ -2187,7 +2189,7 @@ function sumView(){
   ${apR.length?`<div class="tw"><table><thead><tr>${thS("ap","c","Supplier")}${thS("ap","n",L("张数","Invoices"),"num")}${thS("ap","bal",L("未付","Outstanding"),"num")}${thS("ap","over",L("逾期","Overdue"),"num")}${thS("ap","next",L("下一个到期","Next due"))}</tr></thead><tbody>
     ${apR.map(([sid,r])=>`<tr><td>${esc(supName(sid))}</td><td class="num">${r.n}</td><td class="num">${money(r.bal)}</td><td class="num">${r.over?`<span class="tag bad">${money(r.over)}</span>`:""}</td><td>${dmy(r.next)}</td></tr>`).join("")}</tbody>
     <tfoot><tr><td>${L("合计","Total")}</td><td class="num">${sum(apR,([,r])=>r.n)}</td><td class="num">${money(sum(apR,([,r])=>r.bal))}</td><td class="num">${money(sum(apR,([,r])=>r.over))}</td><td></td></tr></tfoot></table></div>`:`<div class="panel empty">${L("没有未付的 supplier invoice","No unpaid supplier invoices")}</div>`}
-  <p class="mute" style="font-size:13px">${L("Invoice 和收款一有改动，这里自动更新。AR 只显示目前选的公司；AP 显示全部 supplier。","Updates automatically when invoices or payments change. AR shows the selected company; AP shows all suppliers.")}</p>
+  <p class="mute" style="font-size:13px">${L("Invoice 和收款一有改动，这里自动更新。AR 和 AP 都只算目前选的公司（AP 按「To 谁」；空白的两边都算）。","Updates automatically. AR and AP show the selected company only (AP by Charged to; blank counts for both).")}</p>
   ${aparPanel()}${APAR?(setTimeout(()=>{if($("#aparOut")&&!$("#aparOut").innerHTML)aparShow()}),""):""}`;
 }
 
@@ -2280,7 +2282,7 @@ const colsOf=cfg=>cfg.cols.filter(c=>SPECIAL[c]||fieldsOf(cfg).some(f=>f.k===c))
 function genView(keys,sk){
   const ent=S.sub[sk],cfg=ENT[ent],e=S.gEdit,dk=ent==="supplier_invoices"?"sup":null,dcol=dk?"invoice_date":null,si=ent==="supplier_invoices";
   const gget=c=>{const f=cfg.fields.find(x=>x.k===c);if(!f)return r=>"";if(f.type==="customer")return r=>custName(r[c]);if(f.type==="supplier")return r=>supName(r[c]);if(["money","number","terms"].includes(f.type))return r=>r[c]==null?null:Number(r[c]);return r=>r[c]};
-  const sk2="g_"+ent,base=S.d[ent].filter(r=>!dk||dfIn(dk,r[dcol])),hit0=SQ[sk2]?base.filter(r=>sqHit(SQ[sk2],[...sqRow(r),...colsOf(cfg).filter(c=>!SPECIAL[c]).map(c=>gget(c)(r))])):base;
+  const coF=(ent==="supplier_invoices"||ent==="diesel_surcharges")&&!S.siAll,sk2="g_"+ent,base=S.d[ent].filter(r=>(!dk||dfIn(dk,r[dcol]))&&(!coF||siMine(r))),hit0=SQ[sk2]?base.filter(r=>sqHit(SQ[sk2],[...sqRow(r),...colsOf(cfg).filter(c=>!SPECIAL[c]).map(c=>gget(c)(r))])):base;
   const qk=si?(S.siQuick||""):"",hit=qk?hit0.filter(SIQ[qk].f):hit0;
   const rows=sortRows("g_"+ent,hit,Object.fromEntries(colsOf(cfg).map(c=>[c,gget(c)])));
   const hid=new Set(S.colHide[ent]||[]),vc=colsOf(cfg).filter(c=>!hid.has(c));
@@ -2291,7 +2293,7 @@ function genView(keys,sk){
   const colBtn=`<details class="colpick"><summary class="btn sec sm">☰ ${L("栏位","Columns")}${hid.size?` (${vc.length}/${colsOf(cfg).length})`:""}</summary><div class="colbox">${colsOf(cfg).map(c=>`<label class="chk"><input type="checkbox" ${hid.has(c)?"":"checked"} onchange="colToggle('${ent}','${c}',this.checked)">${head(c)}</label>`).join("")}</div></details>`;
   return tabs+(cfg.note?`<p class="mute" style="font-size:13px">${L(...cfg.note)}</p>`:"")+
     (e?genForm(ent,cfg,e,sk):`<div class="actions" style="margin:0 0 12px"><button class="btn" onclick="S.gEdit={};S.dirty=true;render()">${L("新增","Add")}</button><button class="btn sec" onclick="exportEnt('${ent}')">⬇ Excel</button></div>`)+
-    `<div class="filters" style="margin:0 0 6px">${sqBox(sk2)}${colBtn}</div>`+(dk?dfBar(dk,yearsOf(S.d[ent],dcol)):"")+chips+sqNote(sk2,rows.length,base.length)+
+    `<div class="filters" style="margin:0 0 6px">${sqBox(sk2)}${colBtn}${ent==="supplier_invoices"||ent==="diesel_surcharges"?`<label class="chk" style="align-self:end"><input type="checkbox" ${S.siAll?"checked":""} onchange="S.siAll=this.checked;S.siSel.clear();render()">${L("显示两间公司","Show both companies")}</label>`:""}</div>`+(dk?dfBar(dk,yearsOf(S.d[ent],dcol)):"")+chips+sqNote(sk2,rows.length,base.length)+
     (si?siSelBar(rows):"")+
     (rows.length?`<div class="tw"><table><thead><tr>${si?`<th onclick="event.stopPropagation()"><input type="checkbox" ${rows.every(r=>S.siSel.has(r.id))?"checked":""} onchange="siSelAll(${esc(JSON.stringify(rows.map(r=>r.id)))},this.checked)"></th>`:""}${vc.map(c=>SPECIAL[c]?`<th>${head(c)}</th>`:thS("g_"+ent,c,head(c),isNum(c)?"num":"")).join("")}</tr></thead><tbody>
       ${rows.map(r=>{const bad=si&&(!surchargeCheck(r).ok||(!r.payment_date&&r.due_date&&r.due_date<today()));
@@ -2309,6 +2311,7 @@ function colToggle(ent,c,on){const h=new Set(S.colHide[ent]||[]);on?h.delete(c):
 function genCell(cfg,c,r){
   if(c==="_apstatus")return apStatus(r);
   if(c==="_check"){const x=surchargeCheck(r);return x.ok?esc(x.t):`<span class="tag bad">${esc(x.t)}</span>`}
+  if(c==="charged_to"&&!r.charged_to&&(cfg===ENT.supplier_invoices||cfg===ENT.diesel_surcharges))return `<span class="tag warn">${L("未分公司","No company")}</span>`;
   if(c==="_att"){const n=S.d.attachments.filter(a=>a.entity_id===r.id).length;return n?`<span style="white-space:nowrap">📎 ${n} <button class="btn sec sm" title="${L("预览","Preview")}" onclick="event.stopPropagation();attPreview('${r.id}')">👁</button>${cfg===ENT.supplier_invoices?` <button class="btn sec sm" title="${L("下载","Download")}" onclick="event.stopPropagation();siDownload(['${r.id}'],'one')">⬇</button>`:""}</span>`:""}
   const f=cfg.fields.find(x=>x.k===c),v=r[c];
   if(cfg===ENT.rates&&isL3()){if(c==="service")return esc(svcLabel(v));
@@ -2870,7 +2873,7 @@ function exportARAP(){const td=today();
   const custs=[...new Set(arInv.map(i=>i.customer_id))];
   const arSum=custs.map(cid=>{const l=arInv.filter(i=>i.customer_id===cid),b=k=>sum(l.filter(i=>bucket(i)===k),balOf);
     return[custName(cid),l.length,sum(l,balOf),b("Current"),b("1-30"),b("31-60"),b("61-90"),b(">90"),sum(l,i=>interestOf(i))]});
-  const ap=S.d.supplier_invoices.filter(x=>!x.payment_date).sort((a,b)=>(a.due_date||"").localeCompare(b.due_date||""));
+  const ap=S.d.supplier_invoices.filter(x=>!x.payment_date&&siMine(x)).sort((a,b)=>(a.due_date||"").localeCompare(b.due_date||""));
   const tot=(rows,i)=>sum(rows,r=>r[i]);
   const arList=S.d.invoices.filter(i=>i.status!=="Cancelled"&&balOf(i)>0.005).sort((a,b)=>a.invoice_date.localeCompare(b.invoice_date)||a.invoice_no.localeCompare(b.invoice_no));
   const apList=S.d.supplier_invoices.filter(x=>!x.payment_date).sort((a,b)=>(a.invoice_date||"").localeCompare(b.invoice_date||"")||String(a.invoice_no).localeCompare(String(b.invoice_no)));
