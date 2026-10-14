@@ -328,7 +328,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-14e";
+const APP_VER="2026-10-14f";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -2959,17 +2959,22 @@ if(/[?&]v=/.test(location.search))history.replaceState(null,"",location.pathname
 setTimeout(checkUpdate,4000);setInterval(checkUpdate,10*60*1000);document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")checkUpdate()});
 function dropZone(el){if(!el||!el.closest)return null;const ob=el.closest("[data-drop]");if(ob)return{lb:ob,open:ob.dataset.drop};const lb=el.closest("label");if(lb){const i=lb.querySelector('input[type="file"]');if(i&&!i.disabled)return{lb,i}}
   const box=el.closest("#photoOv .pvbox");if(box){const i=box.querySelector('label.file input[type="file"]');if(i)return{lb:i.closest("label"),i,box}}return null}
-const dropOK=(f,acc)=>{if(!acc)return true;const n=f.name.toLowerCase(),t=(f.type||"").toLowerCase();return acc.split(",").map(x=>x.trim().toLowerCase()).some(a=>a.startsWith(".")?n.endsWith(a):a.endsWith("/*")?t.startsWith(a.slice(0,-1)):t===a)};
+const EXT_MIME={pdf:"application/pdf",jpg:"image/jpeg",jpeg:"image/jpeg",png:"image/png",heic:"image/heic",heif:"image/heif",webp:"image/webp",gif:"image/gif",bmp:"image/bmp",tif:"image/tiff",tiff:"image/tiff",zip:"application/zip",xlsx:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",xls:"application/vnd.ms-excel",csv:"text/csv"};
+const dropOK=(f,acc)=>{if(!acc)return true;const n=(f.name||"").toLowerCase(),ext=n.split(".").pop();let t=(f.type||"").toLowerCase();if(!t||t==="application/octet-stream"||t==="application/x-msdownload")t=EXT_MIME[ext]||t;return acc.split(",").map(x=>x.trim().toLowerCase()).some(a=>a.startsWith(".")?n.endsWith(a):a.endsWith("/*")?t.startsWith(a.slice(0,-1)):t===a)};
 let dropHi=null;const dropClear=()=>{if(dropHi){dropHi.classList.remove("dropping");dropHi=null}document.querySelectorAll(".pvbox.dropping").forEach(b=>b.classList.remove("dropping"))};
 document.addEventListener("dragover",e=>{if(!e.dataTransfer||![...e.dataTransfer.types].includes("Files"))return;e.preventDefault();const z=dropZone(e.target);
   if(z){e.dataTransfer.dropEffect="copy";if(dropHi!==z.lb){dropClear();dropHi=z.lb;z.lb.classList.add("dropping")}if(z.box)z.box.classList.add("dropping")}else{e.dataTransfer.dropEffect="none";dropClear()}});
 document.addEventListener("dragleave",e=>{if(!e.relatedTarget)dropClear()});
-document.addEventListener("drop",e=>{if(!e.dataTransfer||!e.dataTransfer.files.length)return;e.preventDefault();const z=dropZone(e.target);dropClear();
+document.addEventListener("drop",e=>{if(!e.dataTransfer)return;const hasF=[...(e.dataTransfer.types||[])].includes("Files");let fl=[...e.dataTransfer.files];
+  if(!fl.length)fl=[...(e.dataTransfer.items||[])].filter(it=>it.kind==="file").map(it=>it.getAsFile()).filter(Boolean);
+  if(!fl.length&&!hasF)return;e.preventDefault();const z=dropZone(e.target);dropClear();
+  if(!fl.length)return toast(L("这个地方拖出来的不是文件（WhatsApp / Outlook 有时会这样）。先把文件存到电脑，再从文件夹拖进来。","This source didn't send a real file. Save it to your computer first, then drag it from the folder."));
   if(!z)return toast(L("拖到上传按钮上才会上传","Drop onto an upload button"));
-  const files=[...e.dataTransfer.files];
+  const files=fl;
   if(z.open){window[z.open]();let n=0;const t=setInterval(()=>{const i=document.querySelector('#photoOv .pvbox label.file input[type="file"]');if(i||++n>40){clearInterval(t);if(i)dropInto(i,files)}},50);return}
   dropInto(z.i,files)});
-function dropInto(i,files){let fs=files.filter(f=>dropOK(f,i.getAttribute("accept")));
+function dropInto(i,files){files=files.map(f=>{const t=(f.type||"").toLowerCase(),m=EXT_MIME[(f.name||"").toLowerCase().split(".").pop()];return m&&(!t||t==="application/octet-stream")?new File([f],f.name,{type:m,lastModified:f.lastModified}):f});
+  let fs=files.filter(f=>dropOK(f,i.getAttribute("accept")));
   if(!fs.length)return toast(L(`这里不能放这种文件（只收：${i.getAttribute("accept")}）`,`File type not accepted here`));
   if(!i.multiple)fs=fs.slice(0,1);const dt=new DataTransfer();fs.forEach(f=>dt.items.add(f));i.files=dt.files;i.dispatchEvent(new Event("change",{bubbles:true}))}
 
