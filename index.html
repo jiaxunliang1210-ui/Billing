@@ -2,6 +2,7 @@
 <html lang="zh" data-theme="dark">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-cache">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>ETK · L3H 开单系统</title>
 <link rel="manifest" href="manifest.json">
@@ -91,6 +92,9 @@ main .tw thead th{z-index:2}
 #undoT b{font-size:12px;opacity:.6;min-width:16px}
 #toTop{position:fixed;right:18px;bottom:18px;z-index:120;width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:var(--panel2);color:inherit;font-size:18px;cursor:pointer;display:none;box-shadow:0 6px 18px rgba(0,0,0,.3)}
 #toTop.show{display:block}
+.rcw{color:var(--red,#e5484d);font-weight:600;margin:6px 0}
+#updBar{position:fixed;left:50%;transform:translateX(-50%);top:8px;z-index:9999;background:#f5b301;color:#1a1a1a;font-weight:600;padding:8px 12px;border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.35);display:flex;gap:8px;align-items:center;flex-wrap:wrap;max-width:calc(100vw - 24px)}
+.brand .ver{font-size:11px;font-weight:400;opacity:.55;margin-left:6px}
 label.file.dropping{outline:3px dashed var(--amber,#f5a623);outline-offset:3px;position:relative}
 label.file.dropping::after{content:"放开就上传";position:absolute;left:50%;top:-30px;transform:translateX(-50%);background:var(--amber,#f5a623);color:#111;font-size:12px;padding:2px 8px;border-radius:6px;white-space:nowrap}
 .pvbox.dropping{outline:3px dashed var(--amber,#f5a623);outline-offset:-6px}
@@ -323,6 +327,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
+const APP_VER="2026-10-14";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -493,7 +498,7 @@ function render(){
   if(!S.user){app.innerHTML=loginView();return}
   const urgent=urgentCount();
   const V={exc:excView,do:doView,inv:invView,pay:payView,soa:soaView,sum:sumView,mf:mfView,sup:supView,master:masterView,set:setView};
-  app.innerHTML=`<header class="top"><div class="brand"><span class="stripe"></span>${S.company} ${L("开单系统","Billing")}</div>
+  app.innerHTML=`<header class="top"><div class="brand"><span class="stripe"></span>${S.company} ${L("开单系统","Billing")}<span class="ver" title="${L("系统版本","App version")}">v${APP_VER}</span></div>
     <div class="seg">${["ETK","L3H"].map(c=>`<button class="${c===S.company?"on":""}" onclick="setCompany('${c}')">${c}</button>`).join("")}</div>
     <button class="ghost" onclick="gSearch()" title="Ctrl+K">🔍 ${L("搜索","Search")}</button>
     <span class="sync"><i></i><span></span></span>
@@ -1823,7 +1828,7 @@ function invView(){
     <label class="f">${L("客户","Customer")}<select onchange="S.invF.customer=this.value;render()">${optList(S.d.customers.map(c=>[c.id,c.name]),F.customer,L("全部","All"))}</select></label>
     <label class="f">${L("状态","Status")}<select onchange="S.invF.status=this.value;render()">${optList([["Unpaid",L("未付","Unpaid")],["Partial",L("部分付款","Partial")],["Paid",L("已付","Paid")],["Overdue",L("逾期","Overdue")],["CN","CN"]],F.status,L("全部","All"))}</select></label>
     ${sqBox("inv",L("Invoice No / 客户 / Project / 金额 / 日期","invoice no / customer / project / amount / date"))}
-    <button class="btn" onclick="openInvForm()">${L("新增 Invoice","New invoice")}</button><button class="btn sec" onclick="projBoard()">📊 ${L("Project 进度","Project progress")}</button><button class="btn sec" onclick="suUp()">⬆ ${L("上传 Sales Invoice（PDF / zip）","Upload sales invoices")}</button>${isL3()?`<button class="btn sec" onclick="partnerBill()">↗ ${L("开单给 ETK","Bill ETK")}</button>`:""}<button class="btn sec" onclick="bulkPay()">💰 ${L("批量补记收款","Bulk record payments")}</button><button class="btn sec" onclick="monthEnd()">📦 ${L("月底文件包","Month-end pack")}</button><button class="btn sec" onclick="exportInv()">⬇ Excel</button></div>
+    <button class="btn" onclick="openInvForm()">${L("新增 Invoice","New invoice")}</button><button class="btn sec" onclick="projBoard()">📊 ${L("Project 进度","Project progress")}</button><button class="btn sec" onclick="suUp()">⬆ ${L("上传 Sales Invoice（PDF / zip）","Upload sales invoices")}</button>${isL3()?`<button class="btn sec" onclick="partnerBill()">↗ ${L("开单给 ETK","Bill ETK")}</button>`:""}<button class="btn sec" onclick="invScan()" title="${L("找出还没寄出、跟最新价钱/设定不一样的 invoice","Find unsent invoices that differ from the latest data")}">🔄 ${L("检查旧单要不要更新","Check old invoices")}</button><button class="btn sec" onclick="bulkPay()">💰 ${L("批量补记收款","Bulk record payments")}</button><button class="btn sec" onclick="monthEnd()">📦 ${L("月底文件包","Month-end pack")}</button><button class="btn sec" onclick="exportInv()">⬇ Excel</button></div>
   ${dfBar("inv",yearsOf(S.d.invoices,"invoice_date"))}${invSelBar()}
   ${rows.length?`<div class="tw"><table><thead><tr><th onclick="event.stopPropagation()"><input type="checkbox" ${rows.length&&rows.every(i=>S.invSel.has(i.id))?"checked":""} onchange="invSelAll(this.checked)"></th><th>No</th>${thS("inv","date","Invoice Date")}${thS("inv","no","Invoice No")}${thS("inv","cust",L("客户","Customer"))}<th>Description</th>
     ${thS("inv","sub","Amt before GST","num")}${thS("inv","gst","GST","num")}${thS("inv","total","Total","num")}${thS("inv","paid",L("已付","Paid"),"num")}${thS("inv","bal",L("余额","Balance"),"num")}
@@ -1930,26 +1935,26 @@ async function loadUnbilled(){const f=S.modal.f;if(!f.customer_id)return toast(L
     const have=new Set(f.dos.map(d=>d.id));for(const d of data)if(!have.has(d.id)){f.dos.push(d);f.sel.add(d.id)}
     f.dos.sort((a,b)=>a.do_date.localeCompare(b.do_date)||(a.start_time||"").localeCompare(b.start_time||""));
     if(!data.length)toast(L("没有找到未开单的 DO","No unbilled DOs found"));render()}catch(e){toast(e.message)}}
-async function buildLines(){const f=S.modal.f;
-  if(isL3()&&f.kind==="machine"){const rows=(f._m?.rows||[]).filter((_,i)=>f.msel.has(i));if(!rows.length)return toast(L("还没选机械","Nothing selected"));
-    const np=rows.filter(r=>r.rate==null);if(np.length)return toast(L(`${np.map(r=>r.l.machine_code).join(", ")} 没有价钱，先到 Excavator → 机器 & 价钱 填好`,`No rate for ${np.map(r=>r.l.machine_code).join(", ")}`));
-    f.description=`PROJECT: ${f.project}\nPROVIDE MACHINERY / EQUIPMENT RENTAL FOR ${monthUpper(f.period_from)}`;f.lines=machineLines(rows);f._mchosen=rows;if(!f.summary_no)f.summary_no=projOf(f.project)?.no||"";render();return}
-  const chosen=f.dos.filter(d=>f.sel.has(d.id));if(!chosen.length)return toast(L("还没选 DO","No DOs selected"));
-  {const plan=repricePlan(chosen);if(plan.length){try{await repriceApply(plan);toast(L(`${plan.length} 张 DO 用的是旧价钱，已自动换成 Master List 的价钱`,`${plan.length} DOs re-priced from Master List`))}catch(e){toast(e.message)}}}
+async function buildLines(f0,opt){opt=opt||{};const f=f0||S.modal.f;f._fail=null;const R=()=>{if(!opt.quiet)render()},T=m=>{if(opt.quiet)f._fail=m;else toast(m)};
+  if(isL3()&&f.kind==="machine"){const rows=(f._m?.rows||[]).filter((_,i)=>f.msel.has(i));if(!rows.length)return T(L("还没选机械","Nothing selected"));
+    const np=rows.filter(r=>r.rate==null);if(np.length)return T(L(`${np.map(r=>r.l.machine_code).join(", ")} 没有价钱，先到 Excavator → 机器 & 价钱 填好`,`No rate for ${np.map(r=>r.l.machine_code).join(", ")}`));
+    f.description=`PROJECT: ${f.project}\nPROVIDE MACHINERY / EQUIPMENT RENTAL FOR ${monthUpper(f.period_from)}`;f.lines=machineLines(rows);f._mchosen=rows;if(!f.summary_no)f.summary_no=projOf(f.project)?.no||"";R();return}
+  const chosen=f.dos.filter(d=>f.sel.has(d.id));if(!chosen.length)return T(L("还没选 DO","No DOs selected"));
+  if(!opt.noReprice){const plan=repricePlan(chosen);if(plan.length){try{await repriceApply(plan);T(L(`${plan.length} 张 DO 用的是旧价钱，已自动换成 Master List 的价钱`,`${plan.length} DOs re-priced from Master List`))}catch(e){T(e.message)}}}
   if(isL3()){chosen.sort((a,b)=>a.do_date.localeCompare(b.do_date));const np=noPriceList(chosen);
-    if(np.length){f._chk={noPrice:np};render();toast(L(`有 ${np.length} 张 DO 没有价钱，先到 Master List 设好价钱，或打开那张 DO 填价钱。`,`${np.length} DO(s) have no price.`));return}
+    if(np.length){f._chk={noPrice:np};R();T(L(`有 ${np.length} 张 DO 没有价钱，先到 Master List 设好价钱，或打开那张 DO 填价钱。`,`${np.length} DO(s) have no price.`));return}
     const from=f.period_from||chosen[0].do_date;
     if(f.project){f.description=`PROJECT: ${f.project}\nPROVIDE TRANSPORT SERVICES FOR ${monthUpper(from)}`;f.lines=l3LinesLS(chosen);if(!f.summary_no)f.summary_no=projOf(f.project)?.no||""}
     else{f.description="";f.lines=l3LinesDetail(chosen)}
     const pos=[...new Set(chosen.map(d=>d.customer_po).filter(Boolean))];if(!f.customer_po&&pos.length===1)f.customer_po=pos[0];
-    f._chk=null;render();f._chk=await l3Checklist(f,chosen);if(S.modal?.f===f)render();return}
+    f._chk=null;if(opt.quiet)return;R();f._chk=await l3Checklist(f,chosen);if(S.modal?.f===f)R();return}
   const from=f.period_from||chosen[0].do_date,to=f.period_to||chosen.at(-1).do_date;const groups={};for(const d of chosen)(groups[d.service]=groups[d.service]||[]).push(d);
   if(S.company==="ETK"){f.description=f.project?`Project : ${f.project}`:"";const sv=svcLines(chosen);
     f.lines=[...sv.out,...Object.entries(groups).filter(([svc])=>!svcDef(svc)).map(([svc,l])=>{const a=sum(l,d=>d.amount);return{description:`${svc==="TMA"?"TMA Transport Charges":svc+" Charges"}\n${longDate(from)} to ${longDate(to)}`,qty:1,unit:"LS",unit_price:a,amount:a}})]}
   else{f.description=`${f.project?`PROJECT: ${f.project}\n`:""}PROVIDE TRANSPORT SERVICES FOR ${monthUpper(from)}`;
     f.lines=Object.entries(groups).map(([svc,l])=>({description:L3H_DESC[svc]||svc,qty:sum(l,d=>d.billable_hours),unit:"hrs",unit_price:null,amount:sum(l,d=>d.amount)}))}
   const pos=[...new Set(chosen.map(d=>d.customer_po).filter(Boolean))];if(!f.customer_po&&pos.length===1)f.customer_po=pos[0];
-  render()}
+  R()}
 async function saveInv(){
   const f=S.modal.f,w=$("#invWarn");
   if(!f.customer_id||!f.invoice_no||!f.invoice_date){w.textContent=L("请填客户、Invoice No、Invoice Date","Customer, invoice no and date are required");return}
@@ -1986,6 +1991,71 @@ const lineUnit=l=>l.unit||(l.unit_price==null?"hrs":"LS");
 function openInv(id){S.modal={kind:"inv",id,edits:null,dos:null};render();
   sb.from("delivery_orders").select("id,do_no,do_date").eq("invoice_id",id).then(({data})=>{if(S.modal?.id===id){S.modal.dos=data||[];render()}});
   sb.from("invoice_edits").select("*").eq("invoice_id",id).order("created_at",{ascending:false}).then(({data})=>{if(S.modal?.id===id){S.modal.edits=data||[];render()}})}
+/* ---- 🔄 旧 invoice 按最新资料重算（价钱 / Service 设定 / 客户 Terms） ---- */
+const lnKey=l=>[String(l.description||"").replace(NOUL,"").trim(),r2(Number(l.qty)||0),String(l.unit||lineUnit(l)),l.unit_price==null?"":r2(l.unit_price),r2(Number(l.amount)||0)].join("|");
+async function invRecalc(id,dosPre){const inv=invById(id);if(!inv)return{skip:"—"};
+  if(isMachInv(inv))return{inv,skip:L("机械租用单，请用「修改」","machine rental invoice — use Edit")};
+  if(invOrig(inv))return{inv,skip:L("导入的旧单（用你上传的原本 PDF）","imported invoice")};
+  const dos=dosPre||await fetchAll(()=>sb.from("delivery_orders").select("*").eq("invoice_id",id).order("do_date").order("start_time"));
+  if(!dos.length)return{inv,skip:L("没有连着 DO（手动打的明细），请用「修改」","no DOs linked (manual lines) — use Edit")};
+  const plan=repricePlan(dos),pm=new Map(plan.map(x=>[x.d.id,x]));
+  const copies=dos.map(d=>{const x=pm.get(d.id);return x?{...d,rate:x.rate,amount:x.amount,billable_hours:x.hrs,shift:x.shift}:{...d}});
+  const oldLines=S.d.invoice_lines.filter(l=>l.invoice_id===id).sort((a,b)=>(a.line_no||0)-(b.line_no||0)).map(l=>({...l,unit:lineUnit(l)}));
+  const f={...inv,lines:oldLines.map(l=>({...l})),dos:copies,sel:new Set(copies.map(d=>d.id)),origDos:copies.map(d=>d.id)};
+  await buildLines(f,{quiet:true,noReprice:true});if(f._fail)return{inv,skip:f._fail};
+  const t=invTotals(f),c=custOf(inv.customer_id),newDue=inv.invoice_date?addDays(inv.invoice_date,Number(c.payment_terms_days??30)):inv.due_date;
+  const amtCh=Math.abs(t.total-(Number(inv.total)||0))>0.005,txtCh=oldLines.map(lnKey).join("\n")!==f.lines.map(lnKey).join("\n"),dueCh=!!newDue&&newDue!==inv.due_date;
+  return{inv,f,plan,dos,oldLines,t,newDue,amtCh,txtCh,dueCh,changed:amtCh||txtCh||dueCh||plan.length>0}}
+async function invRecalcSave(r,reason){const inv=r.inv,id=inv.id;if(r.plan.length)await repriceApply(r.plan);
+  const row={amount_before_gst:r.t.sub,gst_amount:r.t.gst,total:r.t.total,due_date:r.newDue||inv.due_date};
+  if(inv.checked||inv.sent_at){const edits=[["amount_before_gst",inv.amount_before_gst,row.amount_before_gst],["gst_amount",inv.gst_amount,row.gst_amount],["total",inv.total,row.total],["due_date",inv.due_date,row.due_date]]
+      .filter(([,o,n])=>typeof n==="number"?Math.abs((Number(o)||0)-n)>0.005:String(o??"")!==String(n??"")).map(([field,o,n])=>({invoice_id:id,field,old_value:String(o??""),new_value:String(n??""),reason}));
+    if(!edits.length)edits.push({invoice_id:id,field:"lines",old_value:"",new_value:"",reason});const e0=await sb.from("invoice_edits").insert(edits);if(e0.error)throw e0.error}
+  let e=await sb.from("invoices").update(row).eq("id",id);if(e.error)throw e.error;
+  e=await sb.from("invoice_lines").delete().eq("invoice_id",id);if(e.error)throw e.error;
+  e=await sb.from("invoice_lines").insert(r.f.lines.map((l,i)=>({invoice_id:id,line_no:i+1,description:l.description||"",qty:l.qty,unit:l.unit||null,unit_price:l.unit==="hrs"||(isL3()&&l.unit_price==null)?null:(l.unit_price??l.amount),amount:Number(l.amount)||0})));if(e.error)throw e.error}
+function rcDiffHTML(r){const row=l=>`<tr><td class="wrap" style="white-space:pre-line">${esc(String(l.description||"").replace(NOUL,""))}</td><td class="num">${l.qty??""} ${esc(l.unit||lineUnit(l))}</td><td class="num">${l.unit_price!=null?money(l.unit_price):""}</td><td class="num">${money(l.amount)}</td></tr>`;
+  const tbl=(ls,tot,ttl)=>`<div style="flex:1;min-width:260px"><h3>${ttl}</h3><div class="tw"><table><thead><tr><th>Description</th><th class="num">Qty</th><th class="num">${L("单价","Price")}</th><th class="num">${L("金额","Amount")}</th></tr></thead><tbody>${ls.map(row).join("")}</tbody><tfoot><tr><td colspan="3">Total（${L("含 GST","incl. GST")}）</td><td class="num">${money(tot)}</td></tr></tfoot></table></div></div>`;
+  return `${r.plan.length?`<p><b>${L("DO 价钱换成 Master List 现在的价钱：","DO prices from current Master List:")}</b><br>${r.plan.slice(0,10).map(x=>`DO ${esc(x.d.do_no||"")} · ${dmy(x.d.do_date)}：$${money(x.d.amount)} → <b>$${money(x.amount)}</b>`).join("<br>")}${r.plan.length>10?`<br>… ${L("还有","and")} ${r.plan.length-10}`:""}</p>`:""}
+  ${r.dueCh?`<p><b>Due date</b>：${dmy(r.inv.due_date)} → <b>${dmy(r.newDue)}</b>（${L("按客户现在的付款期限","from customer's current terms")}）</p>`:""}
+  <div style="display:flex;gap:14px;flex-wrap:wrap">${tbl(r.oldLines,r.inv.total,L("现在","Now"))}${tbl(r.f.lines,r.t.total,L("更新后","After update"))}</div>`}
+let RC1=null,RCB=null;
+async function invRefresh(id){toast(L("计算中…","Working…"));let r;try{r=await invRecalc(id)}catch(e){return toast(e.message)}
+  if(r.skip)return alert(L(`这张不能自动重算：${r.skip}`,`Can't recalculate: ${r.skip}`));
+  if(!r.changed)return toast(L("已经是最新资料，没有要改的 👍","Already up to date 👍"));
+  RC1=r;const paid=paidOf(r.inv);
+  pvOv(`<div class="pvhead"><h3 style="margin:0">🔄 ${esc(r.inv.invoice_no)} · ${L("按最新资料重算","Recalculate with latest data")}</h3><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
+    ${r.inv.sent_at?`<p class="rcw">⚠ ${L(`这张 ${dmy(r.inv.sent_at)} 已经寄给客户，更新后记得重新寄新版本。`,`Sent on ${dmy(r.inv.sent_at)} — resend after updating.`)}</p>`:""}
+    ${paid>0.005&&r.amtCh?`<p class="rcw">⚠ ${L(`这张已收 $${money(paid)}，金额改了余额会跟着变。`,`$${money(paid)} received — the balance will change.`)}</p>`:""}
+    ${!r.amtCh&&r.txtCh?`<p class="mute">${L("金额一样，只是明细的字不同。如果那些字是你手动改的，就不要更新。","Same amount, only wording differs. Skip if you edited the wording by hand.")}</p>`:""}
+    ${rcDiffHTML(r)}<div class="actions"><button class="btn" onclick="invRefreshGo()">${L("更新这张","Update this invoice")}</button><button class="btn sec" data-a="x">${L("取消","Cancel")}</button></div>`)}
+async function invRefreshGo(){const r=RC1;if(!r)return;let reason="";
+  if(r.inv.checked||r.inv.sent_at){reason=prompt(L("这张已检查或已发送，请输入修改原因：","Checked or sent — reason for the change:"),L("按最新资料重算","Recalculated with latest data"));if(!reason)return}
+  try{await invRecalcSave(r,reason)}catch(e){return toast(e.message)}
+  document.querySelector("#photoOv")?.remove();RC1=null;await loadAll();await syncStatuses([r.inv.id]);toast(L("已更新","Updated"));openInv(r.inv.id)}
+async function invScan(o){o=o||{};
+  let cands=S.d.invoices.filter(i=>i.company===S.company&&!["Cancelled","CN"].includes(i.status)&&(!o.customer_id||i.customer_id===o.customer_id));
+  cands=cands.filter(i=>!i.sent_at&&paidOf(i)<0.005&&!isMachInv(i)&&!invOrig(i));
+  if(!cands.length){if(!o.quiet)toast(L("没有还没寄出的 invoice 要检查","No unsent invoices to check"));return}
+  if(!o.quiet)toast(L(`检查 ${cands.length} 张还没寄出的 invoice…`,`Checking ${cands.length} invoices…`));
+  try{const ids=cands.map(i=>i.id);let dos=[];for(let k=0;k<ids.length;k+=100){const part=ids.slice(k,k+100);dos=dos.concat(await fetchAll(()=>sb.from("delivery_orders").select("*").in("invoice_id",part).order("do_date").order("start_time")))}
+    const by={};for(const d of dos)(by[d.invoice_id]=by[d.invoice_id]||[]).push(d);
+    const res=[];for(const i of cands){if(!by[i.id])continue;try{const r=await invRecalc(i.id,by[i.id]);if(!r.skip&&r.changed)res.push(r)}catch(e){}}
+    if(!res.length){if(!o.quiet)toast(L("全部已经是最新资料 👍","All up to date 👍"));return}
+    RCB=res;invScanView(o)}catch(e){toast(e.message)}}
+function invScanView(o){const res=RCB;
+  pvOv(`<div class="pvhead"><h3 style="margin:0">🔄 ${L(`${res.length} 张还没寄出的 invoice 跟最新资料不一样`,`${res.length} unsent invoices differ from the latest data`)}</h3><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
+  ${o.why?`<p class="mute">${esc(o.why)}</p>`:""}
+  <div class="tw"><table><thead><tr><th><input type="checkbox" title="${L("全选","All")}" onchange="document.querySelectorAll('.rcb').forEach(x=>x.checked=this.checked)"></th><th>Invoice</th><th>${L("客户","Customer")}</th><th class="num">${L("现在","Now")}</th><th class="num">${L("更新后","After")}</th><th>${L("改了什么","What changes")}</th><th></th></tr></thead><tbody>
+  ${res.map((r,k)=>`<tr><td><input type="checkbox" class="rcb" data-k="${k}" ${r.amtCh||r.dueCh?"checked":""}></td><td>${esc(r.inv.invoice_no)}<div class="mute" style="font-size:12px">${dmy(r.inv.invoice_date)}</div></td><td class="wrap">${esc(custName(r.inv.customer_id))}</td><td class="num">${money(r.inv.total)}</td><td class="num"><b>${money(r.t.total)}</b></td>
+    <td class="wrap" style="font-size:13px">${[r.plan.length?L(`${r.plan.length} 张 DO 价钱`,`${r.plan.length} DO price(s)`):"",r.amtCh?L("金额","amount"):"",r.txtCh?(r.amtCh?L("明细","lines"):L("只是明细的字（可能你手动改过，所以没打勾）","wording only (maybe hand-edited, so not ticked)")):"",r.dueCh?`Due ${dmy(r.inv.due_date)} → ${dmy(r.newDue)}`:""].filter(Boolean).join(" · ")}</td>
+    <td><button class="btn sec sm" title="${L("看前后对比","Compare")}" onclick="const x=document.getElementById('rcd${k}');x.hidden=!x.hidden">👁</button></td></tr>
+    <tr id="rcd${k}" hidden><td colspan="7">${rcDiffHTML(r)}</td></tr>`).join("")}</tbody></table></div>
+  <p class="mute" style="font-size:13px">${L("已寄出或已收钱的单不会动。要改那些，打开那张单按「🔄 按最新资料重算」。","Sent or paid invoices are left alone — open one and press 🔄 to update it.")}</p>
+  <div class="actions"><button class="btn" onclick="invScanGo()">${L("更新打勾的","Update ticked")}</button><button class="btn sec" data-a="x">${L("不用","Skip")}</button></div>`)}
+async function invScanGo(){const ks=[...document.querySelectorAll(".rcb:checked")].map(x=>Number(x.dataset.k));if(!ks.length)return toast(L("没有打勾","Nothing ticked"));
+  let n=0;const ids=[];for(const k of ks){const r=RCB[k];try{await invRecalcSave(r,"");n++;ids.push(r.inv.id)}catch(e){toast(`${r.inv.invoice_no}: ${e.message}`)}}
+  document.querySelector("#photoOv")?.remove();RCB=null;await loadAll();await syncStatuses(ids);render();toast(L(`已更新 ${n} 张 invoice`,`${n} invoices updated`))}
 function invDetailView(id){
   const i=invById(id);if(!i)return `<div class="mhead"><h2>—</h2><button class="close" onclick="closeModal()">✕</button></div>`;
   const c=custOf(i.customer_id),lines=S.d.invoice_lines.filter(l=>l.invoice_id===id).sort((a,b)=>(a.line_no||0)-(b.line_no||0));
@@ -2007,7 +2077,7 @@ function invDetailView(id){
     <button class="btn sec" onclick="sendInv('${id}','WhatsApp')">WhatsApp</button><button class="btn sec" onclick="sendInv('${id}','Email')">Email</button>
     <button class="btn sec" onclick="openPayForm({customer_id:'${i.customer_id}',invoice_id:'${id}'})">${L("记录收款","Record payment")}</button>
     ${bal>0.005?`<button class="btn sec" onclick="remind('${id}','WhatsApp')">${L("WhatsApp 提醒","WhatsApp reminder")}</button><button class="btn sec" onclick="remind('${id}','Email')">${L("Email 提醒","Email reminder")}</button>`:""}
-    ${quoteBtn(i.customer_id,id)}<button class="btn sec" onclick="openInvForm(invById('${id}'))">${L("修改","Edit")}</button><button class="btn del" onclick="delInv('${id}')">${L("删除","Delete")}</button></div>
+    ${quoteBtn(i.customer_id,id)}<button class="btn sec" onclick="invRefresh('${id}')" title="${L("价钱、Service 设定或客户 Terms 改过，用最新的重算这张","Recalculate with the latest prices / services / terms")}">🔄 ${L("按最新资料重算","Recalculate")}</button><button class="btn sec" onclick="openInvForm(invById('${id}'))">${L("修改","Edit")}</button><button class="btn del" onclick="delInv('${id}')">${L("删除","Delete")}</button></div>
   ${signBox(i)}
   <div class="kv" style="margin-top:14px"><div><span>${L("检查","Checked")}</span>${i.checked?`✓ ${i.checked_at?dmy(i.checked_at.slice(0,10)):""}`:L("未检查","Not yet")}</div>
     <div><span>${L("发送","Sent")}</span>${i.sent_at?`${dmy(i.sent_at)} · ${esc(i.sent_via||"")}`:L("未发送","Not sent")}</div>
@@ -2416,7 +2486,7 @@ async function saveGen(ent){const cfg=ENT[ent],fd=new FormData($("#gForm")),row=
   const wasNew=!S.gEdit.id;
   const{data,error}=S.gEdit.id?await sb.from(ent).update(row).eq("id",S.gEdit.id).select().single():await sb.from(ent).insert(row).select().single();
   if(error)return $("#gWarn").textContent=error.message;
-  toast(L("已保存","Saved"));await loadAll();if(ent==="rates")setTimeout(()=>rateChanged(data),300);
+  toast(L("已保存","Saved"));await loadAll();if(ent==="rates")setTimeout(()=>rateChanged(data),300);if(ent==="customers"&&!wasNew)setTimeout(()=>invScan({customer_id:data.id,quiet:true,why:L("你刚改了这个客户的资料。客户名称、地址、Attn 下载 PDF 时本来就会用最新的；下面是付款期限或明细受影响的单：","You changed this customer.")}),300);if(ent==="services"&&!wasNew)setTimeout(()=>invScan({quiet:true,why:L("你刚改了 Service 设定，下面这些还没寄出的单用的是旧的写法 / 单位：","You changed a service setting.")}),300);
   if(wasNew&&cfg.att){S.gEdit={...data};S.dirty=true;toast(L("已保存，现在可以上传附件","Saved. You can upload attachments now."))}else done();render()}
 async function delGen(ent,id){if(!confirm(L("确定删除？","Delete this record?")))return;const keep=JSON.parse(JSON.stringify(S.d[ent].find(r=>r.id===id)||null));const{error}=await sb.from(ent).delete().eq("id",id);
   if(error)return toast(error.message.includes("foreign key")?L("还有其他资料在用这笔，不能删除。","Other records still use this; can't delete."):error.message);
@@ -2788,10 +2858,10 @@ async function repriceApply(plan){for(const x of plan){const{error}=await sb.fro
 async function rateChanged(r){try{const svc=/^TMA/.test(r.service)?"TMA":r.service,from=r.effective_from,to=r.effective_to||"9999-12-31";
     let dos=await fetchAll(()=>{let q=sb.from("delivery_orders").select("*").eq("company",S.company).eq("service",svc).gte("do_date",from).lte("do_date",to);if(r.customer_id)q=q.eq("customer_id",r.customer_id);return q});
     if(r.plate)dos=dos.filter(d=>d.plate===r.plate);
-    const sent=new Set(S.d.invoices.filter(i=>i.sent_at).map(i=>i.id)),open=dos.filter(d=>!d.invoice_id||!sent.has(d.invoice_id)),plan=repricePlan(open);if(!plan.length)return;
+    const sent=new Set(S.d.invoices.filter(i=>i.sent_at).map(i=>i.id)),open=dos.filter(d=>!d.invoice_id||!sent.has(d.invoice_id)),plan=repricePlan(open);const scan=()=>invScan({customer_id:r.customer_id||undefined,quiet:true,why:L("价钱改了，这些还没寄出的 invoice 还是旧金额：","Price changed — these unsent invoices still show the old amount:")});if(!plan.length)return scan();
     const ex=plan.slice(0,8).map(x=>`DO ${x.d.do_no} ${dmy(x.d.do_date)}: $${money(x.d.amount)} → $${money(x.amount)}`).join("\n"),inInv=plan.filter(x=>x.d.invoice_id).length;
-    if(!confirm(L(`有 ${plan.length} 张 DO 还是用旧价钱：\n${ex}${plan.length>8?"\n…":""}\n\n要全部换成新价钱吗？${inInv?`\n（其中 ${inInv} 张已开在还没发出的 invoice，换完要到 invoice 按「用已选 DO 生成明细」）`:""}`,`${plan.length} DOs use the old price. Update them?`)))return;
-    await repriceApply(plan);await loadDO();render();toast(L(`已更新 ${plan.length} 张 DO 的价钱`,`${plan.length} DOs updated`))}catch(e){toast(e.message)}}
+    if(!confirm(L(`有 ${plan.length} 张 DO 还是用旧价钱：\n${ex}${plan.length>8?"\n…":""}\n\n要全部换成新价钱吗？${inInv?`\n（其中 ${inInv} 张已开在还没发出的 invoice，接下来会列出来让你一起更新）`:""}`,`${plan.length} DOs use the old price. Update them?`)))return;
+    await repriceApply(plan);await loadDO();render();toast(L(`已更新 ${plan.length} 张 DO 的价钱`,`${plan.length} DOs updated`));if(inInv)setTimeout(scan,600)}catch(e){toast(e.message)}}
 
 /* ================= Service 自己设定（VMS 租用 / Programming / Transport…） ================= */
 const SVC_UNITS=["per night","per day","per trip","LS","per hr","per 8 hrs","per load"];
@@ -2864,6 +2934,18 @@ async function pbAfterSave(f,id,row){if(!f._partner)return;try{await sb.from("de
     toast(L("已记到 ETK 的 Supplier Invoice","Recorded in ETK supplier invoices"))}catch(e){toast(e.message)}}
 
 /* ---- 拖文件进来上传：拖到任何上传按钮（或上传窗口里）就等于选文件 ---- */
+/* ---- 新版本提示：GitHub 上传了新版，自动提示更新 ---- */
+let NEW_VER=null;
+async function checkUpdate(){if(!/^https?:$/.test(location.protocol)||NEW_VER)return;
+  try{const r=await fetch(location.pathname+"?vc="+Date.now(),{cache:"no-store"});if(!r.ok)return;const m=(await r.text()).match(/const APP_VER="([^"]+)"/);
+    if(m&&m[1]!==APP_VER){NEW_VER=m[1];showUpdBar()}}catch(e){}}
+function showUpdBar(){if(document.getElementById("updBar"))return;const b=document.createElement("div");b.id="updBar";
+  b.innerHTML=`🆕 ${L(`有新版本（v${esc(NEW_VER)}），你现在用的是 v${esc(APP_VER)}`,`New version available (v${esc(NEW_VER)}); you have v${esc(APP_VER)}`)} <button class="btn sm" onclick="doUpdate()">${L("按这里更新","Update now")}</button><button class="btn sec sm" onclick="this.parentNode.remove()">${L("等下","Later")}</button>`;
+  document.body.appendChild(b)}
+function doUpdate(){if(S.dirty&&!confirm(L("有东西还没保存，更新会不见。还是要更新吗？","Unsaved changes will be lost. Update anyway?")))return;
+  location.replace(location.pathname+"?v="+encodeURIComponent(NEW_VER||Date.now())+location.hash)}
+if(/[?&]v=/.test(location.search))history.replaceState(null,"",location.pathname+location.hash);
+setTimeout(checkUpdate,4000);setInterval(checkUpdate,10*60*1000);document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")checkUpdate()});
 function dropZone(el){if(!el||!el.closest)return null;const lb=el.closest("label");if(lb){const i=lb.querySelector('input[type="file"]');if(i&&!i.disabled)return{lb,i}}
   const box=el.closest("#photoOv .pvbox");if(box){const i=box.querySelector('label.file input[type="file"]');if(i)return{lb:i.closest("label"),i,box}}return null}
 const dropOK=(f,acc)=>{if(!acc)return true;const n=f.name.toLowerCase(),t=(f.type||"").toLowerCase();return acc.split(",").map(x=>x.trim().toLowerCase()).some(a=>a.startsWith(".")?n.endsWith(a):a.endsWith("/*")?t.startsWith(a.slice(0,-1)):t===a)};
