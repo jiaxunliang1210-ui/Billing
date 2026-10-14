@@ -327,7 +327,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-14b";
+const APP_VER="2026-10-14c";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -2003,10 +2003,11 @@ async function invRecalc(id,dosPre){const inv=invById(id);if(!inv)return{skip:"�
   const oldLines=S.d.invoice_lines.filter(l=>l.invoice_id===id).sort((a,b)=>(a.line_no||0)-(b.line_no||0)).map(l=>({...l,unit:lineUnit(l)}));
   const f={...inv,lines:oldLines.map(l=>({...l})),dos:copies,sel:new Set(copies.map(d=>d.id)),origDos:copies.map(d=>d.id)};
   await buildLines(f,{quiet:true,noReprice:true});if(f._fail)return{inv,skip:f._fail};
+  if(!f.lines.length||f.lines.every(l=>!(Number(l.amount)>0))&&Number(inv.total)>0.005)return{inv,skip:L("系统算不出这张的明细（结果会是空的），所以不动它，请用「修改」","could not rebuild the lines (result would be empty) — use Edit")};
   const t=invTotals(f),c=custOf(inv.customer_id),newDue=inv.invoice_date?addDays(inv.invoice_date,Number(c.payment_terms_days??30)):inv.due_date;
   const amtCh=Math.abs(t.total-(Number(inv.total)||0))>0.005,txtCh=oldLines.map(lnKey).join("\n")!==f.lines.map(lnKey).join("\n"),dueCh=!!newDue&&newDue!==inv.due_date;
   return{inv,f,plan,dos,oldLines,t,newDue,amtCh,txtCh,dueCh,changed:amtCh||txtCh||dueCh||plan.length>0}}
-async function invRecalcSave(r,reason){const inv=r.inv,id=inv.id;if(r.plan.length)await repriceApply(r.plan);
+async function invRecalcSave(r,reason){const inv=r.inv,id=inv.id;if(!r.f.lines.length)throw new Error(L("明细是空的，不更新","Empty lines — not updated"));if(r.plan.length)await repriceApply(r.plan);
   const row={amount_before_gst:r.t.sub,gst_amount:r.t.gst,total:r.t.total,due_date:r.newDue||inv.due_date};
   if(inv.checked||inv.sent_at){const edits=[["amount_before_gst",inv.amount_before_gst,row.amount_before_gst],["gst_amount",inv.gst_amount,row.gst_amount],["total",inv.total,row.total],["due_date",inv.due_date,row.due_date]]
       .filter(([,o,n])=>typeof n==="number"?Math.abs((Number(o)||0)-n)>0.005:String(o??"")!==String(n??"")).map(([field,o,n])=>({invoice_id:id,field,old_value:String(o??""),new_value:String(n??""),reason}));
