@@ -95,6 +95,7 @@ main .tw thead th{z-index:2}
 .rcw{color:var(--red,#e5484d);font-weight:600;margin:6px 0}
 #updBar{position:fixed;left:50%;transform:translateX(-50%);top:8px;z-index:9999;background:#f5b301;color:#1a1a1a;font-weight:600;padding:8px 12px;border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.35);display:flex;gap:8px;align-items:center;flex-wrap:wrap;max-width:calc(100vw - 24px)}
 .brand .ver{font-size:11px;font-weight:400;opacity:.55;margin-left:6px}
+[data-drop].dropping{outline:3px dashed var(--amber,#f5a623);outline-offset:3px}
 label.file.dropping{outline:3px dashed var(--amber,#f5a623);outline-offset:3px;position:relative}
 label.file.dropping::after{content:"放开就上传";position:absolute;left:50%;top:-30px;transform:translateX(-50%);background:var(--amber,#f5a623);color:#111;font-size:12px;padding:2px 8px;border-radius:6px;white-space:nowrap}
 .pvbox.dropping{outline:3px dashed var(--amber,#f5a623);outline-offset:-6px}
@@ -327,7 +328,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-14d";
+const APP_VER="2026-10-14e";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -1223,7 +1224,7 @@ function pvView(){const rows=sortRows("pv",(S.d.pvs||[]).filter(p=>p.company===S
   :`<div class="panel empty">${L("这段时间没有 PV。按「新 PV」开始。","No PVs in this period.")}</div>`}`}
 function supView(){const keys=["supplier_invoices","diesel_surcharges","suppliers"],cur=S.sub.sup;
   const tabs=`<div class="sub">${keys.map(k=>`<button class="${k===cur?"on":""}" onclick="S.sub.sup='${k}';S.gEdit=null;S.dirty=false;render()">${L(...ENT[k].label)}</button>`).join("")}<button class="${cur==="pv"?"on":""}" onclick="S.sub.sup='pv';S.gEdit=null;S.dirty=false;render()">💳 ${L("付款 / PV","Payments / PV")}</button></div>`;
-  return `<div class="actions" style="margin:0 0 6px"><button class="btn sec" onclick="bulkUp()">⬆ ${L("批量上传 Excel（供应商 / 客户报告）","Bulk upload Excel")}</button><button class="btn sec" onclick="tiUp()">⬆ ${L("上传 Tax Invoice（PDF / zip）","Upload tax invoices")}</button></div>`+tabs+(cur==="pv"?pvView():genView([cur],"sup"))}
+  return `<div class="actions" style="margin:0 0 6px"><button class="btn sec" data-drop="bulkUp" onclick="bulkUp()">⬆ ${L("批量上传 Excel（供应商 / 客户报告）","Bulk upload Excel")}</button><button class="btn sec" data-drop="tiUp" onclick="tiUp()">⬆ ${L("上传 Tax Invoice（PDF / zip）","Upload tax invoices")}</button></div>`+tabs+(cur==="pv"?pvView():genView([cur],"sup"))}
 /* ---- 新 PV / 修改 ---- */
 let PVF=null;
 function pvOv(html){let ov=$("#photoOv");if(!ov){ov=document.createElement("div");ov.id="photoOv";document.body.appendChild(ov);ov.onclick=e=>{if(e.target===ov||e.target.closest("[data-a=x]"))ov.remove()}}
@@ -1832,7 +1833,7 @@ function invView(){
     <label class="f">${L("客户","Customer")}<select onchange="S.invF.customer=this.value;render()">${optList(S.d.customers.map(c=>[c.id,c.name]),F.customer,L("全部","All"))}</select></label>
     <label class="f">${L("状态","Status")}<select onchange="S.invF.status=this.value;render()">${optList([["Unpaid",L("未付","Unpaid")],["Partial",L("部分付款","Partial")],["Paid",L("已付","Paid")],["Overdue",L("逾期","Overdue")],["CN","CN"]],F.status,L("全部","All"))}</select></label>
     ${sqBox("inv",L("Invoice No / 客户 / Project / 金额 / 日期","invoice no / customer / project / amount / date"))}
-    <button class="btn" onclick="openInvForm()">${L("新增 Invoice","New invoice")}</button><button class="btn sec" onclick="projBoard()">📊 ${L("Project 进度","Project progress")}</button><button class="btn sec" onclick="suUp()">⬆ ${L("上传 Sales Invoice（PDF / zip）","Upload sales invoices")}</button>${isL3()?`<button class="btn sec" onclick="partnerBill()">↗ ${L("开单给 ETK","Bill ETK")}</button>`:""}<button class="btn sec" onclick="invScan()" title="${L("找出还没寄出、跟最新价钱/设定不一样的 invoice","Find unsent invoices that differ from the latest data")}">🔄 ${L("检查旧单要不要更新","Check old invoices")}</button><button class="btn sec" onclick="bulkPay()">💰 ${L("批量补记收款","Bulk record payments")}</button><button class="btn sec" onclick="monthEnd()">📦 ${L("月底文件包","Month-end pack")}</button><button class="btn sec" onclick="exportInv()">⬇ Excel</button></div>
+    <button class="btn" onclick="openInvForm()">${L("新增 Invoice","New invoice")}</button><button class="btn sec" onclick="projBoard()">📊 ${L("Project 进度","Project progress")}</button><button class="btn sec" data-drop="suUp" onclick="suUp()">⬆ ${L("上传 Sales Invoice（PDF / zip）","Upload sales invoices")}</button>${isL3()?`<button class="btn sec" onclick="partnerBill()">↗ ${L("开单给 ETK","Bill ETK")}</button>`:""}<button class="btn sec" onclick="invScan()" title="${L("找出还没寄出、跟最新价钱/设定不一样的 invoice","Find unsent invoices that differ from the latest data")}">🔄 ${L("检查旧单要不要更新","Check old invoices")}</button><button class="btn sec" onclick="bulkPay()">💰 ${L("批量补记收款","Bulk record payments")}</button><button class="btn sec" onclick="monthEnd()">📦 ${L("月底文件包","Month-end pack")}</button><button class="btn sec" onclick="exportInv()">⬇ Excel</button></div>
   ${dfBar("inv",yearsOf(S.d.invoices,"invoice_date"))}${invSelBar()}
   ${rows.length?`<div class="tw"><table><thead><tr><th onclick="event.stopPropagation()"><input type="checkbox" ${rows.length&&rows.every(i=>S.invSel.has(i.id))?"checked":""} onchange="invSelAll(this.checked)"></th><th>No</th>${thS("inv","date","Invoice Date")}${thS("inv","no","Invoice No")}${thS("inv","cust",L("客户","Customer"))}<th>Description</th>
     ${thS("inv","sub","Amt before GST","num")}${thS("inv","gst","GST","num")}${thS("inv","total","Total","num")}${thS("inv","paid",L("已付","Paid"),"num")}${thS("inv","bal",L("余额","Balance"),"num")}
@@ -2956,7 +2957,7 @@ function doUpdate(){if(S.dirty&&!confirm(L("有东西还没保存，更新会不
   location.replace(location.pathname+"?v="+encodeURIComponent(NEW_VER||Date.now())+location.hash)}
 if(/[?&]v=/.test(location.search))history.replaceState(null,"",location.pathname+location.hash);
 setTimeout(checkUpdate,4000);setInterval(checkUpdate,10*60*1000);document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")checkUpdate()});
-function dropZone(el){if(!el||!el.closest)return null;const lb=el.closest("label");if(lb){const i=lb.querySelector('input[type="file"]');if(i&&!i.disabled)return{lb,i}}
+function dropZone(el){if(!el||!el.closest)return null;const ob=el.closest("[data-drop]");if(ob)return{lb:ob,open:ob.dataset.drop};const lb=el.closest("label");if(lb){const i=lb.querySelector('input[type="file"]');if(i&&!i.disabled)return{lb,i}}
   const box=el.closest("#photoOv .pvbox");if(box){const i=box.querySelector('label.file input[type="file"]');if(i)return{lb:i.closest("label"),i,box}}return null}
 const dropOK=(f,acc)=>{if(!acc)return true;const n=f.name.toLowerCase(),t=(f.type||"").toLowerCase();return acc.split(",").map(x=>x.trim().toLowerCase()).some(a=>a.startsWith(".")?n.endsWith(a):a.endsWith("/*")?t.startsWith(a.slice(0,-1)):t===a)};
 let dropHi=null;const dropClear=()=>{if(dropHi){dropHi.classList.remove("dropping");dropHi=null}document.querySelectorAll(".pvbox.dropping").forEach(b=>b.classList.remove("dropping"))};
@@ -2965,9 +2966,12 @@ document.addEventListener("dragover",e=>{if(!e.dataTransfer||![...e.dataTransfer
 document.addEventListener("dragleave",e=>{if(!e.relatedTarget)dropClear()});
 document.addEventListener("drop",e=>{if(!e.dataTransfer||!e.dataTransfer.files.length)return;e.preventDefault();const z=dropZone(e.target);dropClear();
   if(!z)return toast(L("拖到上传按钮上才会上传","Drop onto an upload button"));
-  let fs=[...e.dataTransfer.files].filter(f=>dropOK(f,z.i.getAttribute("accept")));
-  if(!fs.length)return toast(L(`这里不能放这种文件（只收：${z.i.getAttribute("accept")}）`,`File type not accepted here`));
-  if(!z.i.multiple)fs=fs.slice(0,1);const dt=new DataTransfer();fs.forEach(f=>dt.items.add(f));z.i.files=dt.files;z.i.dispatchEvent(new Event("change",{bubbles:true}))});
+  const files=[...e.dataTransfer.files];
+  if(z.open){window[z.open]();let n=0;const t=setInterval(()=>{const i=document.querySelector('#photoOv .pvbox label.file input[type="file"]');if(i||++n>40){clearInterval(t);if(i)dropInto(i,files)}},50);return}
+  dropInto(z.i,files)});
+function dropInto(i,files){let fs=files.filter(f=>dropOK(f,i.getAttribute("accept")));
+  if(!fs.length)return toast(L(`这里不能放这种文件（只收：${i.getAttribute("accept")}）`,`File type not accepted here`));
+  if(!i.multiple)fs=fs.slice(0,1);const dt=new DataTransfer();fs.forEach(f=>dt.items.add(f));i.files=dt.files;i.dispatchEvent(new Event("change",{bubbles:true}))}
 
 /* ---- 👁 附件预览 ---- */
 async function attPreview(eid,aid){const list=S.d.attachments.filter(a=>a.entity_id===eid).sort((a,b)=>(b.kind==="Tax Invoice")-(a.kind==="Tax Invoice"));if(!list.length)return;
@@ -3150,7 +3154,7 @@ async function aparRepFiles(input){const fs=[...input.files];input.value="";
 function aparPanel(){return `<div class="panel"><h2>${L("导入你的 AP-AR Summary Excel","Import your AP-AR Summary Excel")}</h2>
   <p class="mute" style="font-size:14px;margin-top:0">${L("直接上传你平时用的 AP-AR SUMMARY 文件。AR 读「Sales invoices」，AP 读「Tax Invoice 23」（没有就读「TAX INVOICES」）。Invoice No 已经在系统里的不会重复新增；如果 Excel 现在写了 paid / received / 日期，而系统还没收 / 还没付，会帮你记收款 / 标已付。金额不同的会列出来。导入前会先给你看结果。","Upload your usual AP-AR SUMMARY file. AR reads 'Sales invoices', AP reads 'Tax Invoice 23' (or 'TAX INVOICES'). Invoice numbers already in the system are skipped. You'll see a preview first.")}</p>
   <label class="btn file">⬆ ${L("选 AP-AR Summary 文件","Choose AP-AR Summary file")}<input type="file" accept=".xlsx,.xlsm,.xls" hidden onchange="aparFile(this)"></label>
-  <button class="btn sec" onclick="bulkUp()">⬆ ${L("批量上传供应商 / 客户报告（更新付款）","Bulk upload supplier / customer reports")}</button>
+  <button class="btn sec" data-drop="bulkUp" onclick="bulkUp()">⬆ ${L("批量上传供应商 / 客户报告（更新付款）","Bulk upload supplier / customer reports")}</button>
   <div id="aparOut" style="margin-top:12px"></div></div>`}
 async function aparFile(input){const file=input.files[0];input.value="";if(!file)return;const box=$("#aparOut");box.innerHTML=L("读取中…","Reading…");
   try{const wb=XLSX.read(await file.arrayBuffer(),{cellDates:true});const find=rx=>wb.SheetNames.find(n=>rx.test(n.trim()));
