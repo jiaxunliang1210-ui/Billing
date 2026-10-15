@@ -328,7 +328,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-15";
+const APP_VER="2026-10-15b";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -480,6 +480,7 @@ async function loadAll(){
     for(const[k,t]of[["machines","machines"],["mlogs","machine_logs"],["mbills","machine_bills"]]){try{S.d[k]=co==="L3H"?await fetchAll(()=>sb.from(t).select("*").eq("company",co)):[]}catch(e){S.d[k]=[]}}
     await loadDO(); S.lastSync=new Date();
   }catch(e){toast(e.message)}
+  render._key=null; /* 资料刷新了：下次画面要整页更新（后面的清单 / 逾期状态） */
 }
 async function loadDO(){const from=`${S.month}-01`,to=lastDayOf(S.month);
   S.d.delivery_orders=await fetchAll(()=>sb.from("delivery_orders").select("*").eq("company",S.company).gte("do_date",from).lte("do_date",to).order("do_date").order("start_time"))}
