@@ -329,7 +329,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-15h";
+const APP_VER="2026-10-15i";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -1454,7 +1454,7 @@ async function mepRender(){const m=MEP.m,from=`${m}-01`,to=lastDayOf(m),co=S.com
     <div id="mepSum"></div></div>
   <div class="actions" style="flex-wrap:wrap">
     <button class="btn" onclick="mepOk()&&mepSales()">⬇ Sales Invoice PDF（${invs.length}）</button>
-    <button class="btn" onclick="mepOk()&&mepTax()">⬇ Tax Invoice PDF（${sis.length}）</button>
+    <button class="btn" onclick="mepOk()&&mepTax()">⬇ Tax Invoice PDF（${sis.length}）</button><label class="chk" style="font-size:13px"><input type="checkbox" ${MEP.first?"checked":""} onchange="MEP.first=this.checked">${L("只要第一页","Page 1 only")}</label>
     <button class="btn" onclick="mepOk()&&mepArap()">⬇ AP-AR Summary（Excel）</button>
     <button class="btn sec" onclick="pvPdf(MEP.d.pvs.map(p=>p.id))" ${pvs.length?"":"disabled"}>⬇ PV PDF（${pvs.length}）</button>
     <button class="btn sec" onclick="pvListingXlsx(MEP.d.pvs.map(p=>p.id))" ${pvs.length?"":"disabled"}>⬇ PV Excel + Listing</button></div>
@@ -1465,7 +1465,7 @@ async function mepRender(){const m=MEP.m,from=`${m}-01`,to=lastDayOf(m),co=S.com
 function mepOk(){return !MEP.issues||MEP.okd||(MEP.okd=confirm(L(`还有 ${MEP.issues} 项检查没清（看上面红色 / 黄色的）。确定还是要打包？`,`${MEP.issues} checks still open. Pack anyway?`)))}
 function mepSales(){const{invs}=MEP.d;signedFirstPages(invs,`${S.company} SALES INVOICE FOR ${monTag(MEP.m+"-01")}`)}
 async function mepTax(){const{sis}=MEP.d;if(!sis.length)return toast(L("这个月没有 supplier invoice","No supplier invoices"));const items=[],miss=[];
-  for(const si of sis){const at=siAtts(si);if(!at.length){miss.push(`${supName(si.supplier_id)} ${si.invoice_no}`);continue}for(const a of at)items.push({att:a,label:si.invoice_no})}
+  for(const si of sis){const at=siAtts(si);if(!at.length){miss.push(`${supName(si.supplier_id)} ${si.invoice_no}`);continue}if(MEP.first)items.push({att:siMainAtt(si),label:si.invoice_no,max:1});else for(const a of at)items.push({att:a,label:si.invoice_no})}
   if(!items.length)return toast(L("还没有上传任何扫描件","No scans uploaded"));
   try{await buildPdf(items,`${S.company} TAX INVOICE FOR ${monTag(MEP.m+"-01")}`);if(miss.length)alert(L(`这些没有扫描件，没放进去：\n${miss.join("\n")}`,`Missing scans:\n${miss.join("\n")}`))}catch(e){toast(e.message)}}
 async function mepArap(){const{invs,sis}=MEP.d,l3=S.company==="L3H";try{await loadExcelJS();const wb=new ExcelJS.Workbook();
@@ -2535,7 +2535,7 @@ function genCell(cfg,c,r){
   if(c==="received_date"&&cfg===ENT.supplier_invoices){const d=siRecv(r);return d?`${dmy(d)}${r.invoice_date&&d.slice(0,7)!==r.invoice_date.slice(0,7)?` <span class="tag warn" style="white-space:nowrap">${L(`${+d.slice(5,7)} 月入账`,`Counts in ${MONL[+d.slice(5,7)-1]}`)}</span>`:""}`:""}
   if(c==="_check"){const x=surchargeCheck(r);return x.ok?`<span class="mute" title="${esc(x.t)}">${x.t&&x.t!=="—"?"✓":"—"}</span>`:`<span class="tag bad">${esc(x.t)}</span>`}
   if(c==="charged_to"&&!r.charged_to&&(cfg===ENT.supplier_invoices||cfg===ENT.diesel_surcharges))return `<span class="tag warn">${L("未分公司","No company")}</span>`;
-  if(c==="_att"){const n=S.d.attachments.filter(a=>a.entity_id===r.id).length;return n?`<span style="white-space:nowrap">📎 ${n} <button class="btn sec sm" title="${L("预览","Preview")}" onclick="event.stopPropagation();attPreview('${r.id}')">👁</button>${cfg===ENT.supplier_invoices?` <button class="btn sec sm" title="${L("下载","Download")}" onclick="event.stopPropagation();siDownload(['${r.id}'],'one')">⬇</button>`:""}</span>`:""}
+  if(c==="_att"){const n=S.d.attachments.filter(a=>a.entity_id===r.id).length;return n?`<span style="white-space:nowrap">📎 ${n} <button class="btn sec sm" title="${L("预览","Preview")}" onclick="event.stopPropagation();attPreview('${r.id}')">👁</button>${cfg===ENT.supplier_invoices?` <button class="btn sec sm" title="${L("下载","Download")}" onclick="event.stopPropagation();siDownload(['${r.id}'],'one')">⬇</button> <button class="btn sec sm" title="${L("只下载第一页","Download page 1 only")}" onclick="event.stopPropagation();siDownload(['${r.id}'],'first')">⬇1</button>`:""}</span>`:""}
   const f=cfg.fields.find(x=>x.k===c),v=r[c];
   if(cfg===ENT.rates&&isL3()){if(c==="service")return esc(svcLabel(v));
     if((c==="ot_rate"||c==="ot_rate_night")&&!isDayRate(r))return"";if((c==="price_night"||c==="plate")&&MAT_SVC[r.service])return"";if(c==="material"&&!MAT_SVC[r.service]&&!v)return""}
@@ -2566,6 +2566,7 @@ function genForm(ent,cfg,e,sk){
   ${ent==="supplier_invoices"?`<div class="actions" style="margin:0 0 8px"><label class="btn sec file">📄 ${L("从 PDF 读资料（可以拖进来）","Read details from PDF (drag & drop OK)")}<input type="file" hidden accept="application/pdf,.pdf,image/*" onchange="siPdf(this)"></label><span id="siPdfMsg" class="mute" style="font-size:13px"></span></div><div id="siPdfDiff"></div>`:""}
   <form id="gForm" class="grid" oninput="S.dirty=true${ent==="supplier_invoices"?";siDupCheck();siDue(event)":""}" onchange="${ent==="supplier_invoices"?"siDue(event)":""}" onsubmit="event.preventDefault();saveGen('${ent}')">${fieldsOf(cfg).map(f=>`<div data-gk="${f.k}" style="display:contents">${genInput(f,e[f.k])}</div>`).join("")}</form>${ent==="rates"&&isL3()?`<p class="mute" id="rateHint" style="font-size:13px;margin:4px 0 0"></p>`:""}
   ${ent==="supplier_invoices"&&e.id?`<p>${L("Surcharge 检查","Surcharge check")}：${genCell(cfg,"_check",e)}</p>`:""}
+  ${ent==="supplier_invoices"&&e.id&&siAtts(e).length?`<p style="margin:6px 0"><button class="btn sec sm" onclick="siDownload(['${e.id}'],'first')">⬇ ${L("只下载第一页","Download page 1 only")}</button> <button class="btn sec sm" onclick="siDownload(['${e.id}'],'one')">⬇ ${L("下载全部","Download all")}</button></p>`:""}
   ${cfg.att&&e.id?attBox(ent,e.id,cfg.att):cfg.att?`<p class="mute">${L("保存后可以上传附件。","Upload attachments after saving.")}</p>`:""}
   ${ent==="supplier_invoices"?`<div id="siDup">${(setTimeout(siDupCheck),setTimeout(siDueInit),e.id?0:warmOCR(),"")}</div>`:""}<div class="warn" id="gWarn"></div>${ent==="rates"&&isL3()?(setTimeout(rateVis),""):""}
   <div class="actions"><button class="btn" onclick="saveGen('${ent}')">${L("保存","Save")}</button><button class="btn sec" onclick="done();render()">${L("取消","Cancel")}</button>
@@ -2707,7 +2708,7 @@ function siSelBar(rows){const ids=[...S.siSel].filter(id=>S.d.supplier_invoices.
     <b>${L(`已选 ${ids.length} 张`,`${ids.length} selected`)}</b><span class="mute">$${money(sum(sel,x=>x.total))}</span>${noScan?`<span class="tag warn">${L(`${noScan} 张没有扫描件`,`${noScan} without scan`)}</span>`:""}<span style="flex:1"></span>
     <button class="btn sm" onclick="siPreview(${J})">👁 ${L("一起预览","Preview together")}</button>
     <button class="btn sec sm" onclick="siMarkPaid(${J})">✓ ${L("标已付","Mark paid")}</button><button class="btn sec sm" onclick="siMakePV(${J})">💳 ${L("开 PV","New PV")}</button><button class="btn sec sm" onclick="siContra(${J})">🔁 Contra</button>
-    <button class="btn sec sm" onclick="siDownload(${J},'pdf')">⬇ ${L("合并成一个 PDF","One merged PDF")}</button>
+    <button class="btn sm" onclick="siDownload(${J},'first')">⬇ ${L("合并第一页","Merge page 1 only")}</button><button class="btn sec sm" onclick="siDownload(${J},'pdf')">⬇ ${L("合并成一个 PDF（全部页）","One merged PDF (all pages)")}</button>
     <button class="btn sec sm" onclick="siDownload(${J},'zip')">⬇ ${L("打包 zip（每张一个 PDF）","Zip (one PDF each)")}</button>
     <button class="btn sec sm" onclick="S.siSel.clear();render()">✕ ${L("取消勾选","Clear")}</button></div>`}
 async function siMarkPaid(ids){const list=S.d.supplier_invoices.filter(x=>ids.includes(x.id)&&!x.payment_date);
@@ -2724,6 +2725,7 @@ function siMakePV(ids){if(!S.d._pvOK)return toast(L("还没跑付款 PV 的 SQL"
   if(!ok.length)return toast(L("勾选的都已付或已经在 PV 里","All selected are paid or already in a PV"));
   if(skip)toast(L(`${skip} 张已付或已在别的 PV，没放进去`,`${skip} skipped`));
   pvForm();PVF.supplier_id=sups[0];PVF.account=supAcct(supById(sups[0]));PVF.sel=new Set(ok.map(x=>x.id));pvFormRender()}
+const siMainAtt=si=>{const at=siAtts(si);return at.find(a=>/tax\s*invoice/i.test(a.kind||""))||at[0]||null};
 const siSorted=ids=>S.d.supplier_invoices.filter(x=>ids.includes(x.id)).sort((a,b)=>String(a.invoice_date).localeCompare(String(b.invoice_date))||String(a.invoice_no).localeCompare(String(b.invoice_no)));
 function siFileName(si,a,k,n){const ext=(String(a.file_name||a.file_path).match(/\.[a-z0-9]{2,5}$/i)||[".pdf"])[0].toLowerCase();
   const base=`${si.invoice_date||""}_${supName(si.supplier_id)}_${si.invoice_no}_${Number(si.total||0).toFixed(2)}`.replace(/[\\/:*?"<>|]+/g,"-").replace(/\s+/g," ").trim();return base+(n>1?`_${k+1}`:"")+ext}
@@ -2732,6 +2734,10 @@ function saveBlob(blob,name){const u=URL.createObjectURL(blob),x=document.create
 async function siDownload(ids,mode){const list=siSorted(ids),miss=list.filter(si=>!siAtts(si).length);
   try{if(mode==="one"||(mode==="zip"&&list.length===1&&siAtts(list[0]).length===1)){const si=list[0],at=siAtts(si);if(!at.length)return toast(L("这张没有扫描件","No scan"));
       toast(L("下载中…","Downloading…"));for(const [k,a] of at.entries())saveBlob(await siBlob(a),siFileName(si,a,k,at.length));return}
+    if(mode==="first"){const its=list.map(si=>({si,a:siMainAtt(si)})).filter(x=>x.a);if(!its.length)return toast(L("勾选的都没有扫描件","None of these has a scan"));
+      toast(L("合并第一页中…","Merging first pages…"));const tg=list.length===1?siFileName(list[0],its[0].a,0,1).replace(/\.[a-z0-9]+$/i,"")+" (page 1)":`${S.company} Tax Invoice page 1 ${list[0].invoice_date||""}${list.length>1?" to "+(list.at(-1).invoice_date||""):""} (${its.length})`;
+      await buildPdf(its.map(x=>({att:x.a,label:x.si.invoice_no,max:1})),tg);
+      if(miss.length)alert(L(`这些没有扫描件，没放进去：\n${miss.map(si=>`${supName(si.supplier_id)} ${si.invoice_no}`).join("\n")}`,`No scan:\n${miss.map(si=>si.invoice_no).join("\n")}`));return}
     const items=[];for(const si of list)siAtts(si).forEach((a,k,arr)=>items.push({si,a,k,n:arr.length}));
     if(!items.length)return toast(L("勾选的都没有扫描件","None of these has a scan"));
     const tag=`${S.company} Tax Invoice ${list[0].invoice_date||""}${list.length>1?" to "+(list.at(-1).invoice_date||""):""} (${list.length})`;
