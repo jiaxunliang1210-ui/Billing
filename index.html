@@ -329,7 +329,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-15g";
+const APP_VER="2026-10-15h";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -416,6 +416,7 @@ const isDayRate=r=>!!r&&/8\s*hrs?|day|天/i.test(r.unit||"");
 const baseHrsOf=r=>Number(r?.min_hours)||8;
 const shareOf=f=>{const v=Number(f?.share_pct);return v>0&&v<100?v:0};
 const unshare=d=>{const k=shareOf(d)/100;if(!k)return d;return{...d,billable_hours:d.hours_overridden&&d.billable_hours!=null?r2(d.billable_hours/k):d.billable_hours,surcharge:r2((Number(d.surcharge)||0)/k)}};
+const siRecv=si=>si?.received_date||si?.invoice_date||"";
 function recompute(f){{const d=cSvc(f.service);if(d)return recomputeSvc(f,d)}if(isL3())return recomputeL3(f);
   f.shift=f.service==="TMA"?shiftOf(f.start_time):null;
   const rs=f.service==="TMA"?(f.shift?`TMA ${f.shift}`:null):f.service;
@@ -1433,7 +1434,7 @@ let MEP=null;
 function monthEnd(){const[a]=prevMonthRange();MEP={m:a.slice(0,7)};mepRender()}
 async function mepRender(){const m=MEP.m,from=`${m}-01`,to=lastDayOf(m),co=S.company;
   const invs=S.d.invoices.filter(i=>i.company===co&&i.status!=="Cancelled"&&i.invoice_date>=from&&i.invoice_date<=to).sort((a,b)=>String(a.invoice_no).localeCompare(String(b.invoice_no),undefined,{numeric:true}));
-  const sis=S.d.supplier_invoices.filter(si=>(!si.charged_to||si.charged_to===co)&&si.invoice_date>=from&&si.invoice_date<=to).sort((a,b)=>String(a.invoice_date).localeCompare(String(b.invoice_date))||String(a.invoice_no).localeCompare(String(b.invoice_no)));
+  const sis=S.d.supplier_invoices.filter(si=>(!si.charged_to||si.charged_to===co)&&siRecv(si)>=from&&siRecv(si)<=to).sort((a,b)=>String(siRecv(a)).localeCompare(String(siRecv(b)))||String(a.invoice_date).localeCompare(String(b.invoice_date))||String(a.invoice_no).localeCompare(String(b.invoice_no)));
   const pvs=(S.d.pvs||[]).filter(p=>p.company===co&&p.pv_date>=from&&p.pv_date<=to).sort((a,b)=>a.pv_date.localeCompare(b.pv_date));
   const gaps=[];{const g={};for(const i of invs){const mm=String(i.invoice_no).match(/^(.*?)(\d+)$/);if(!mm||/CN/i.test(mm[1]))continue;(g[mm[1]]=g[mm[1]]||[]).push({n:+mm[2],w:mm[2].length})}
     for(const[pre,xs]of Object.entries(g)){const ns=new Set(xs.map(x=>x.n)),w=xs[0].w,mx=Math.max(...ns);for(let k=1;k<mx;k++)if(!ns.has(k))gaps.push(pre+String(k).padStart(w,"0"))}}
@@ -1478,7 +1479,7 @@ async function mepArap(){const{invs,sis}=MEP.d,l3=S.company==="L3H";try{await lo
   [6,12,18,36,48,16,12,14,30,22].forEach((w,i)=>s1.getColumn(i+1).width=w);
   const tH=["No","Invoice Date","Invoice Number","Name of Customer","Description","Invoice Amount before GST ($)","GST ($)","Total","Payment","Remark","GST SUBMISSION PERIOD"];
   const s2=sheet("Tax Invoice",tH,sis.map((si,k)=>{const p=pvOfSI(si);return[k+1,dmy(si.invoice_date),String(si.invoice_no),supName(si.supplier_id),si.description||"",Number(si.amount_before_gst)||0,Number(si.gst_amount)||0,Number(si.total)||0,
-    si.payment_date?`paid on ${dmy(si.payment_date)}${p?.bank_ref?" - "+p.bank_ref:""}`:"",si.remark||"",gstPeriod(si.invoice_date)]}),[6,7,8],5);
+    si.payment_date?`paid on ${dmy(si.payment_date)}${p?.bank_ref?" - "+p.bank_ref:""}`:"",si.remark||"",gstPeriod(siRecv(si))]}),[6,7,8],5);
   [5,12,22,34,44,16,12,14,26,20,18].forEach((w,i)=>s2.getColumn(i+1).width=w);
   await xlDownload(wb,`${S.company}_AP-AR_SUMMARY_${monTag(MEP.m+"-01").replace(" ","_")}.xlsx`)}catch(e){toast(e.message)}}
 
@@ -2474,15 +2475,16 @@ const ENT={
   suppliers:{label:["供应商","Suppliers"],fields:[F("name","text",1,["名称","Name"]),F("payment_terms_days","terms",0,["付款期限","Payment terms"],30),F("contact","text",0,["联络人 / 电话","Contact"]),F("email","email",0,["Email","Email"]),F("bank_name","text",0,["银行（PV 的 A/C 用）","Bank (for PV A/C)"]),F("bank_account","text",0,["户口号码","Account no."]),F("remark","text",0,["Remark","Remark"])],
     cols:["name","payment_terms_days","contact","email","bank_name","bank_account"]},
   supplier_invoices:{label:["Supplier Invoice","Supplier invoices"],att:["Tax Invoice","Supporting"],fields:[F("supplier_id","supplier",1,["供应商","Supplier"]),F("charged_to","chargedTo",0,["To 谁","Charged to"]),
-    F("invoice_no","text",1,["Invoice No","Invoice No"]),F("invoice_date","date",1,["Invoice 日期","Invoice date"]),F("due_date","date",0,["Due date（空白自动算）","Due date (auto if blank)"]),
+    F("invoice_no","text",1,["Invoice No","Invoice No"]),F("invoice_date","date",1,["Invoice 日期","Invoice date"]),F("received_date","date",0,["收到日期（算哪个月，空白 = 今天）","Received (month it counts in; blank = today)"]),F("due_date","date",0,["Due date（空白自动算）","Due date (auto if blank)"]),
     F("description","textarea",0,["Description（可以换行）","Description (multi-line)"]),F("amount_before_gst","money",0,["Amt before GST","Amt before GST"]),F("gst_amount","money",0,["GST（空白自动 9%）","GST (auto 9% if blank)"]),
     F("total","money",0,["Total（空白自动算）","Total (auto if blank)"]),F("trips","number",0,["趟数","Trips"]),F("surcharge_charged","money",0,["收了多少 Diesel Surcharge","Diesel surcharge charged"]),
     F("payment_date","date",0,["付款日期","Payment date"]),F("remark","text",0,["Remark","Remark"])],
-    cols:["_att","invoice_date","supplier_id","invoice_no","description","charged_to","total","due_date","_apstatus","_check"],
+    cols:["_att","invoice_date","received_date","supplier_id","invoice_no","description","charged_to","total","due_date","_apstatus","_check"],
     before(row){{const dup=S.d.supplier_invoices.find(x=>x.id!==S.gEdit?.id&&x.supplier_id===row.supplier_id&&normNo(x.invoice_no)===normNo(row.invoice_no));
         if(dup)return L(`这个供应商的 Invoice No 已经有了：${dup.invoice_no}（${dmy(dup.invoice_date)} · $${money(dup.total)}）`,`Duplicate supplier invoice: ${dup.invoice_no}`)}
       if(row.gst_amount==null&&row.amount_before_gst!=null)row.gst_amount=r2(row.amount_before_gst*0.09);
       if(row.total==null&&row.amount_before_gst!=null)row.total=r2(row.amount_before_gst+(row.gst_amount||0));
+      if(!row.received_date)row.received_date=S.gEdit?.id?(S.gEdit.invoice_date||row.invoice_date):today();
       if(!row.due_date&&row.invoice_date){const s=S.d.suppliers.find(x=>x.id===row.supplier_id);row.due_date=addDays(row.invoice_date,Number(s?.payment_terms_days??30))}
       row.status=row.payment_date?"Paid":"Unpaid"}},
   diesel_surcharges:{label:["Diesel Surcharge（供应商）","Diesel surcharge (supplier)"],att:["Supporting"],fields:[F("supplier_id","supplier",1,["供应商","Supplier"]),F("amount_per_trip","money",1,["每趟金额","Amount per trip"]),
@@ -2499,9 +2501,9 @@ const SPECIAL={_apstatus:["状态 / 付款日期","Status / paid"],_check:["Surc
 const fieldsOf=cfg=>cfg.fields.filter(f=>!f.only||f.only===S.company);
 const colsOf=cfg=>cfg.cols.filter(c=>SPECIAL[c]||fieldsOf(cfg).some(f=>f.k===c));
 function genView(keys,sk){
-  const ent=S.sub[sk],cfg=ENT[ent],e=S.gEdit,dk=ent==="supplier_invoices"?"sup":null,dcol=dk?"invoice_date":null,si=ent==="supplier_invoices";
+  const ent=S.sub[sk],cfg=ENT[ent],e=S.gEdit,dk=ent==="supplier_invoices"?"sup":null,dcol=dk?(S.siDateBy==="inv"?"invoice_date":"received_date"):null,si=ent==="supplier_invoices";
   const gget=c=>{const f=cfg.fields.find(x=>x.k===c);if(!f)return r=>"";if(f.type==="customer")return r=>custName(r[c]);if(f.type==="supplier")return r=>supName(r[c]);if(["money","number","terms"].includes(f.type))return r=>r[c]==null?null:Number(r[c]);return r=>r[c]};
-  const coF=(ent==="supplier_invoices"||ent==="diesel_surcharges")&&!S.siAll,sk2="g_"+ent,base=S.d[ent].filter(r=>(!dk||dfIn(dk,r[dcol]))&&(!coF||siMine(r))),hit0=SQ[sk2]?base.filter(r=>sqHit(SQ[sk2],[...sqRow(r),...colsOf(cfg).filter(c=>!SPECIAL[c]).map(c=>gget(c)(r))])):base;
+  const coF=(ent==="supplier_invoices"||ent==="diesel_surcharges")&&!S.siAll,sk2="g_"+ent,base=S.d[ent].filter(r=>(!dk||dfIn(dk,dcol==="received_date"?siRecv(r):r[dcol]))&&(!coF||siMine(r))),hit0=SQ[sk2]?base.filter(r=>sqHit(SQ[sk2],[...sqRow(r),...colsOf(cfg).filter(c=>!SPECIAL[c]).map(c=>gget(c)(r))])):base;
   const qk=si?(S.siQuick||""):"",hit=qk?hit0.filter(SIQ[qk].f):hit0;
   const rows=sortRows("g_"+ent,hit,Object.fromEntries(colsOf(cfg).map(c=>[c,gget(c)])));
   const hid=new Set(S.colHide[ent]||[]),vc=colsOf(cfg).filter(c=>!hid.has(c));
@@ -2513,7 +2515,7 @@ function genView(keys,sk){
   const colBtn=`<details class="colpick"><summary class="btn sec sm">☰ ${L("栏位","Columns")}${hid.size?` (${vc.length}/${colsOf(cfg).length})`:""}</summary><div class="colbox">${colsOf(cfg).map(c=>`<label class="chk"><input type="checkbox" ${hid.has(c)?"":"checked"} onchange="colToggle('${ent}','${c}',this.checked)">${head(c)}</label>`).join("")}</div></details>`;
   return tabs+(cfg.note?`<p class="mute" style="font-size:13px">${L(...cfg.note)}</p>`:"")+
     (e?genForm(ent,cfg,e,sk):`<div class="actions" style="margin:0 0 12px"><button class="btn" onclick="S.gEdit={};S.dirty=true;render()">${L("新增","Add")}</button><button class="btn sec" onclick="exportEnt('${ent}')">⬇ Excel</button></div>`)+
-    `<div class="filters" style="margin:0 0 6px">${sqBox(sk2)}${colBtn}${ent==="supplier_invoices"||ent==="diesel_surcharges"?`<label class="chk" style="align-self:end"><input type="checkbox" ${S.siAll?"checked":""} onchange="S.siAll=this.checked;S.siSel.clear();render()">${L("显示两间公司","Show both companies")}</label>`:""}</div>`+(dk?dfBar(dk,yearsOf(S.d[ent],dcol)):"")+chips+sqNote(sk2,rows.length,base.length)+
+    `<div class="filters" style="margin:0 0 6px">${sqBox(sk2)}${colBtn}${ent==="supplier_invoices"||ent==="diesel_surcharges"?`<label class="chk" style="align-self:end"><input type="checkbox" ${S.siAll?"checked":""} onchange="S.siAll=this.checked;S.siSel.clear();render()">${L("显示两间公司","Show both companies")}</label>`:""}</div>`+(dk?`<div class="filters" style="margin:0 0 4px;align-items:center"><span class="mute" style="font-size:13px">${L("日期按：","Date by:")}</span><div class="seg">${[["recv",L("收到日期（入账月份）","Received (month)")],["inv",L("Invoice 日期","Invoice date")]].map(([k,t])=>`<button class="${(S.siDateBy||"recv")===k?"on":""}" onclick="S.siDateBy='${k}';render()">${t}</button>`).join("")}</div></div>`+dfBar(dk,yearsOf(S.d[ent].map(r=>({d:dcol==="received_date"?siRecv(r):r[dcol]})),"d")):"")+chips+sqNote(sk2,rows.length,base.length)+
     (si?siSelBar(rows):"")+
     (rows.length?`<div class="tw"><table><thead><tr>${si?`<th onclick="event.stopPropagation()"><input type="checkbox" ${rows.every(r=>S.siSel.has(r.id))?"checked":""} onchange="siSelAll(${esc(JSON.stringify(rows.map(r=>r.id)))},this.checked)"></th>`:""}${vc.map(c=>SPECIAL[c]?`<th>${head(c)}</th>`:thS("g_"+ent,c,head(c),isNum(c)?"num":"")).join("")}</tr></thead><tbody>
       ${rows.map(r=>{const bad=si&&(!surchargeCheck(r).ok||(!r.payment_date&&r.due_date&&r.due_date<today()));
@@ -2530,6 +2532,7 @@ function siDupCheck(){const fm=$("#gForm"),box=$("#siDup");if(!fm||!box)return;c
 function colToggle(ent,c,on){const h=new Set(S.colHide[ent]||[]);on?h.delete(c):h.add(c);S.colHide[ent]=[...h];render()}
 function genCell(cfg,c,r){
   if(c==="_apstatus")return apStatus(r);
+  if(c==="received_date"&&cfg===ENT.supplier_invoices){const d=siRecv(r);return d?`${dmy(d)}${r.invoice_date&&d.slice(0,7)!==r.invoice_date.slice(0,7)?` <span class="tag warn" style="white-space:nowrap">${L(`${+d.slice(5,7)} 月入账`,`Counts in ${MONL[+d.slice(5,7)-1]}`)}</span>`:""}`:""}
   if(c==="_check"){const x=surchargeCheck(r);return x.ok?`<span class="mute" title="${esc(x.t)}">${x.t&&x.t!=="—"?"✓":"—"}</span>`:`<span class="tag bad">${esc(x.t)}</span>`}
   if(c==="charged_to"&&!r.charged_to&&(cfg===ENT.supplier_invoices||cfg===ENT.diesel_surcharges))return `<span class="tag warn">${L("未分公司","No company")}</span>`;
   if(c==="_att"){const n=S.d.attachments.filter(a=>a.entity_id===r.id).length;return n?`<span style="white-space:nowrap">📎 ${n} <button class="btn sec sm" title="${L("预览","Preview")}" onclick="event.stopPropagation();attPreview('${r.id}')">👁</button>${cfg===ENT.supplier_invoices?` <button class="btn sec sm" title="${L("下载","Download")}" onclick="event.stopPropagation();siDownload(['${r.id}'],'one')">⬇</button>`:""}</span>`:""}
@@ -3116,7 +3119,7 @@ async function pbMake(){const sel=PB.rows.filter(d=>PB.sel.has(d.id));if(!sel.le
 async function pbAfterSave(f,id,row){if(!f._partner)return;try{await sb.from("delivery_orders").update({partner_invoice_id:id}).in("id",f._partner.ids);
     let sup=S.d.suppliers.find(s=>/L3H\s*RESOURCES/i.test(s.name));if(!sup){const{data}=await sb.from("suppliers").insert({name:"L3H Resources Pte Ltd",payment_terms_days:30}).select().single();sup=data}
     if(sup&&!S.d.supplier_invoices.some(x=>x.supplier_id===sup.id&&normNo(x.invoice_no)===normNo(row.invoice_no)))
-      await sb.from("supplier_invoices").insert({supplier_id:sup.id,charged_to:"ETK",invoice_no:row.invoice_no,invoice_date:row.invoice_date,due_date:row.due_date||addDays(row.invoice_date,30),description:L("L3H 开给 ETK（VMS transport，cost to cost）","L3H to ETK (cost to cost)"),amount_before_gst:row.amount_before_gst,gst_amount:row.gst_amount,total:row.total,status:"Unpaid",remark:L("自动：L3H 开单给 ETK 时建立","Auto-created from L3H invoice")});
+      await sb.from("supplier_invoices").insert({supplier_id:sup.id,charged_to:"ETK",invoice_no:row.invoice_no,invoice_date:row.invoice_date,received_date:row.invoice_date,due_date:row.due_date||addDays(row.invoice_date,30),description:L("L3H 开给 ETK（VMS transport，cost to cost）","L3H to ETK (cost to cost)"),amount_before_gst:row.amount_before_gst,gst_amount:row.gst_amount,total:row.total,status:"Unpaid",remark:L("自动：L3H 开单给 ETK 时建立","Auto-created from L3H invoice")});
     toast(L("已记到 ETK 的 Supplier Invoice","Recorded in ETK supplier invoices"))}catch(e){toast(e.message)}}
 
 /* ---- 拖文件进来上传：拖到任何上传按钮（或上传窗口里）就等于选文件 ---- */
@@ -3241,7 +3244,8 @@ function tiRender(){const F=TI.files,cnt=k=>F.filter(x=>x.st===k).length,go=F.fi
   ${F.length?`<ul style="margin:8px 0 4px 18px;font-size:14px"><li>${L("配对到","Matched")}: <b>${cnt("ok")}</b></li><li>${L("系统没有这张（打勾的会用文件名资料新增）","Not in system (ticked = create from file name)")}: ${cnt("new")}</li>
     <li>${L("那张已经有 Tax Invoice 附件（要再放就打勾）","Already has a tax invoice (tick to add anyway)")}: ${cnt("has")}</li><li>${L("已经上传过，跳过","Already uploaded, skipped")}: ${cnt("same")}</li>${cnt("reading")?`<li>⏳ ${L(`读取 / 认字中，还有 ${cnt("reading")} 个（扫描件每个约 10–20 秒，可以先做别的）`,`Reading / OCR: ${cnt("reading")} left`)}</li>`:""}${F.some(x=>x.ocr&&!x.reading)?`<li><span class="tag bad">OCR</span> ${L("标 OCR 的是扫描件认字读出来的，比较容易错，要仔细对","OCR rows were read from scans — check carefully")}</li>`:""}${cnt("fill")?`<li><b style="color:var(--bad)">${L("要你补资料（读不到字的扫描件）","Need details (scans without text)")}: ${cnt("fill")}</b></li>`:""}${cnt("bad")?`<li>${L("不是 PDF","Not PDF")}: ${cnt("bad")}</li>`:""}
     ${F.some(x=>x.src==="pdf"||x.src==="hint")?`<li>${L("黄色格子是从 PDF 读到的，请核对，可以直接改","Yellow fields were read from the PDF — check and edit")}</li>`:""}</ul>
-  ${cnt("new")?`<label style="font-size:14px"><input type="checkbox" ${TI.paidNew?"checked":""} onchange="TI.paidNew=this.checked"> ${L("新增的当作已付（付款日期 = invoice 日期）","Mark created ones as paid (payment date = invoice date)")}</label>`:""}
+  ${cnt("new")?`<label style="font-size:14px"><input type="checkbox" ${TI.paidNew?"checked":""} onchange="TI.paidNew=this.checked"> ${L("新增的当作已付（付款日期 = invoice 日期）","Mark created ones as paid (payment date = invoice date)")}</label>
+    <label style="font-size:14px;margin-left:14px">${L("新增的收到日期（算哪个月）","Received date for new ones")} <input type="date" value="${TI.recv||today()}" onchange="TI.recv=this.value"></label>`:""}
   <p style="font-size:13px;margin:6px 0"><a href="#" onclick="event.preventDefault();TI.files.forEach(x=>{if(['ok','new','has'].includes(x.st))TI.take.add(x.name)});tiRender()">${L("全选","All")}</a> · <a href="#" onclick="event.preventDefault();TI.take.clear();tiRender()">${L("全不选","None")}</a></p>
   <div class="tw" style="max-height:50vh;overflow:auto"><table><thead><tr><th></th><th>${L("状态","Status")}</th><th>${L("日期","Date")}</th><th>${L("供应商","Supplier")}</th><th>Invoice No</th><th class="num">Total</th><th>${L("系统里的","In system")}</th></tr></thead><tbody>
   ${rows.map(x=>{const[t,l]=TI_ST[x.st],can=["ok","has","new"].includes(x.st);return `<tr><td>${can?`<input type="checkbox" ${TI.take.has(x.name)?"checked":""} onchange="TI.take[this.checked?'add':'delete'](${esc(JSON.stringify(x.name))});tiRender()">`:""}</td>
@@ -3260,7 +3264,7 @@ async function tiApply(){const go=TI.files.filter(x=>TI.take.has(x.name)&&["ok",
       const smap=new Map(S.d.suppliers.map(s=>[normCo(s.name),s]));keys.forEach((k,i)=>smap.set(k,created[i]));
       const rows=nw.map(x=>{const k=normCo(x.sup),s=smap.get(g.merge.get(k)||k),rt=gstRateOn(x.date),before=r2(x.total/(1+rt/100));
         return{supplier_id:s.id,charged_to:S.company,invoice_no:x.no,invoice_date:x.date,due_date:addDays(x.date,Number(s.payment_terms_days??30)),amount_before_gst:before,gst_amount:r2(x.total-before),total:x.total,
-          payment_date:TI.paidNew?x.date:null,status:TI.paidNew?"Paid":"Unpaid",remark:L("从 Tax Invoice 文件名新增","Added from tax invoice file name")}});
+          payment_date:TI.paidNew?x.date:null,status:TI.paidNew?"Paid":"Unpaid",received_date:TI.recv||today(),remark:L("从 Tax Invoice 文件名新增","Added from tax invoice file name")}});
       const made=[];for(const r of rows){const{data,error}=await sb.from("supplier_invoices").insert(r).select().single();if(error)throw new Error("supplier_invoices: "+error.message);made.push(data)}
       nw.forEach((x,i)=>x.si=made[i])}
     const q=[...go];
