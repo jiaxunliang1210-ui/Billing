@@ -328,7 +328,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-14f";
+const APP_VER="2026-10-15";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -413,6 +413,8 @@ function findSurcharge(c,svc,date){const s=S.d.customer_surcharges.filter(x=>x.c
   .sort((a,b)=>(b.service?1:0)-(a.service?1:0)||b.start_date.localeCompare(a.start_date))[0];return s?Number(s.amount_per_do):0}
 const isDayRate=r=>!!r&&/8\s*hrs?|day|天/i.test(r.unit||"");
 const baseHrsOf=r=>Number(r?.min_hours)||8;
+const shareOf=f=>{const v=Number(f?.share_pct);return v>0&&v<100?v:0};
+const unshare=d=>{const k=shareOf(d)/100;if(!k)return d;return{...d,billable_hours:d.hours_overridden&&d.billable_hours!=null?r2(d.billable_hours/k):d.billable_hours,surcharge:r2((Number(d.surcharge)||0)/k)}};
 function recompute(f){{const d=cSvc(f.service);if(d)return recomputeSvc(f,d)}if(isL3())return recomputeL3(f);
   f.shift=f.service==="TMA"?shiftOf(f.start_time):null;
   const rs=f.service==="TMA"?(f.shift?`TMA ${f.shift}`:null):f.service;
@@ -579,6 +581,7 @@ function doView(){
     ${fld("rate","Rate",f.rate??"","number",'step="0.01"')}
     ${fld("surcharge","Surcharge",f.surcharge??0,"number",'step="0.01"')}
     ${fld("remark","Remark",f.remark)}
+    ${isL3()&&!cSvc(f.service)?fld("share_pct",L("分摊 %（同一张 DO 分给两个 Project，例 50；空白 = 100%）","Share % (one DO split between projects; blank = 100%)"),f.share_pct??"","number",'step="1" min="1" max="99"'):""}
     ${isL3()&&f.service==="Tipper"?fld("loads",L("Load 数量（没写时间才按 load 算）","Loads (if no time)"),f.loads??"","number",'step="0.5"'):""}
     ${isL3()?fld("price_note",L("改价原因（价钱跟 Master List 不一样才要填）","Price change reason"),f.price_note||"","text","",f._priceChanged?"need":""):""}
     ${isL3()?`<div class="wide l3chk">${f.service==="Lorry Crane"?`<label class="chk"><input type="checkbox" name="lifting_sup" ${f.lifting_sup?"checked":""}>${L("有 Lifting Supervisor","With lifting supervisor")} <small class="mute">${f._supTouched?L("手动","manual"):L("自动：司机 / 17:00 前开工","auto: driver / start before 17:00")}</small></label>`:""}
@@ -591,7 +594,8 @@ function doView(){
   ${doPhotoBox(f)}${(setTimeout(checkOverlap,0),"")}
   ${billed?`<div class="note">${L(`这张 DO 已开在 invoice ${esc(billed.invoice_no)}，改金额后要到 Invoice 重新生成明细。`,`Billed on ${esc(billed.invoice_no)}. Rebuild the invoice lines after changing amounts.`)}</div>`:""}
   <div class="warn" id="doWarn"></div>
-  <div class="actions"><button class="btn" onclick="saveDO()">${L("保存","Save")}</button>
+  ${isL3()&&f.id&&shareOf(f)?(()=>{const sib=S.d.delivery_orders.find(x=>x.id===f.share_of||x.share_of===f.id);return sib?`<div class="note">↔ ${L(`同一张 DO 的另一半：${esc(sib.project||"—")} · ${shareOf(sib)||100}% · $${money(sib.amount)}`,`Other half: ${esc(sib.project||"—")} · ${shareOf(sib)||100}% · $${money(sib.amount)}`)} <a href="#" onclick="editDO('${sib.id}');return false">${L("打开","Open")}</a></div>`:""})():""}
+  <div class="actions"><button class="btn" onclick="saveDO()">${L("保存","Save")}</button>${isL3()&&f.id&&shareOf(f)&&!S.d.delivery_orders.some(x=>x.id===f.share_of||x.share_of===f.id)?`<button class="btn sec" onclick="shareTwin()">↔ ${L(`另一半（${100-shareOf(f)}%）开给其他 Project`,`Other ${100-shareOf(f)}% to another project`)}</button>`:""}
     <button class="btn sec" onclick="S.doForm=null;done();render()">${L("取消","Cancel")}</button>
     ${f.id?`<button class="btn del" onclick="delDO('${f.id}')">${L("删除","Delete")}</button>`:""}</div></section>
   ${doList()}`;
@@ -631,7 +635,7 @@ async function saveDO(){
     if(f._priceChanged&&!String(f.price_note||"").trim()){w.textContent=L("价钱跟 Master List 不一样，请在「改价原因」写原因（例：客户特别价）。","Price differs from Master List — enter a reason.");document.querySelector('.grid [name="price_note"]')?.focus();return}
     if(f._tipLoad&&!f.record_only&&!(Number(f.loads)>0)&&!(f.charges||[]).length){w.textContent=L("Tipper 没写时间：请填「Load 数量」，或填开始 / 结束时间。","Tipper without time: enter loads or times.");return}}
   const dup=await sb.from("delivery_orders").select("id,do_date").eq("company",S.company).eq("do_no",f.do_no.trim());
-  const other=(dup.data||[]).find(x=>x.id!==f.id);
+  const other=(dup.data||[]).find(x=>x.id!==f.id&&x.id!==f.share_of&&!(f.id&&S.d.delivery_orders.some(y=>y.id===x.id&&y.share_of===f.id)));
   if(other){w.textContent=L(`DO 号码已存在（日期 ${dmy(other.do_date)}），不能重复。`,`DO number already exists (dated ${dmy(other.do_date)}).`);return}
   const xco=await sb.from("delivery_orders").select("company,do_date").eq("do_no",f.do_no.trim()).neq("company",S.company);
   if((xco.data||[]).length&&!confirm(L(`${xco.data[0].company} 也有 DO ${f.do_no.trim()}（${dmy(xco.data[0].do_date)}）。确定不是同一张？`,`${xco.data[0].company} also has DO ${f.do_no.trim()}. Save anyway?`)))return;
@@ -642,12 +646,16 @@ async function saveDO(){
   if(cSvc(f.service))Object.assign(row,{units:Number(f.units)>0?Number(f.units):1,end_date:svcKind(svcDef(f.service))==="rent"?(f.end_date||f.do_date):null,partner_do_no:f.partner_do_no||null,start_time:null,end_time:null,shift:null});
   if(isL3())Object.assign(row,{driver:f.driver||null,lifting_sup:f.service==="Lorry Crane"?!!f.lifting_sup:null,hourly:f.hourly!==false,
     charges:(f.charges||[]).map(({item,material,desc,qty,uom,rate,amount,_rt,_qt})=>({item,material:material||null,desc:desc||null,qty,uom,rate,amount,_rt:!!_rt,_qt:!!_qt})),
-    loads:f.service==="Tipper"&&f.loads!=null&&f.loads!==""?Number(f.loads):null,record_only:!!f.record_only,price_note:f._priceChanged?(f.price_note||null):null});
+    loads:f.service==="Tipper"&&f.loads!=null&&f.loads!==""?Number(f.loads):null,record_only:!!f.record_only,price_note:f._priceChanged?(f.price_note||null):null,
+    share_pct:shareOf(f)||null,share_of:f.share_of||null});
+  if(isL3()&&shareOf(f)&&!f.record_only){row.billable_hours=f._shHrs;row.surcharge=f._shSur}
   if(f.id&&f.invoice_id){const old=S.d.delivery_orders.find(x=>x.id===f.id)||{},ch=doChanges(old,row);
     if(Object.keys(ch).length){const inv=invById(f.invoice_id),reason=prompt(L(`这张 DO 已开在 ${inv?.invoice_no||"invoice"}。改了什么、为什么改？（会留记录，改金额后要到 invoice 重新生成明细）`,`This DO is billed on ${inv?.invoice_no}. Reason for the change?`));
       if(!reason)return;row.edit_log=[...(old.edit_log||[]),{at:new Date().toISOString(),reason,changes:ch}]}}
   const res=f.id?await sb.from("delivery_orders").update(row).eq("id",f.id).select().single():await sb.from("delivery_orders").insert(row).select().single();
   if(res.error){w.textContent=res.error.message;return}
+  if(f.share_of&&!f.id){await sb.from("delivery_orders").update({share_of:res.data.id}).eq("id",f.share_of)}
+  if(f.id&&f.share_of)await shareSync(f,row);
   const pend=f._pending||[];if(pend.length){try{for(const x of pend)await storeJpeg("do",res.data.id,"DO",x.blob,x.name)}catch(e){toast(L("DO 已保存，但照片上传失败：","DO saved, photo upload failed: ")+(e.message||e));}}
   const lateI=isL3()?lateInvOf(res.data):null;
   toast(L("已保存到云端","Saved to cloud")+(pend.length?L(` · ${pend.length} 张照片`,` · ${pend.length} photo(s)`):"")+(lateI?L(` · ⚠ 补单：这个月已开 ${lateI.invoice_no}，这张要开在下一张`,` · ⚠ Late: ${lateI.invoice_no} already issued`):""));
@@ -660,7 +668,22 @@ async function delDO(id){const dd=S.d.delivery_orders.find(x=>x.id===id);if(dd?.
   const{error}=await sb.from("delivery_orders").delete().eq("id",id);if(error)return toast(error.message);
   const ph=doPhotos(id);if(ph.length){await sb.storage.from("attachments").remove(ph.map(a=>a.file_path));await sb.from("attachments").delete().in("id",ph.map(a=>a.id));S.d.attachments=S.d.attachments.filter(a=>!ph.includes(a))}
   toast(L("已删除","Deleted"));S.doForm=null;done();await loadDO();render()}
-function editDO(id){const d=S.d.delivery_orders.find(x=>x.id===id);if(!d)return;
+/* ---- 同一张 DO 分给两个 Project ---- */
+function shareTwin(){const f=S.doForm;if(!f?.id)return;const b0=S.d.delivery_orders.find(x=>x.id===f.id);if(!b0)return;const b=unshare(b0);
+  const n={...blankDO()};for(const k of["do_date","customer_id","service","plate","driver","do_no","customer_po","from_loc","to_loc","description","hourly","lifting_sup","hours_overridden","billable_hours","surcharge","rate"])n[k]=b[k];
+  Object.assign(n,{id:undefined,invoice_id:null,start_time:b.start_time?.slice(0,5)||"",end_time:b.end_time?.slice(0,5)||"",project:"",share_pct:100-shareOf(f),share_of:f.id,charges:[],
+    remark:`Share cost ${100-shareOf(f)}% with ${b.project||""}`.trim(),_rateTouched:false,_surTouched:true,_descTouched:true,_supTouched:b.lifting_sup!=null,_pending:[]});
+  S.doForm=recompute(n);S.dirty=true;render();window.scrollTo({top:0,behavior:"smooth"});toast(L("选另一个 Project，再按保存","Choose the other project and save"))}
+async function shareSync(f,row){const sib=S.d.delivery_orders.find(x=>x.id===f.share_of);if(!sib)return;const t=v=>String(v||"").slice(0,5);
+  const keys=["do_date","plate","driver","do_no","from_loc","to_loc"],diff=keys.filter(k=>String(row[k]??"")!==String(sib[k]??"")).concat(t(row.start_time)!==t(sib.start_time)||t(row.end_time)!==t(sib.end_time)?["time"]:[]);
+  const wantPct=shareOf(row)?100-shareOf(row):null,pctDiff=wantPct!=null&&shareOf(sib)!==wantPct;
+  if(!diff.length&&!pctDiff)return;
+  if(!confirm(L(`另一半（${sib.project||"—"} · DO ${sib.do_no}）也要一起改吗？${diff.length?"\n时间 / 日期 / 车牌等跟着改":""}${pctDiff?`\n分摊改成 ${wantPct}%`:""}${sib.invoice_id?`\n（那张已开在 ${invById(sib.invoice_id)?.invoice_no||"invoice"}，改完要重算那张 invoice）`:""}`,`Update the other half (${sib.project}) too?`)))return;
+  const g0={...unshare(sib),...Object.fromEntries(keys.map(k=>[k,row[k]])),start_time:t(row.start_time),end_time:t(row.end_time),_rateTouched:true,_surTouched:true,_descTouched:true,_supTouched:sib.lifting_sup!=null,
+    charges:(sib.charges||[]).map(x=>({...x,_rt:true,_qt:true}))};if(pctDiff)g0.share_pct=wantPct;
+  const g=recompute(g0),upd={...Object.fromEntries(keys.map(k=>[k,row[k]])),start_time:row.start_time,end_time:row.end_time,shift:g.shift,actual_hours:g.actual_hours,billable_hours:g._shHrs??g.billable_hours,surcharge:shareOf(g)?g._shSur:Number(g.surcharge)||0,amount:g.amount,share_pct:shareOf(g)||null};
+  const{error}=await sb.from("delivery_orders").update(upd).eq("id",sib.id);if(error)toast(error.message)}
+function editDO(id){const d0=S.d.delivery_orders.find(x=>x.id===id);if(!d0)return;const d=unshare(d0);
   S.doForm=recompute({...d,start_time:d.start_time?.slice(0,5)||"",end_time:d.end_time?.slice(0,5)||"",_rateTouched:true,_surTouched:true,_descTouched:true,_supTouched:d.lifting_sup!=null,
     charges:(d.charges||[]).map(x=>({...x,_rt:true,_qt:true}))});
   S.dirty=true;render();window.scrollTo({top:0,behavior:"smooth"})}
@@ -675,7 +698,7 @@ function doList(){
   ${rows.map(d=>`<tr class="click" onclick="editDO('${d.id}')"><td>${dmy(d.do_date)}</td><td>${esc(d.do_no)}${ovIds.has(d.id)?` <span class="tag bad" title="${L("同一辆车时间重叠 / 可能重复","Overlap / duplicate")}">⚠</span>`:""}${l3&&lateInvOf(d)?` <span class="tag warn" title="${L("这个月已开单，这张是补单","Late entry")}">${L("补单","Late")}</span>`:""}${d.price_note?` <span class="tag warn" title="${esc(d.price_note)}">${L("改价","Price")}</span>`:""}${d.record_only?` <span class="tag mute">NIL</span>`:""}${(d.edit_log||[]).length?` <span class="tag mute" title="${esc(d.edit_log.map(x=>dmy(x.at.slice(0,10))+" "+x.reason).join(" / "))}">${L("改过","Edited")}</span>`:""}</td><td>${esc(custName(d.customer_id))}</td><td>${esc(d.project)}</td><td>${esc(d.service)}${(d.charges||[]).length?` <span class="tag mute">+${d.charges.length}</span>`:""}</td>
     <td>${esc(d.plate)}</td>${l3?`<td>${esc(d.driver||"")}</td>`:""}<td>${d.start_time?.slice(0,5)||""}</td><td>${d.end_time?.slice(0,5)||""}</td><td>${d.shift?`<span class="tag ${d.shift}">${d.shift}</span>`:""}${d.lifting_sup===true?` <span class="tag Day">Sup</span>`:""}${l3&&supWarn(d)?` <span class="tag warn" title="${esc(supWarn(d))}">⚠</span>`:""}</td>
     <td>${esc(d.from_loc)}</td><td>${esc(d.to_loc)}</td><td class="num">${d.billable_hours??""}</td><td class="num">${money(d.rate)}</td><td class="num">${Number(d.surcharge)?money(d.surcharge):""}</td>
-    <td class="num">${money(d.amount)}</td><td>${d.invoice_id?esc(invById(d.invoice_id)?.invoice_no||"✓"):`<span class="tag mute">${L("未开单","Unbilled")}</span>`}</td><td onclick="event.stopPropagation();viewDoPhoto('${d.id}')" title="${L("看照片","View photo")}">${doPhotos(d.id).length?`<span class="tag ok" style="cursor:zoom-in">📷 ${doPhotos(d.id).length}</span>`:`<span class="tag warn" style="cursor:pointer">—</span>`}</td></tr>`).join("")}</tbody>
+    <td class="num">${money(d.amount)}${shareOf(d)?`<div class="mute" style="font-size:11px">${shareOf(d)}% share</div>`:""}</td><td>${d.invoice_id?esc(invById(d.invoice_id)?.invoice_no||"✓"):`<span class="tag mute">${L("未开单","Unbilled")}</span>`}</td><td onclick="event.stopPropagation();viewDoPhoto('${d.id}')" title="${L("看照片","View photo")}">${doPhotos(d.id).length?`<span class="tag ok" style="cursor:zoom-in">📷 ${doPhotos(d.id).length}</span>`:`<span class="tag warn" style="cursor:pointer">—</span>`}</td></tr>`).join("")}</tbody>
   <tfoot><tr><td colspan="${l3?12:11}">${L("合计","Total")} ${rows.length} DO</td><td class="num">${sum(rows,d=>d.billable_hours)}</td><td></td><td></td><td class="num">$${money(sum(rows,d=>d.amount))}</td><td></td><td>${rows.filter(d=>!doPhotos(d.id).length).length?`<span class="tag warn">${rows.filter(d=>!doPhotos(d.id).length).length} ${L("缺","missing")}</span>`:""}</td></tr></tfoot></table></div>`
   :`<div class="panel empty">${S.d.delivery_orders.length?L("没有符合筛选的 DO。","No DOs match the filters."):L("这个月还没有 DO，在上面新增第一张。","No DOs this month yet. Add the first one above.")}</div>`}</section>`;
 }
@@ -772,6 +795,10 @@ function recomputeL3(f){
   f._priceChanged=mainChg||f.charges.some(l=>l._chg);
   const empty=!f._tipLoad&&f.hourly&&f._hx==null&&!f.charges.length;
   f.amount=empty?null:r2(f._main+sum(f.charges,l=>l.amount)+(Number(f.surcharge)||0));
+  {const sp=shareOf(f);f._shHrs=null;f._shSur=null;
+    if(sp&&!f.record_only){const k=sp/100,full=f.amount;f._shHrs=f.billable_hours==null?null:r2(f.billable_hours*k);f._shSur=r2((Number(f.surcharge)||0)*k);f._main=r2(f._main*k);
+      if(f.amount!=null)f.amount=r2(f._main+sum(f.charges,l=>l.amount)+f._shSur);
+      why.push(L(`分摊 ${sp}%：计费小时 ${f.billable_hours??"—"} → ${f._shHrs??"—"}，Surcharge $${money(f.surcharge)} → $${money(f._shSur)}，金额 $${money(full)} → $${money(f.amount)}`,`${sp}% share: hrs ${f.billable_hours} → ${f._shHrs}, amount $${money(full)} → $${money(f.amount)}`))}}
   f._why=why;
   return f}
 function calcViewL3(f){const ex=sum(f.charges||[],l=>l.amount);
@@ -779,7 +806,7 @@ function calcViewL3(f){const ex=sum(f.charges||[],l=>l.amount);
   ${f._otHours?`<div>OT<b>${f._otHours} hr × $${money(f._otRate)}</b></div>`:""}
   ${f._tipLoad?`<div>Load<b>${Number(f.loads)||0}</b></div>`:`<div>${L("实际小时","Actual hrs")}<b>${f.actual_hours??"—"}</b></div>
   <div>${L("计费小时","Billable hrs")}<b>${f.billable_hours??"—"}${f.hours_overridden?` <small class="mute" style="font-size:12px">${L("手动","manual")}</small>`:""}</b></div>`}
-  <div>${f._tipLoad?L("按 load","By load"):L("按小时","Hourly")}<b>${f.record_only?"NIL":(f._tipLoad||f.hourly)?`$${money(f._main)}`:L("不收","—")}</b></div>
+  ${shareOf(f)?`<div>${L("分摊","Share")}<b>${shareOf(f)}% → ${f._shHrs??"—"} hr</b></div>`:""}<div>${f._tipLoad?L("按 load","By load"):L("按小时","Hourly")}<b>${f.record_only?"NIL":(f._tipLoad||f.hourly)?`$${money(f._main)}`:L("不收","—")}</b></div>
   ${(f.charges||[]).length?`<div>${L("其他收费","Other charges")}<b>$${money(ex)}</b></div>`:""}
   <div class="total">${L("金额","Amount")}<b>${f.record_only?"NIL":f.amount!=null?"$"+money(f.amount):"—"}</b></div>
   ${(f._why||[]).length?`<div class="why">${f._why.map(w=>`<span class="${w.startsWith("⚠")?"w":""}">${esc(w)}</span>`).join("")}</div>`:""}`}
@@ -823,10 +850,10 @@ const isDupPair=(a,b)=>a.do_date===b.do_date&&(a.start_time&&b.start_time?String
 let ovlTimer=null;
 function checkOverlap(){clearTimeout(ovlTimer);ovlTimer=setTimeout(async()=>{const f=S.doForm,box=$("#ovl");if(!f||!box)return;
   const out=[];
-  try{if(f.plate&&f.do_date){const{data}=await sb.from("delivery_orders").select("id,company,do_no,do_date,start_time,end_time,project,customer_id,plate,from_loc,to_loc,description,record_only").eq("plate",f.plate)
+  try{if(f.plate&&f.do_date){const{data}=await sb.from("delivery_orders").select("id,company,do_no,do_date,start_time,end_time,project,customer_id,plate,from_loc,to_loc,description,record_only,share_of").eq("plate",f.plate)
       .gte("do_date",addDays(f.do_date,-1)).lte("do_date",addDays(f.do_date,1));
     const me=spanOf(f,f.do_date);
-    for(const d of data||[]){if(d.id===f.id||d.record_only)continue;const dup=isDupPair(f,d),ov=!dup&&overlap(me,spanOf(d,f.do_date));if(dup||ov)out.push({d,dup})}}
+    for(const d of data||[]){if(d.id===f.id||d.record_only||d.id===f.share_of||(f.id&&d.share_of===f.id))continue;const dup=isDupPair(f,d),ov=!dup&&overlap(me,spanOf(d,f.do_date));if(dup||ov)out.push({d,dup})}}
     if(String(f.do_no||"").trim()){const{data}=await sb.from("delivery_orders").select("id,company,do_no,do_date").eq("do_no",f.do_no.trim()).neq("company",S.company);
       for(const d of data||[])out.push({d,xco:true})}}catch(e){}
   if(S.doForm!==f)return;f._ovl=out;box.innerHTML=ovlMsg(f,out)},350)}
@@ -837,7 +864,7 @@ const ovlMsg=(f,hit)=>(hit||[]).length?`<div class="note" style="border-color:#d
 function overlapPairs(list){const out=[],by={};for(const d of list)if(d.plate&&!d.record_only)(by[d.plate]=by[d.plate]||[]).push(d);
   for(const ds of Object.values(by)){ds.sort((a,b)=>a.do_date.localeCompare(b.do_date));
     for(let i=0;i<ds.length;i++)for(let j=i+1;j<ds.length;j++){if(daysBetween(ds[i].do_date,ds[j].do_date)>1)break;
-      const dup=isDupPair(ds[i],ds[j]);if(dup||overlap(spanOf(ds[i],ds[i].do_date),spanOf(ds[j],ds[i].do_date)))out.push([ds[i],ds[j],dup])}}
+      if(ds[i].share_of===ds[j].id||ds[j].share_of===ds[i].id||(ds[i].share_of&&ds[i].share_of===ds[j].share_of))continue;const dup=isDupPair(ds[i],ds[j]);if(dup||overlap(spanOf(ds[i],ds[i].do_date),spanOf(ds[j],ds[i].do_date)))out.push([ds[i],ds[j],dup])}}
   return out}
 function monthOverlapIds(){const s=new Set();for(const[a,b]of overlapPairs(S.d.delivery_orders)){s.add(a.id);s.add(b.id)}return s}
 /* 补单：这个月份的单已经开了，这张 DO 还没开 */
@@ -1005,7 +1032,7 @@ function l3RecordsHTML(inv,dos){const c=custOf(inv.customer_id),no=inv.summary_n
     out.push(chunkPages(rows,per,(rs,pi,last)=>`${head(k)}<table class="sm rec"><colgroup><col style="width:3.5%"><col style="width:5.5%"><col style="width:6.5%"><col style="width:9%"><col style="width:9%"><col style="width:6%"><col style="width:4.5%"><col style="width:4.5%"><col><col style="width:5.5%"><col style="width:4.5%"><col style="width:3.5%"><col style="width:4.5%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:6.5%"><col style="width:4%"></colgroup>
       <thead><tr><th class="y">S/N</th><th class="y">D/N</th><th class="y">Date</th><th class="y">From</th><th class="y">To</th><th>Vehicle No</th><th>In</th><th>Out</th><th class="y">Description</th><th>Rate</th><th>Total Hr 1</th><th>UOM</th><th class="o">Total Hr 2</th><th class="o">Rate2</th><th class="o">Diesel Surcharge</th><th class="o">Amount</th><th>Remarks</th></tr></thead><tbody>
       ${rs.map((d,i)=>{const amt=r2(mainAmt(d)+(Number(d.surcharge)||0)),h=Number(d.billable_hours||0).toFixed(2);return `<tr><td>${pi*per+i+1}</td><td>${esc(d.do_no)}</td><td>${dMonYY(d.do_date)}</td><td>${esc(d.from_loc||"")}</td><td>${esc(d.to_loc||"")}</td><td>${esc(d.plate||"")}</td>
-        <td>${tShort(d.start_time)}</td><td>${tShort(d.end_time)}</td><td>${esc(d.description||"")}</td><td class="a">${acc(d.rate)}</td><td>${h}</td><td>hr</td><td>${h}</td><td class="a">${acc(d.rate)}</td><td class="a">${acc(d.surcharge)}</td><td class="a">${acc(amt)}</td><td>${esc(d.remark||"")}</td></tr>`}).join("")}
+        <td>${tShort(d.start_time)}</td><td>${tShort(d.end_time)}</td><td>${esc(d.description||"")}</td><td class="a">${acc(d.rate)}</td><td>${h}</td><td>hr</td><td>${h}</td><td class="a">${acc(d.rate)}</td><td class="a">${acc(d.surcharge)}</td><td class="a">${acc(amt)}</td><td>${esc([shareOf(d)&&!/\d\s*%/.test(d.remark||"")?shareOf(d)+"% share":"",d.remark||""].filter(Boolean).join(" · "))}</td></tr>`}).join("")}
       ${last?`<tr class="tt"><td colspan="9"></td><td class="lb">HRS</td><td class="u">${T(d=>d.billable_hours).toFixed(2)}</td><td></td><td class="u">${T(d=>d.billable_hours).toFixed(2)}</td><td class="lb">TOTAL</td><td class="u a">${acc(T(d=>d.surcharge))}</td><td class="u a">${acc(T(d=>mainAmt(d)+(Number(d.surcharge)||0)))}</td><td></td></tr>`:""}</tbody></table>`))};
   const loadSheet=(k,lr)=>{out.push(chunkPages(lr,per+2,(rs,pi,last)=>`${head(k)}<table class="sm rec"><colgroup><col style="width:4%"><col style="width:8%"><col style="width:7%"><col style="width:11%"><col style="width:11%"><col style="width:5%"><col style="width:6%"><col><col style="width:5%"><col style="width:5%"><col style="width:7%"><col style="width:8%"><col style="width:6%"></colgroup>
     <thead><tr><th>S/N</th><th>D/N</th><th>Date</th><th>From</th><th>To</th><th>Company</th><th>Vehicle No</th><th>Descriptions</th><th>Qty</th><th>UOM</th><th>Rate</th><th>Amount</th><th>Remarks</th></tr></thead><tbody>
@@ -1830,7 +1857,8 @@ async function excImportFile(input){const file=input.files[0];input.value="";if(
 function invView(){
   const F=S.invF,rows=invRows(),desc=invDesc;
   return `<div class="filters">
-    <label class="f">${L("客户","Customer")}<select onchange="S.invF.customer=this.value;render()">${optList(S.d.customers.map(c=>[c.id,c.name]),F.customer,L("全部","All"))}</select></label>
+    <label class="f">${L("客户","Customer")}<select onchange="S.invF.customer=this.value;S.invF.project='';render()">${optList(S.d.customers.map(c=>[c.id,c.name]),F.customer,L("全部","All"))}</select></label>
+    ${(()=>{const pj=[...new Set(S.d.invoices.filter(i=>i.company===S.company&&(!F.customer||i.customer_id===F.customer)).map(i=>i.project).filter(Boolean))].sort();return pj.length?`<label class="f">Project<select onchange="S.invF.project=this.value;render()">${optList(pj.map(x=>[x,projLabel(x)]),F.project||"",L("全部","All"))}</select></label>`:""})()}
     <label class="f">${L("状态","Status")}<select onchange="S.invF.status=this.value;render()">${optList([["Unpaid",L("未付","Unpaid")],["Partial",L("部分付款","Partial")],["Paid",L("已付","Paid")],["Overdue",L("逾期","Overdue")],["CN","CN"]],F.status,L("全部","All"))}</select></label>
     ${sqBox("inv",L("Invoice No / 客户 / Project / 金额 / 日期","invoice no / customer / project / amount / date"))}
     <button class="btn" onclick="openInvForm()">${L("新增 Invoice","New invoice")}</button><button class="btn sec" onclick="projBoard()">📊 ${L("Project 进度","Project progress")}</button><button class="btn sec" data-drop="suUp" onclick="suUp()">⬆ ${L("上传 Sales Invoice（PDF / zip）","Upload sales invoices")}</button>${isL3()?`<button class="btn sec" onclick="partnerBill()">↗ ${L("开单给 ETK","Bill ETK")}</button>`:""}<button class="btn sec" onclick="invScan()" title="${L("找出还没寄出、跟最新价钱/设定不一样的 invoice","Find unsent invoices that differ from the latest data")}">🔄 ${L("检查旧单要不要更新","Check old invoices")}</button><button class="btn sec" onclick="bulkPay()">💰 ${L("批量补记收款","Bulk record payments")}</button><button class="btn sec" onclick="monthEnd()">📦 ${L("月底文件包","Month-end pack")}</button><button class="btn sec" onclick="exportInv()">⬇ Excel</button></div>
@@ -2857,10 +2885,10 @@ function afterLoadOnce(){if(S._afterLoad)return;S._afterLoad=1;setTimeout(()=>{i
 
 /* ---- DO 价钱跟 Master List 对齐：开单时 / 改价钱后自动更新旧 DO ---- */
 function repricePlan(dos){const out=[];for(const d of dos){if(d.record_only||d.price_note)continue;
-    const f=recompute({...d,start_time:d.start_time?.slice(0,5)||"",end_time:d.end_time?.slice(0,5)||"",_rateTouched:false,_surTouched:true,_descTouched:true,_supTouched:d.lifting_sup!=null,
+    const f=recompute({...unshare(d),start_time:d.start_time?.slice(0,5)||"",end_time:d.end_time?.slice(0,5)||"",_rateTouched:false,_surTouched:true,_descTouched:true,_supTouched:d.lifting_sup!=null,
       charges:(d.charges||[]).map(x=>({...x,_rt:true,_qt:true}))});
     if(f.rate==null||f.amount==null)continue;
-    if(Math.abs((Number(d.rate)||0)-Number(f.rate))>0.005||Math.abs((Number(d.amount)||0)-Number(f.amount))>0.005)out.push({d,rate:f.rate,amount:f.amount,hrs:f.billable_hours,shift:f.shift})}
+    if(Math.abs((Number(d.rate)||0)-Number(f.rate))>0.005||Math.abs((Number(d.amount)||0)-Number(f.amount))>0.005)out.push({d,rate:f.rate,amount:f.amount,hrs:f._shHrs??f.billable_hours,shift:f.shift})}
   return out}
 async function repriceApply(plan){for(const x of plan){const{error}=await sb.from("delivery_orders").update({rate:x.rate,amount:x.amount,billable_hours:x.hrs,shift:x.shift}).eq("id",x.d.id);if(error)throw error;
     Object.assign(x.d,{rate:x.rate,amount:x.amount,billable_hours:x.hrs,shift:x.shift})}}
@@ -3419,7 +3447,7 @@ function exportDO(){const rows=doFiltered();
     fill:i=>rows[i].invoice_id?null:"amber",
     total:["Total",`${rows.length} DO`,"","","","","","","","","","",sum(rows,d=>d.actual_hours),sum(rows,d=>d.billable_hours),"",sum(rows,d=>d.surcharge),sum(rows,d=>d.amount),"","",""],
     legend:[["amber","Unbilled"]]}])}
-function invRows(){const F=S.invF;let rows=S.d.invoices.filter(i=>dfIn("inv",i.invoice_date)&&(!F.customer||i.customer_id===F.customer)&&sqHit(SQ.inv,[i.invoice_no,custName(i.customer_id),i.description,invDesc(i),i.project,i.customer_po,i.our_ref,i.total,i.amount_before_gst,i.invoice_date,i.due_date,i.remark,i.summary_no]));
+function invRows(){const F=S.invF;let rows=S.d.invoices.filter(i=>dfIn("inv",i.invoice_date)&&(!F.customer||i.customer_id===F.customer)&&(!F.project||i.project===F.project)&&sqHit(SQ.inv,[i.invoice_no,custName(i.customer_id),i.description,invDesc(i),i.project,i.customer_po,i.our_ref,i.total,i.amount_before_gst,i.invoice_date,i.due_date,i.remark,i.summary_no]));
   if(F.status==="Overdue")rows=rows.filter(i=>overdueDays(i)>0);else if(F.status)rows=rows.filter(i=>statusOf(i)===F.status);
   return sortRows("inv",rows,{date:i=>i.invoice_date,no:i=>i.invoice_no,cust:i=>custName(i.customer_id),sub:i=>Number(i.amount_before_gst)||0,gst:i=>Number(i.gst_amount)||0,total:i=>Number(i.total)||0,paid:paidOf,bal:balOf,due:i=>i.due_date,status:statusOf})}
 const invDesc=i=>(i.description||S.d.invoice_lines.find(l=>l.invoice_id===i.id)?.description||"").split("\n").filter(Boolean).join(" / ");
@@ -3580,20 +3608,21 @@ document.addEventListener("keydown",e=>{if(S.user&&(e.ctrlKey||e.metaKey)&&e.key
 
 /* ================= DO 搜索 / 筛选 / 照片核对 ================= */
 function doFiltered(){const F=S.doF,q=String(F.q||"").trim().toLowerCase();
-  return S.d.delivery_orders.filter(d=>(!S.unbilledOnly||!d.invoice_id)&&(!F.customer||d.customer_id===F.customer)&&(!F.service||d.service===F.service)&&(!F.plate||d.plate===F.plate)
+  return S.d.delivery_orders.filter(d=>(!S.unbilledOnly||!d.invoice_id)&&(!F.customer||d.customer_id===F.customer)&&(!F.project||d.project===F.project)&&(!F.service||d.service===F.service)&&(!F.plate||d.plate===F.plate)
     &&(!F.shift||d.shift===F.shift)&&(!F.billed||(F.billed==="yes")===!!d.invoice_id)&&(!F.photo||(F.photo==="yes")===!!doPhotos(d.id).length)
     &&(!q||sqHit(q,[d.do_no,custName(d.customer_id),d.plate,d.project,d.from_loc,d.to_loc,d.description,d.customer_po,invById(d.invoice_id)?.invoice_no,d.do_date,d.amount,d.remark])))}
 let doQTimer=null;
 function doSearch(el){S.doF.q=el.value;clearTimeout(doQTimer);doQTimer=setTimeout(()=>{const pos=el.selectionStart;render();const n=$("#doQ");if(n){n.focus();try{n.setSelectionRange(pos,pos)}catch(e){}}},250)}
+const projLabel=x=>{const p=projOf(x);return p?.no?`${x} (No.${p.no})`:x};
 function doFilterBar(){const F=S.doF,all=S.d.delivery_orders,on=Object.entries(F).some(([k,v])=>v&&k!=="q")||F.q;
   const plates=[...new Set(all.map(d=>d.plate).filter(Boolean))].sort(),custs=[...new Set(all.map(d=>d.customer_id))].map(id=>[id,custName(id)]).sort((a,b)=>a[1].localeCompare(b[1]));
-  const sel=(k,opts,lab)=>`<label class="f">${lab}<select onchange="S.doF.${k}=this.value;render()">${optList(opts,F[k],L("全部","All"))}</select></label>`;
+  const sel=(k,opts,lab)=>`<label class="f">${lab}<select onchange="S.doF.${k}=this.value;${k==="customer"?"S.doF.project='';":""}render()">${optList(opts,F[k],L("全部","All"))}</select></label>`;
   return `<div class="filters">
     <label class="f" style="min-width:220px">${L("搜索","Search")}<input id="doQ" type="search" value="${esc(F.q||"")}" placeholder="${L("DO 号码 / 客户 / 车牌 / 地点","DO no / customer / vehicle / place")}" oninput="doSearch(this)"></label>
-    ${sel("customer",custs,L("客户","Customer"))}${sel("service",svcNames().map(s=>[s,s]),"Service")}${sel("plate",plates.map(p=>[p,p]),L("车牌","Vehicle"))}
+    ${sel("customer",custs,L("客户","Customer"))}${(()=>{const pj=[...new Set(all.filter(d=>!F.customer||d.customer_id===F.customer).map(d=>d.project).filter(Boolean))].sort();return pj.length?sel("project",pj.map(x=>[x,projLabel(x)]),"Project"):""})()}${sel("service",svcNames().map(s=>[s,s]),"Service")}${sel("plate",plates.map(p=>[p,p]),L("车牌","Vehicle"))}
     ${sel("shift",[["Day","Day"],["Night","Night"]],"Day/Night")}${sel("billed",[["no",L("未开单","Unbilled")],["yes",L("已开单","Billed")]],L("开单","Billed"))}
     ${sel("photo",[["yes",L("有照片","Has photo")],["no",L("没有照片","No photo")]],L("照片","Photo"))}
-    ${on?`<button class="btn sec sm" onclick="S.doF={q:'',customer:'',service:'',plate:'',shift:'',billed:'',photo:''};S.unbilledOnly=false;render()">✕ ${L("清除筛选","Clear filters")}</button>`:""}</div>`}
+    ${on?`<button class="btn sec sm" onclick="S.doF={q:'',customer:'',project:'',service:'',plate:'',shift:'',billed:'',photo:''};S.unbilledOnly=false;render()">✕ ${L("清除筛选","Clear filters")}</button>`:""}</div>`}
 
 /* ---- 照片网址（暂存 9 分钟） ---- */
 const photoUrlCache={};
