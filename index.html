@@ -328,7 +328,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-15";
+const APP_VER="2026-10-15c";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -480,6 +480,7 @@ async function loadAll(){
     for(const[k,t]of[["machines","machines"],["mlogs","machine_logs"],["mbills","machine_bills"]]){try{S.d[k]=co==="L3H"?await fetchAll(()=>sb.from(t).select("*").eq("company",co)):[]}catch(e){S.d[k]=[]}}
     await loadDO(); S.lastSync=new Date();
   }catch(e){toast(e.message)}
+  render._key=null; /* 资料刷新了：下次画面要整页更新（后面的清单 / 逾期状态） */
 }
 async function loadDO(){const from=`${S.month}-01`,to=lastDayOf(S.month);
   S.d.delivery_orders=await fetchAll(()=>sb.from("delivery_orders").select("*").eq("company",S.company).gte("do_date",from).lte("do_date",to).order("do_date").order("start_time"))}
@@ -507,7 +508,7 @@ function render(){
   const V={exc:excView,do:doView,inv:invView,pay:payView,soa:soaView,sum:sumView,mf:mfView,sup:supView,master:masterView,set:setView};
   app.innerHTML=`<header class="top"><div class="brand"><span class="stripe"></span>${S.company} ${L("开单系统","Billing")}<span class="ver" title="${L("系统版本","App version")}">v${APP_VER}</span></div>
     <div class="seg">${["ETK","L3H"].map(c=>`<button class="${c===S.company?"on":""}" onclick="setCompany('${c}')">${c}</button>`).join("")}</div>
-    <button class="ghost" onclick="gSearch()" title="Ctrl+K">🔍 ${L("搜索","Search")}</button>
+    <button class="ghost" onclick="gSearch()" title="Ctrl+K">🔍 ${L("搜索","Search")}</button><button class="ghost" onclick="recentLog()" title="${L("最近 key 了什么、有没有进去","What you entered recently")}">🕘 ${L("最近记录","Recent")}</button>
     <span class="sync"><i></i><span></span></span>
     <button class="ghost" onclick="reload();toast(L('已重新同步','Refreshed'))" title="Refresh">⟳</button>
     <button class="ghost" onclick="toggleLang()">${L("EN","中文")}</button>
@@ -683,6 +684,38 @@ async function shareSync(f,row){const sib=S.d.delivery_orders.find(x=>x.id===f.s
     charges:(sib.charges||[]).map(x=>({...x,_rt:true,_qt:true}))};if(pctDiff)g0.share_pct=wantPct;
   const g=recompute(g0),upd={...Object.fromEntries(keys.map(k=>[k,row[k]])),start_time:row.start_time,end_time:row.end_time,shift:g.shift,actual_hours:g.actual_hours,billable_hours:g._shHrs??g.billable_hours,surcharge:shareOf(g)?g._shSur:Number(g.surcharge)||0,amount:g.amount,share_pct:shareOf(g)||null};
   const{error}=await sb.from("delivery_orders").update(upd).eq("id",sib.id);if(error)toast(error.message)}
+/* ---- 🕘 最近记录：刚刚 key 的有没有进去 ---- */
+const tHM=t=>{if(!t)return"";const d=new Date(t);if(isNaN(d))return"";const p=n=>String(n).padStart(2,"0");return `${p(d.getDate())}/${p(d.getMonth()+1)} ${p(d.getHours())}:${p(d.getMinutes())}`};
+async function recentLog(){let dos=[],sis=[];
+  try{dos=await sb.from("delivery_orders").select("id,do_no,do_date,customer_id,project,service,amount,invoice_id,share_pct,created_at").eq("company",S.company).order("created_at",{ascending:false}).range(0,59).then(r=>r.data||[])}catch(e){}
+  try{sis=(S.d.supplier_invoices||[]).filter(x=>!x.charged_to||x.charged_to===S.company)}catch(e){}
+  let edits=[];try{edits=await sb.from("invoice_edits").select("*").order("created_at",{ascending:false}).range(0,59).then(r=>r.data||[])}catch(e){}
+  const ev=[];
+  for(const p of S.d.payments.filter(p=>p.company===S.company||!p.company))ev.push({t:p.created_at,k:"pay",p});
+  for(const i of S.d.invoices.filter(i=>i.company===S.company))ev.push({t:i.created_at,k:"inv",i});
+  for(const d of dos)ev.push({t:d.created_at,k:"do",d});
+  for(const x of sis)ev.push({t:x.created_at,k:"si",x});
+  for(const e of edits){const i=invById(e.invoice_id);if(i&&i.company===S.company)ev.push({t:e.created_at,k:"edit",e,i})}
+  const list=ev.filter(x=>x.t).sort((a,b)=>String(b.t).localeCompare(String(a.t))).slice(0,80);
+  const tag=(c,t)=>`<span class="tag ${c}">${t}</span>`;
+  const row=x=>{
+    if(x.k==="pay"){const p=x.p,al=S.d.payment_allocations.filter(a=>a.payment_id===p.id),un=payUnalloc(p);
+      return `<tr class="click" onclick="document.querySelector('#photoOv')?.remove();openPayForm(S.d.payments.find(z=>z.id==='${p.id}'))"><td>${tHM(x.t)}</td><td>${tag("ok",L("收款","Payment"))}</td>
+        <td class="wrap"><b>${esc(custName(p.customer_id))}</b> · $${money(p.amount)} · ${dmy(p.payment_date)} ${esc(p.method||"")} ${esc(p.reference||"")}</td>
+        <td class="wrap">${al.map(a=>{const i=invById(a.invoice_id);return i?`${esc(i.invoice_no)} $${money(a.amount)} → ${statusTag(i)}`:"?"}).join("<br>")}${un>0.005?`${al.length?"<br>":""}<span class="tag bad">${L(`未分配 $${money(un)}`,`Unapplied $${money(un)}`)}</span>`:""}</td></tr>`}
+    if(x.k==="inv"){const i=x.i;return `<tr class="click" onclick="document.querySelector('#photoOv')?.remove();S.tab='inv';openInv('${i.id}')"><td>${tHM(x.t)}</td><td>${tag("",L("开 Invoice","Invoice"))}</td>
+        <td class="wrap"><b>${esc(i.invoice_no)}</b> · ${esc(custName(i.customer_id))}${i.project?" · "+esc(i.project):""} · $${money(i.total)}</td><td>${statusTag(i)}</td></tr>`}
+    if(x.k==="do"){const d=x.d,i=invById(d.invoice_id);return `<tr class="click" onclick="document.querySelector('#photoOv')?.remove();recentDO('${d.id}','${d.do_date}')"><td>${tHM(x.t)}</td><td>${tag("mute","DO")}</td>
+        <td class="wrap"><b>DO ${esc(d.do_no||"")}</b> · ${dmy(d.do_date)} · ${esc(custName(d.customer_id))}${d.project?" · "+esc(d.project):""} · ${esc(d.service||"")} · $${money(d.amount)}${shareOf(d)?` (${shareOf(d)}%)`:""}</td>
+        <td>${i?esc(i.invoice_no):`<span class="tag mute">${L("未开单","Unbilled")}</span>`}</td></tr>`}
+    if(x.k==="si"){const v=x.x,sup=(S.d.suppliers||[]).find(z=>z.id===v.supplier_id);return `<tr><td>${tHM(x.t)}</td><td>${tag("warn",L("供应商单","Supplier inv"))}</td>
+        <td class="wrap"><b>${esc(v.invoice_no||"")}</b> · ${esc(sup?.name||"")} · $${money(v.total??v.amount)}</td><td>${v.payment_date?tag("ok",L("已付 ","Paid ")+dmy(v.payment_date)):tag("mute",L("未付","Unpaid"))}</td></tr>`}
+    const e=x.e;return `<tr class="click" onclick="document.querySelector('#photoOv')?.remove();S.tab='inv';openInv('${x.i.id}')"><td>${tHM(x.t)}</td><td>${tag("warn",L("改 Invoice","Edit"))}</td>
+        <td class="wrap"><b>${esc(x.i.invoice_no)}</b> · ${esc(e.field)}${e.old_value||e.new_value?`：${esc(e.old_value)} → ${esc(e.new_value)}`:""}</td><td class="wrap mute">${esc(e.reason||"")}</td></tr>`};
+  pvOv(`<div class="pvhead"><h3 style="margin:0">🕘 ${L(`${S.company} 最近记录`,`${S.company} recent entries`)}</h3><span class="mute" style="font-size:13px">${L("最新的在上面 · 按一行打开","Newest first · click to open")}</span><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
+    ${list.length?`<div class="tw" style="max-height:72vh;overflow:auto"><table><thead><tr><th>${L("几时 key","When")}</th><th>${L("类型","Type")}</th><th>${L("内容","What")}</th><th>${L("现在状态","Now")}</th></tr></thead><tbody>${list.map(row).join("")}</tbody></table></div>`
+      :`<p class="mute">${L("还没有记录。","Nothing yet.")}</p>`}`)}
+async function recentDO(id,date){S.tab="do";if(date&&S.month!==date.slice(0,7)){S.month=date.slice(0,7);await loadDO()}render();editDO(id)}
 function editDO(id){const d0=S.d.delivery_orders.find(x=>x.id===id);if(!d0)return;const d=unshare(d0);
   S.doForm=recompute({...d,start_time:d.start_time?.slice(0,5)||"",end_time:d.end_time?.slice(0,5)||"",_rateTouched:true,_surTouched:true,_descTouched:true,_supTouched:d.lifting_sup!=null,
     charges:(d.charges||[]).map(x=>({...x,_rt:true,_qt:true}))});
@@ -2216,6 +2249,7 @@ function autoAlloc(){const f=S.modal.f;let left=Number(f.amount)||0;f.alloc={};
 async function savePay(){const f=S.modal.f,w=$("#payWarn");
   if(!f.customer_id||!f.payment_date||!(Number(f.amount)>0)){w.textContent=L("请填客户、日期、金额","Customer, date and amount are required");return}
   const a=sum(Object.values(f.alloc),x=>x);if(a>Number(f.amount)+0.005){w.textContent=L("分配的金额超过收到的金额","Applied amount exceeds amount received");return}
+  if(Number(f.amount)-a>0.005&&!confirm(L(`还有 $${money(Number(f.amount)-a)} 没分配到 invoice（会当成客户多付 / 预付，invoice 不会变已付）。\n\n确定这样保存？要分配的话按「取消」，在下面的 invoice 打勾。`,`$${money(Number(f.amount)-a)} is not applied to any invoice. Save anyway?`)))return;
   for(const[iid,x]of Object.entries(f.alloc)){const i=invById(iid);if(x>balExcl(i,f.id)+0.005){w.textContent=L(`${i.invoice_no} 分配超过未付金额`,`${i.invoice_no}: more than its balance`);return}}
   const row={company:S.company,customer_id:f.customer_id,payment_date:f.payment_date,amount:Number(f.amount),method:f.method||null,reference:f.reference||null,remark:f.remark||null};
   let id=f.id;const before=id?S.d.payment_allocations.filter(x=>x.payment_id===id).map(x=>x.invoice_id):[];
