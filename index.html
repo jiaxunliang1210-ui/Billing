@@ -96,6 +96,7 @@ main .tw thead th{z-index:2}
 #updBar{position:fixed;left:50%;transform:translateX(-50%);top:8px;z-index:9999;background:#f5b301;color:#1a1a1a;font-weight:600;padding:8px 12px;border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.35);display:flex;gap:8px;align-items:center;flex-wrap:wrap;max-width:calc(100vw - 24px)}
 .brand .ver{font-size:11px;font-weight:400;opacity:.55;margin-left:6px}
 [data-drop].dropping{outline:3px dashed var(--amber,#f5a623);outline-offset:3px}
+.pdfFill{background:rgba(245,179,1,.18)!important;outline:1px solid #f5b301}
 label.file.dropping{outline:3px dashed var(--amber,#f5a623);outline-offset:3px;position:relative}
 label.file.dropping::after{content:"放开就上传";position:absolute;left:50%;top:-30px;transform:translateX(-50%);background:var(--amber,#f5a623);color:#111;font-size:12px;padding:2px 8px;border-radius:6px;white-space:nowrap}
 .pvbox.dropping{outline:3px dashed var(--amber,#f5a623);outline-offset:-6px}
@@ -328,7 +329,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-15c";
+const APP_VER="2026-10-15g";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -2210,11 +2211,37 @@ function openPayForm(p){
   const f=p.id?{...p,alloc:Object.fromEntries(S.d.payment_allocations.filter(a=>a.payment_id===p.id).map(a=>[a.invoice_id,Number(a.amount)]))}
     :{customer_id:p.customer_id||"",payment_date:today(),amount:null,method:"Bank Transfer",reference:"",remark:"",alloc:{}};
   if(!p.id&&p.invoice_id){const i=invById(p.invoice_id);f.amount=balOf(i);f.alloc[p.invoice_id]=balOf(i)}
-  f._amtManual=f.amount!=null&&f.amount!=="";S.modal={kind:"payForm",f};S.dirty=true;render()}
+  f._amtManual=f.amount!=null&&f.amount!=="";S.modal={kind:"payForm",f};S.dirty=true;render();if(!p.id)warmOCR()}
+/* ---- 收款：从收据 / 转账截图 / payment advice 读资料 ---- */
+function parseReceipt(lines){const T=lines.join("\n"),amts=l=>(l.match(/-?\d{1,3}(?:,\d{3})+\.\d{2}\b|-?\d+\.\d{2}\b/g)||[]).map(x=>Number(x.replace(/,/g,"")));
+  let amount=null;for(const rx of[/total\s*(amount|paid|payment)|amount\s*(paid|transferred|debited|credited)|payment\s*amount|transfer\s*amount|you\s*(paid|sent|transferred)/i,/amount|sgd|s\$|total|paid/i]){const v=lines.filter(l=>rx.test(l)).flatMap(amts).filter(v=>v>0);if(v.length){amount=Math.max(...v);break}}
+  if(amount==null){const v=amts(T).filter(v=>v>0);if(v.length)amount=Math.max(...v)}
+  let date=null;for(const l of lines)if(/date|on\b|time/i.test(l)){const d=dateIn2(l);if(d){date=d;break}}if(!date)for(const l of lines){const d=dateIn2(l);if(d){date=d;break}}
+  const rm=T.match(/(?:ref(?:erence)?|transaction|txn|trans(?:fer)?)\s*(?:no\.?|id|number|ref(?:erence)?)?\.?\s*[:：#]?\s*([A-Z0-9\-\/]*\d[A-Z0-9\-\/]{4,})/i);
+  const method=/paynow/i.test(T)?"PayNow":/cheque|chq\b/i.test(T)?"Cheque":/giro|fast|transfer|ibg|meps|\btt\b|remittance/i.test(T)?"Bank Transfer":null;
+  let cust="",bl=0;const N=" "+normCo(T)+" ";for(const c of S.d.customers){const n=normCo(c.name);if(n.length<4)continue;if(N.includes(" "+n+" ")&&n.length>bl){bl=n.length;cust=c.id}}
+  if(!cust){for(const c of S.d.customers){const w=normCo(c.name).split(" ").filter(x=>x.length>3&&!/^(PTE|LTD|PRIVATE|LIMITED|CONSTRUCTION|ENGINEERING|SERVICES|COMPANY|AND)$/.test(x));if(w.length&&w.every(x=>N.includes(" "+x+" "))&&w.join("").length>bl){bl=w.join("").length;cust=c.id}}}
+  const A=suAn(T),invs=S.d.invoices.filter(i=>i.company===S.company&&(!cust||i.customer_id===cust)&&suAn(i.invoice_no).length>=6&&A.includes(suAn(i.invoice_no)));
+  return{amount,date,ref:rm?rm[1]:"",method,cust,invs}}
+async function payReceipt(input){const file=input.files?.[0];input.value="";const f=S.modal?.f;if(!file||!f)return;f._receipt=file;
+  const msg=$("#payRcMsg");if(msg)msg.innerHTML=`<span class="tag mute">⏳ ${L("读取中（扫描 / 截图要认字，约 10–20 秒）…","Reading (OCR for scans / screenshots, ~10–20 s)…")}</span>`;
+  const{lines,ocr,fail}=await readDocLines(file,2);if(S.modal?.f!==f)return;
+  if(lines.join("").replace(/\s/g,"").length<15){f._rcMsg=`<span class="tag warn">${L("读不到字，请手动填","Couldn't read any text — fill in by hand")}</span> · ${L("保存时会附上这个文件","file will be attached on save")}`;render();return}
+  const r=parseReceipt(lines),filled=[];
+  if(r.cust&&!f.customer_id){f.customer_id=r.cust;f.alloc={};filled.push("customer_id")}
+  if(r.date&&(!f.payment_date||f.payment_date===today())&&r.date!==f.payment_date){f.payment_date=r.date;filled.push("payment_date")}
+  if(r.amount!=null&&!f._amtManual&&!(Number(f.amount)>0)){f.amount=r.amount;f._amtManual=true;filled.push("amount")}
+  if(r.ref&&!f.reference){f.reference=r.ref;filled.push("reference")}
+  if(r.method&&(!f.id)){if(f.method!==r.method){f.method=r.method;filled.push("method")}}
+  let ticked=0;if(r.invs.length&&!Object.keys(f.alloc).length&&f.customer_id){let left=Number(f.amount)||0;for(const i of r.invs.filter(i=>i.customer_id===f.customer_id).sort((a,b)=>a.invoice_date.localeCompare(b.invoice_date))){const b=balExcl(i,f.id);if(b<=0.005)continue;const x=left>0?r2(Math.min(b,left)):b;f.alloc[i.id]=x;left=r2(left-x);ticked++}}
+  f._fillK=new Set(filled);
+  f._rcMsg=`<span class="tag warn">${L(`读出 ${filled.length} 格（黄色）${ticked?`，收据上写的 ${ticked} 张 invoice 已打勾`:""}，请检查`,`${filled.length} field(s) filled${ticked?`, ${ticked} invoice(s) ticked`:""} — please check`)}</span>${ocr?` <span class="tag bad">OCR</span>`:""} · ${L("保存时会附上这个文件","file will be attached on save")}${r.cust?"":` · <span class="tag warn">${L("认不出客户，请选","Customer not recognised")}</span>`}`;
+  render();setTimeout(()=>{for(const k of f._fillK||[]){const el=document.querySelector(`.modal [data-k="${k}"]`);if(el)el.classList.add("pdfFill")}},0)}
 function payInvList(f){return S.d.invoices.filter(i=>i.customer_id===f.customer_id&&i.status!=="Cancelled"&&(balExcl(i,f.id)>0.005||f.alloc[i.id]))}
 function payFormView(f){
   const list=payInvList(f),allocSum=sum(Object.values(f.alloc),x=>x),un=r2((Number(f.amount)||0)-allocSum);
   return `<div class="mhead"><h2>${f.id?L("修改收款","Edit payment"):L("记录收款","Record payment")}</h2><button class="close" onclick="closeModal()">✕</button></div>
+  <div class="actions" style="margin:0 0 8px"><label class="btn sec file">📄 ${L("从收据 / 转账截图 / Payment Advice 读资料（可以拖进来）","Read from receipt / transfer screenshot / payment advice")}<input type="file" hidden accept="application/pdf,.pdf,image/*" onchange="payReceipt(this)"></label><span id="payRcMsg" class="mute" style="font-size:13px">${f._rcMsg||""}</span></div>
   <div class="grid" oninput="payIn(event.target)" onchange="payIn(event.target,true)">
     <label class="f">${L("客户","Customer")} *<select data-k="customer_id">${custOpts(f.customer_id)}</select></label>
     <label class="f">${L("收款日期","Payment date")} *<input type="date" data-k="payment_date" value="${f.payment_date||""}"></label>
@@ -2257,6 +2284,7 @@ async function savePay(){const f=S.modal.f,w=$("#payWarn");
   else{const{data,error}=await sb.from("payments").insert(row).select().single();if(error)return w.textContent=error.message;id=data.id}
   const ins=Object.entries(f.alloc).filter(([,x])=>x>0).map(([invoice_id,amount])=>({payment_id:id,invoice_id,amount}));
   if(ins.length){const{error}=await sb.from("payment_allocations").insert(ins);if(error)return w.textContent=error.message}
+  if(f._receipt){try{await attUploadFile("payment",id,f._receipt,"Receipt")}catch(e){toast(L("收款已保存，但收据上传失败：","Saved, but receipt upload failed: ")+(e.message||e))}}
   await loadAll();await syncStatuses([...before,...ins.map(x=>x.invoice_id)]);
   toast(L("收款已保存","Payment saved"));S.modal=null;done();
   if(!f.id){openPayForm(S.d.payments.find(p=>p.id===id));toast(L("已保存，现在可以上传收据","Saved. You can upload the receipt now."))}else render()}
@@ -2447,10 +2475,10 @@ const ENT={
     cols:["name","payment_terms_days","contact","email","bank_name","bank_account"]},
   supplier_invoices:{label:["Supplier Invoice","Supplier invoices"],att:["Tax Invoice","Supporting"],fields:[F("supplier_id","supplier",1,["供应商","Supplier"]),F("charged_to","chargedTo",0,["To 谁","Charged to"]),
     F("invoice_no","text",1,["Invoice No","Invoice No"]),F("invoice_date","date",1,["Invoice 日期","Invoice date"]),F("due_date","date",0,["Due date（空白自动算）","Due date (auto if blank)"]),
-    F("description","text",0,["Description","Description"]),F("amount_before_gst","money",0,["Amt before GST","Amt before GST"]),F("gst_amount","money",0,["GST（空白自动 9%）","GST (auto 9% if blank)"]),
+    F("description","textarea",0,["Description（可以换行）","Description (multi-line)"]),F("amount_before_gst","money",0,["Amt before GST","Amt before GST"]),F("gst_amount","money",0,["GST（空白自动 9%）","GST (auto 9% if blank)"]),
     F("total","money",0,["Total（空白自动算）","Total (auto if blank)"]),F("trips","number",0,["趟数","Trips"]),F("surcharge_charged","money",0,["收了多少 Diesel Surcharge","Diesel surcharge charged"]),
     F("payment_date","date",0,["付款日期","Payment date"]),F("remark","text",0,["Remark","Remark"])],
-    cols:["_att","invoice_date","supplier_id","invoice_no","charged_to","total","due_date","_apstatus","_check"],
+    cols:["_att","invoice_date","supplier_id","invoice_no","description","charged_to","total","due_date","_apstatus","_check"],
     before(row){{const dup=S.d.supplier_invoices.find(x=>x.id!==S.gEdit?.id&&x.supplier_id===row.supplier_id&&normNo(x.invoice_no)===normNo(row.invoice_no));
         if(dup)return L(`这个供应商的 Invoice No 已经有了：${dup.invoice_no}（${dmy(dup.invoice_date)} · $${money(dup.total)}）`,`Duplicate supplier invoice: ${dup.invoice_no}`)}
       if(row.gst_amount==null&&row.amount_before_gst!=null)row.gst_amount=r2(row.amount_before_gst*0.09);
@@ -2527,15 +2555,16 @@ function genInput(f,v){const lab=L(...(isL3()&&f.labelL3||f.label))+(f.req?" *":
     case"materialOpt":return `<label class="f">${lab}<select name="${f.k}">${optList(MATERIALS.map(m=>[m,m]),v,L("所有材料","Any"))}</select></label>`;
     case"bool":return `<label class="f">${lab}<select name="${f.k}">${optList([["true",L("是","Yes")],["false",L("停止","Stopped")]],String(v))}</select></label>`;
     case"month":return `<label class="f">${lab}<input type="month" name="${f.k}" value="${esc(String(v).slice(0,7))}"></label>`;
-    case"textarea":return `<label class="f wide">${lab}<textarea name="${f.k}">${esc(v)}</textarea></label>`;
+    case"textarea":return `<label class="f wide">${lab}<textarea name="${f.k}" rows="${Math.min(8,Math.max(2,String(v).split("\n").length+1))}" oninput="this.rows=Math.min(8,Math.max(2,this.value.split('\\n').length+1))">${esc(v)}</textarea></label>`;
     case"money":case"number":return `<label class="f">${lab}<input type="number" step="0.01" name="${f.k}" value="${esc(v)}"></label>`;
     default:return `<label class="f">${lab}<input type="${f.type}" name="${f.k}" value="${esc(v)}"></label>`}}
 function genForm(ent,cfg,e,sk){
   return `<section class="panel"><h2>${e.id?L("修改","Edit"):L("新增","Add")} · ${L(...cfg.label)}</h2>
-  <form id="gForm" class="grid" oninput="S.dirty=true${ent==="supplier_invoices"?";siDupCheck()":""}" onsubmit="event.preventDefault();saveGen('${ent}')">${fieldsOf(cfg).map(f=>`<div data-gk="${f.k}" style="display:contents">${genInput(f,e[f.k])}</div>`).join("")}</form>${ent==="rates"&&isL3()?`<p class="mute" id="rateHint" style="font-size:13px;margin:4px 0 0"></p>`:""}
+  ${ent==="supplier_invoices"?`<div class="actions" style="margin:0 0 8px"><label class="btn sec file">📄 ${L("从 PDF 读资料（可以拖进来）","Read details from PDF (drag & drop OK)")}<input type="file" hidden accept="application/pdf,.pdf,image/*" onchange="siPdf(this)"></label><span id="siPdfMsg" class="mute" style="font-size:13px"></span></div><div id="siPdfDiff"></div>`:""}
+  <form id="gForm" class="grid" oninput="S.dirty=true${ent==="supplier_invoices"?";siDupCheck();siDue(event)":""}" onchange="${ent==="supplier_invoices"?"siDue(event)":""}" onsubmit="event.preventDefault();saveGen('${ent}')">${fieldsOf(cfg).map(f=>`<div data-gk="${f.k}" style="display:contents">${genInput(f,e[f.k])}</div>`).join("")}</form>${ent==="rates"&&isL3()?`<p class="mute" id="rateHint" style="font-size:13px;margin:4px 0 0"></p>`:""}
   ${ent==="supplier_invoices"&&e.id?`<p>${L("Surcharge 检查","Surcharge check")}：${genCell(cfg,"_check",e)}</p>`:""}
   ${cfg.att&&e.id?attBox(ent,e.id,cfg.att):cfg.att?`<p class="mute">${L("保存后可以上传附件。","Upload attachments after saving.")}</p>`:""}
-  ${ent==="supplier_invoices"?`<div id="siDup">${(setTimeout(siDupCheck),"")}</div>`:""}<div class="warn" id="gWarn"></div>${ent==="rates"&&isL3()?(setTimeout(rateVis),""):""}
+  ${ent==="supplier_invoices"?`<div id="siDup">${(setTimeout(siDupCheck),setTimeout(siDueInit),e.id?0:warmOCR(),"")}</div>`:""}<div class="warn" id="gWarn"></div>${ent==="rates"&&isL3()?(setTimeout(rateVis),""):""}
   <div class="actions"><button class="btn" onclick="saveGen('${ent}')">${L("保存","Save")}</button><button class="btn sec" onclick="done();render()">${L("取消","Cancel")}</button>
   ${e.id&&!cfg.noDelete?`<button class="btn del" onclick="delGen('${ent}','${e.id}')">${L("删除","Delete")}</button>`:""}</div></section>`}
 /* L3H 价钱表：选了 Service 只显示要填的格子 */
@@ -2557,6 +2586,7 @@ async function saveGen(ent){const cfg=ENT[ent],fd=new FormData($("#gForm")),row=
   const wasNew=!S.gEdit.id;
   const{data,error}=S.gEdit.id?await sb.from(ent).update(row).eq("id",S.gEdit.id).select().single():await sb.from(ent).insert(row).select().single();
   if(error)return $("#gWarn").textContent=error.message;
+  if(ent==="supplier_invoices"&&S.gEdit?._pdf&&data?.id){try{await attUploadFile("supplier_invoices",data.id,S.gEdit._pdf,"Tax Invoice")}catch(e){toast(L("已保存，但 PDF 附件上传失败：","Saved, but PDF upload failed: ")+(e.message||e))}}
   toast(L("已保存","Saved"));await loadAll();if(ent==="rates")setTimeout(()=>rateChanged(data),300);if(ent==="customers"&&!wasNew)setTimeout(()=>invScan({customer_id:data.id,quiet:true,why:L("你刚改了这个客户的资料。客户名称、地址、Attn 下载 PDF 时本来就会用最新的；下面是付款期限或明细受影响的单：","You changed this customer.")}),300);if(ent==="services"&&!wasNew)setTimeout(()=>invScan({quiet:true,why:L("你刚改了 Service 设定，下面这些还没寄出的单用的是旧的写法 / 单位：","You changed a service setting.")}),300);
   if(wasNew&&cfg.att){S.gEdit={...data};S.dirty=true;toast(L("已保存，现在可以上传附件","Saved. You can upload attachments now."))}else done();render()}
 async function delGen(ent,id){if(!confirm(L("确定删除？","Delete this record?")))return;const keep=JSON.parse(JSON.stringify(S.d[ent].find(r=>r.id===id)||null));const{error}=await sb.from(ent).delete().eq("id",id);
@@ -2570,11 +2600,94 @@ function attBox(type,id,kinds){const list=S.d.attachments.filter(a=>a.entity_typ
   ${list.length?`<ul>${list.map(a=>`<li>${type!=="pv"?`<a href="#" title="${L("预览","Preview")}" onclick="attPreview('${id}','${a.id}');return false">👁</a> `:""}<a href="#" onclick="openAtt('${a.id}');return false">${esc(a.kind||"")} · ${esc(a.file_name||"")}</a> <button class="x" onclick="delAtt('${a.id}')" title="Delete">✕</button></li>`).join("")}</ul>`:`<p class="mute">${L("还没有附件","No files yet")}</p>`}
   <div class="attadd"><select id="attKind-${id}">${kinds.map(k=>`<option>${k}</option>`).join("")}</select>
   <label class="btn sec sm file">📎 ${L("上传文件","Upload file")}<input type="file" hidden onchange="upAtt('${type}','${id}',this)"></label></div></div>`}
+/* ---- Supplier invoice：Due date 自动算 + 从 PDF 读资料 ---- */
+function siTerms(fm){if(fm.dataset.pdfTerms!==undefined&&fm.dataset.pdfTerms!=="")return Number(fm.dataset.pdfTerms);const s=S.d.suppliers.find(x=>x.id===fm.supplier_id?.value);return Number(s?.payment_terms_days??30)}
+function termsIn(lines){for(const l of lines){if(!/term/i.test(l))continue;const t=l.slice(l.search(/term/i));if(/c\s*\.?\s*[o0]\s*\.?\s*d\b|cash\s*on\s*delivery|\bcash\b/i.test(t))return 0;const m=t.match(/(\d{1,3})\s*days?/i);if(m)return Number(m[1])}return null}
+function siDueCalc(fm){const d=fm.invoice_date?.value;return d?addDays(d,siTerms(fm)):""}
+function siDueInit(){const fm=$("#gForm");if(!fm||!fm.due_date)return;const exp=siDueCalc(fm),cur=fm.due_date.value;fm.dataset.dueTouched=cur&&exp&&cur!==exp?"1":"";
+  if(!cur&&exp)fm.due_date.value=exp;siDueHint()}
+function siDueHint(){const fm=$("#gForm");if(!fm)return;const w=fm.querySelector('[data-gk="due_date"] label');if(!w)return;let h=w.querySelector(".dueh");if(!h){h=document.createElement("small");h.className="dueh";h.style.cssText="display:block;font-size:11px;margin-top:2px";w.appendChild(h)}
+  const exp=siDueCalc(fm),t=siTerms(fm);if(!exp){h.textContent="";return}
+  const src=fm.dataset.pdfTerms!==undefined&&fm.dataset.pdfTerms!==""?L("（PDF 写的）"," (from PDF)"):"";
+  if(fm.due_date.value===exp){h.className="dueh mute";h.textContent=(t===0?L("C.O.D：当天到期","C.O.D: due same day"):L(`按 ${t} 天自动算`,`Auto: ${t} days`))+src}
+  else{h.className="dueh";h.innerHTML=`<a href="#" onclick="siDueReset();return false">${L(`按 ${t} 天应该是 ${dmy(exp)}，按这里改`,`${t} days = ${dmy(exp)} — click to use`)}</a>`}}
+function siDueReset(){const fm=$("#gForm");if(!fm)return;fm.due_date.value=siDueCalc(fm);fm.dataset.dueTouched="";S.dirty=true;siDueHint()}
+function siDue(e){const fm=$("#gForm"),n=e?.target?.name;if(!fm||!fm.due_date)return;
+  if(n==="due_date"){fm.dataset.dueTouched=fm.due_date.value&&fm.due_date.value!==siDueCalc(fm)?"1":"";siDueHint();return}
+  if((n==="invoice_date"||n==="supplier_id")&&!fm.dataset.dueTouched){const v=siDueCalc(fm);if(v)fm.due_date.value=v}
+  siDueHint()}
+function parseInvMore(lines){const amts=l=>(l.match(/-?\d{1,3}(?:,\d{3})+\.\d{2}\b|-?\d+\.\d{2}\b/g)||[]).map(x=>Number(x.replace(/,/g,"")));
+  let sub=null,gst=null;
+  for(const l of lines){if(sub==null&&/sub\s*-?\s*total|before\s*gst|excl(\.|uding)?\s*gst|total\s*excl|nett?\s*amount|amount\s*\(?\s*excl/i.test(l)){const a=amts(l);if(a.length)sub=a.at(-1)}
+    if(gst==null&&/\bG\.?S\.?T\b/i.test(l)&&!/reg(n|istration)?\.?\s*(no|number)|gst\s*no|incl|before|excl|sub\s*-?\s*total|total\s*(amount\s*)?(incl|payable)/i.test(l)){const a=amts(l).filter(v=>!/\b9\.00\b/.test(String(v))||true);if(a.length)gst=a.at(-1)}}
+  let desc="";const hi=lines.findIndex(l=>/\bdescription\b|\bparticulars\b|\bdetails\b/i.test(l));
+  const junk=l=>!l.trim()||l.replace(/[^A-Za-z]/g,"").length<4||/^[\d\s.,$S\-:()%]+$/.test(l)||/===|\(\s*SGD\s*\)|sub\s*-?\s*total|\btotal\b|\bgst\b|amount|qty|quantity|unit\s*price|page\s*\d|bank|cheque|payment|terms|signature|thank|approved|initial|remarks?\b|project\b/i.test(l);
+  if(hi>=0){const got=[];for(let i=hi+1;i<lines.length&&got.length<4;i++){const l=lines[i];if(/sub\s*-?\s*total|\btotal\b/i.test(l))break;if(junk(l))continue;got.push(l.replace(/[|}{\]\[]+/g," ").replace(/(\s+[i|l,]*\s*S?\$?\s?[\d.,]+\d){1,3}\s*[\/,.|]*\s*$/,"").replace(/\s+[i|l,]+\s*$/,"").replace(/\s+\d+\s*(SETS?|PCS?|UNITS?|NOS|LOTS?|TRIPS?|HRS?|DAYS?)\s*$/i,"").replace(/^\s*\d+[.)]?\s+/,"").replace(/\s*[,:;]\s*$/,"").trim())}desc=got.filter(Boolean).join("\n")}
+  if(!desc){const l=lines.find(l=>/being|charges|rental|transport|hire|service|supply|repair|diesel/i.test(l)&&!junk(l));if(l)desc=l.trim()}
+  return{sub,gst,desc:desc.slice(0,400)}}
+let SIPDF=null;
+async function siPdf(input){const file=input.files?.[0];input.value="";if(!file)return;await siPdfRead(file,true)}
+async function siPdfRead(file,keep){const fm=$("#gForm"),msg=$("#siPdfMsg");if(!fm)return;if(msg)msg.textContent=L("读取 PDF 中…","Reading PDF…");
+  let lines=[];try{lines=await pdfLines(file,3)}catch(e){if(msg)msg.textContent=L("读不到这个 PDF","Couldn't read this PDF");return}
+  if(keep&&S.gEdit){S.gEdit._pdf=file}
+  let ocr=false;
+  if(lines.join("").replace(/\s/g,"").length<30){if(msg)msg.innerHTML=`<span class="tag mute">⏳ ${L("扫描的 PDF：用 OCR 认字中，大约 10–20 秒…","Scanned PDF: reading with OCR, about 10–20 s…")}</span>`;
+    try{lines=await ocrLines(file);ocr=true}catch(e){lines=[]}
+    if(!$("#gForm"))return;
+    if(lines.join("").replace(/\s/g,"").length<30){if(msg)msg.innerHTML=`<span class="tag warn">${L("认不到字（太模糊或 OCR 载入失败），请手动填","Couldn't read any text — please fill in by hand")}</span>${keep?" "+L("（保存时会自动附上这个 PDF）","(the PDF will be attached on save)"):""}`;return}}
+  siApplyLines(lines,{ocr,keep})}
+function siApplyLines(lines,o){o=o||{};const fm=$("#gForm"),msg=$("#siPdfMsg");if(!fm)return;
+  const r=parseInvText(lines),m=parseInvMore(lines),tm=termsIn(lines);fm.dataset.pdfTerms=tm==null?"":String(tm);let total=r.total,sub=m.sub,gst=m.gst;
+  if(total!=null&&sub!=null&&total>sub)gst=r2(total-sub);if(total!=null&&gst!=null&&sub==null)sub=r2(total-gst);
+  if(total!=null&&sub==null&&gst==null){sub=r2(total/1.09);gst=r2(total-sub)}
+  if(sub!=null&&gst!=null&&total==null)total=r2(sub+gst);
+  let supId="";if(r.sup){const n=normCo(r.sup);const x=S.d.suppliers.find(z=>normCo(z.name)===n)||S.d.suppliers.find(z=>{const k=normCo(z.name);return k.length>3&&(n.includes(k)||k.includes(n))});if(x)supId=x.id}
+  const got={supplier_id:supId,invoice_no:r.no||"",invoice_date:r.date||"",description:m.desc||"",amount_before_gst:sub??"",gst_amount:gst??"",total:total??""};
+  const filled=[],diff=[];
+  for(const[k,v]of Object.entries(got)){if(v===""||v==null)continue;const el=fm.elements[k];if(!el)continue;const cur=String(el.value??"").trim(),nv=String(v);
+    const same=cur===nv||(["amount_before_gst","gst_amount","total"].includes(k)&&cur!==""&&Math.abs(Number(cur)-Number(nv))<0.005)||(k==="invoice_no"&&sqComp(cur)===sqComp(nv));
+    if(same)continue;if(!cur){el.value=nv;el.classList.add("pdfFill");filled.push(k);if(el.tagName==="TEXTAREA")el.rows=Math.min(8,Math.max(2,nv.split("\n").length+1))}else diff.push([k,cur,nv])}
+  SIPDF=Object.fromEntries(diff.map(([k,,nv])=>[k,nv]));
+  const lab=k=>({supplier_id:L("供应商","Supplier"),invoice_no:"Invoice No",invoice_date:L("Invoice 日期","Date"),description:"Description",amount_before_gst:"Amt before GST",gst_amount:"GST",total:"Total"}[k]);
+  const show=(k,v)=>k==="supplier_id"?esc(S.d.suppliers.find(z=>z.id===v)?.name||v):k==="invoice_date"?dmy(v):esc(String(v));
+  if(msg)msg.innerHTML=filled.length||diff.length?`<span class="tag warn">${L(`从 PDF 读出 ${filled.length} 格（黄色），请检查后再保存`,`${filled.length} field(s) filled from PDF (yellow) — check before saving`)}</span>${o.ocr?` <span class="tag bad">${L("扫描件用 OCR 认的字，比较容易错，要仔细对","OCR from a scan — check carefully")}</span>`:""}${o.keep?" "+L("· 保存时会自动附上这个 PDF","· PDF will be attached on save"):""}`:`<span class="tag ok">${L("PDF 的资料跟表格一样 ✓","PDF matches the form ✓")}</span>`;
+  const newSup=r.sup&&!supId&&!fm.supplier_id.value?r.sup:"";SIPDF._newSup=newSup;SIPDF._terms=tm;
+  const dv=$("#siPdfDiff");if(dv)dv.innerHTML=(newSup?`<div class="note" style="margin-bottom:8px">${L(`PDF 的供应商「<b>${esc(newSup)}</b>」系统里还没有。`,`Supplier "<b>${esc(newSup)}</b>" is not in the system.`)} <a href="#" onclick="siNewSup();return false">＋ ${L("新增这个供应商","Add this supplier")}</a></div>`:"")+(diff.length?`<div class="note" style="margin-bottom:8px"><b>${L("PDF 跟你填的不一样：","PDF differs from what you entered:")}</b><br>${diff.map(([k,cur,nv])=>`${lab(k)}：${L("现在","now")} <b>${show(k,cur)}</b> · PDF <b>${show(k,nv)}</b> <a href="#" onclick="siPdfUse('${k}');this.parentNode&&(this.outerHTML='✓');return false">${L("用 PDF 的","Use PDF")}</a>`).join("<br>")}</div>`:"");
+  if(filled.includes("invoice_date")||filled.includes("supplier_id")||tm!=null){if(!fm.dataset.dueTouched){const v=siDueCalc(fm);if(v)fm.due_date.value=v}}siDueHint();siDupCheck();S.dirty=true}
+function loadTess(){if(window.Tesseract)return Promise.resolve();return new Promise((ok,no)=>{const sc=document.createElement("script");sc.src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";sc.onload=ok;sc.onerror=()=>no(new Error("OCR load failed"));document.head.appendChild(sc)})}
+/* 认字工人：照电脑能力同时开 1–3 个，打开上传视窗就先准备 */
+const OCR_N=Math.max(1,Math.min(3,Math.floor((navigator.hardwareConcurrency||4)/2)));const TWP=[],TWQ=[];
+function newWorker(){const w={busy:false,p:null};w.p=Tesseract.createWorker("eng").catch(e=>{TWP.splice(TWP.indexOf(w),1);throw e});TWP.push(w);return w}
+async function withWorker(fn){await loadTess();let w=TWP.find(x=>!x.busy);if(!w&&TWP.length<OCR_N)w=newWorker();
+  if(!w){await new Promise(r=>TWQ.push(r));return withWorker(fn)}
+  w.busy=true;try{return await fn(await w.p)}finally{w.busy=false;const n=TWQ.shift();if(n)n()}}
+function warmOCR(){if(navigator.onLine===false)return;setTimeout(()=>loadTess().then(()=>{if(!TWP.length)newWorker()}).catch(()=>{}),300)}
+async function pool(items,n,fn){let i=0;await Promise.all(Array.from({length:Math.min(n,items.length)},async()=>{while(i<items.length){const x=items[i++];try{await fn(x)}catch(e){}}}))}
+async function readDocLines(file,pages=2){const isPdf=/pdf/i.test(file.type||file.name);let lines=[];
+  if(isPdf){try{lines=await pdfLines(file,pages)}catch(e){lines=[]}}
+  if(lines.join("").replace(/\s/g,"").length>=30)return{lines,ocr:false};
+  try{lines=await ocrLines(file)}catch(e){return{lines:[],ocr:true,fail:true}}
+  return{lines,ocr:true}}
+async function ocrLines(file,maxPages=1){let imgs=[];
+  if(/pdf/i.test(file.type||file.name)){await loadPdfJs();const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise;
+    for(let i=1;i<=Math.min(pdf.numPages,maxPages);i++){const pg=await pdf.getPage(i),vp=pg.getViewport({scale:2.78}),c=document.createElement("canvas");c.width=vp.width;c.height=vp.height;await pg.render({canvasContext:c.getContext("2d"),viewport:vp}).promise;imgs.push(c)}}
+  else imgs=[file];
+  const out=[];for(const im of imgs){const r=await withWorker(w=>w.recognize(im));out.push(...String(r?.data?.text||"").split("\n"))}
+  return out.map(x=>x.trim()).filter(Boolean)}
+async function siNewSup(){const n=SIPDF?._newSup;if(!n)return;const name=prompt(L("供应商名称（可以改）：","Supplier name:"),n.replace(/\s+/g," ").trim());if(!name)return;
+  const{data,error}=await sb.from("suppliers").insert({name,payment_terms_days:SIPDF._terms??30}).select().single();if(error)return toast(error.message);
+  S.d.suppliers.push(data);const fm=$("#gForm");if(!fm)return;const sel=fm.supplier_id;const o=document.createElement("option");o.value=data.id;o.textContent=data.name;sel.appendChild(o);sel.value=data.id;sel.classList.add("pdfFill");
+  if(S.gEdit)S.gEdit.supplier_id=data.id;SIPDF._newSup="";const dv=$("#siPdfDiff");if(dv)dv.querySelector(".note")?.remove();siDue({target:{name:"supplier_id"}});siDupCheck();toast(L("已新增供应商","Supplier added"))}
+function siPdfUse(k){const fm=$("#gForm");if(!fm||!SIPDF||SIPDF[k]==null)return;fm.elements[k].value=SIPDF[k];fm.elements[k].classList.add("pdfFill");S.dirty=true;if(k==="invoice_date"||k==="supplier_id")siDue({target:{name:k}});siDupCheck()}
+async function attUploadFile(type,id,file,kind){const safe=file.name.replace(/[^\w.\-]+/g,"_"),path=`${S.user.id}/${type}/${id}/${Date.now()}_${safe}`;
+  const up=await sb.storage.from("attachments").upload(path,file);if(up.error)throw up.error;
+  const{data,error}=await sb.from("attachments").insert({entity_type:type,entity_id:id,kind,file_path:path,file_name:file.name}).select().single();if(error)throw error;S.d.attachments.push(data);return data}
 async function upAtt(type,id,input){const file=input.files[0];if(!file)return;const kind=$(`#attKind-${id}`).value,safe=file.name.replace(/[^\w.\-]+/g,"_");
   const path=`${S.user.id}/${type}/${id}/${Date.now()}_${safe}`;toast(L("上传中…","Uploading…"));
   const up=await sb.storage.from("attachments").upload(path,file);if(up.error)return toast(up.error.message);
   const{data,error}=await sb.from("attachments").insert({entity_type:type,entity_id:id,kind,file_path:path,file_name:file.name}).select().single();if(error)return toast(error.message);
-  S.d.attachments.push(data);toast(L("已上传","Uploaded"));render();if(type==="pv"&&$("#photoOv"))pvOpen(id)}
+  S.d.attachments.push(data);toast(L("已上传","Uploaded"));render();if(type==="pv"&&$("#photoOv"))pvOpen(id);
+  if(type==="supplier_invoices"&&/pdf/i.test(file.type||file.name)&&$("#gForm"))setTimeout(()=>siPdfRead(file,false),50)}
 async function openAtt(aid){const a=S.d.attachments.find(x=>x.id===aid),w=window.open("","_blank");
   const{data,error}=await sb.storage.from("attachments").createSignedUrl(a.file_path,600);if(error){w?.close();return toast(error.message)}
   if(w)w.location=data.signedUrl;else location.href=data.signedUrl}
@@ -2644,7 +2757,7 @@ async function invDl(id){const i=invById(id),o=invOrig(i);if(!o)return printInv(
     saveBlob(data,fileBase(i)+ext);toast(fileBase(i)+ext)}catch(e){toast(e.message||String(e))}}
 /* ---- ⬆ 上传 Sales Invoice（PDF / zip）→ 配对 invoice，存成签名页 ---- */
 let SU=null;
-function suUp(){SU={files:[],take:new Set()};suRender()}
+function suUp(){SU={files:[],take:new Set()};suRender();warmOCR()}
 async function suFiles(input){const fs=[...input.files];input.value="";const add=[];const pg=$("#suProg");if(pg)pg.textContent=L("读取中…","Reading…");
   for(const f of fs){if(/\.zip$/i.test(f.name)){try{await loadJSZip();const z=await JSZip.loadAsync(await f.arrayBuffer());
         for(const e of Object.values(z.files)){if(e.dir||!/\.(pdf|jpe?g|png)$/i.test(e.name)||/(^|\/)__MACOSX\//.test(e.name))continue;const nm=e.name.split("/").pop();add.push(new File([await e.async("blob")],nm,{type:/\.pdf$/i.test(nm)?"application/pdf":"image/jpeg"}))}}
@@ -2660,13 +2773,13 @@ function suFind(text){const b=suAn(text);if(b.length<4)return null;let best=null
   return tie?null:best}
 function suAnalyse(){for(const x of SU.files){
     if(x.manual){const i=S.d.invoices.find(v=>suAn(v.invoice_no)===suAn(x.manual));x.inv=i||null}
-    else if(x.inv===undefined){const i=suFind(x.name);if(i)x.inv=i;else if(/\.pdf$/i.test(x.name)){x.inv=null;x.reading=true}else x.inv=null}
+    else if(x.inv===undefined){const i=suFind(x.name);if(i)x.inv=i;else if(/\.(pdf|jpe?g|png)$/i.test(x.name)){x.inv=null;x.reading=true}else x.inv=null}
     const i=x.inv;x.st=x.reading?"reading":!i?"none":S.d.attachments.some(a=>a.entity_type==="invoice"&&a.entity_id===i.id&&a.kind===SIGNED_KIND&&a.file_name===x.name)?"same":signedOf(i)?"has":"ok";
     if(!x._init&&x.st!=="reading"){if(x.st==="ok")SU.take.add(x.name);x._init=1}}}
-async function suRead(){for(const x of SU.files.filter(f=>f.reading)){try{const lines=await pdfLines(x.file,1),r=parseInvText(lines);
+async function suRead(){if(SU._busy)return;SU._busy=true;try{await pool(SU.files.filter(f=>f.reading),OCR_N,async x=>{try{const{lines,ocr}=await readDocLines(x.file,1),r=parseInvText(lines);x.ocr=ocr;
       let i=r.no?suFind(r.no):null;if(!i){const hit=lines.join(" ").match(new RegExp(S.company+"\\s*[\\/\\-]\\s*(INV\\s*[\\/\\-]\\s*)?\\d{4}\\s*[\\/\\-]\\s*\\d{1,3}","i"));if(hit)i=suFind(hit[0])}
       x.inv=i||null;x.readNo=r.no||""}catch(e){x.inv=null}
-    x.reading=false;suAnalyse();if($("#suGo")||$("#photoOv"))suRender()}}
+    x.reading=false;suAnalyse();if($("#suGo")||$("#photoOv"))suRender()})}finally{SU._busy=false}if(SU.files.some(f=>f.reading))setTimeout(suRead,0)}
 function suSet(name,v){const x=SU.files.find(f=>f.name===name);if(!x)return;x.manual=String(v||"").trim();x._init=0;suAnalyse();suRender()}
 const SU_ST={ok:["ok",["配对到","Matched"]],has:["warn",["已经有签名页（要换就打勾）","Has a signed page (tick to replace)"]],same:["mute",["已经上传过","Already uploaded"]],none:["bad",["配不到","No match"]],reading:["mute",["读取中…","Reading…"]]};
 function suRender(){const F=SU.files,cnt=k=>F.filter(x=>x.st===k).length,go=F.filter(x=>SU.take.has(x.name)&&["ok","has"].includes(x.st));
@@ -2675,11 +2788,11 @@ function suRender(){const F=SU.files,cnt=k=>F.filter(x=>x.st===k).length,go=F.fi
   <p class="mute" style="font-size:13px;margin-top:0">${L("你以前做好的 Sales Invoice（签好的或原本的 PDF / 照片）。可以一次选很多个，或直接选整包 zip。系统先看文件名里的单号（例：ETK-INV-2609-17.pdf、L3H_2607_32.pdf），没有就读 PDF 里的 Invoice No。放进去当作那张 invoice 的签名页：月底签名第一页合并、寄客户版本都会用到；导入的旧单按 👁 / ⬇ 会直接打开这个原本的 PDF。","Your earlier sales invoices (PDF / photo). Matched by invoice no in the file name, else read from the PDF. Saved as the signed page.")}</p>
   <label class="btn file">⬆ ${L("选 PDF / 照片 / zip","Choose PDF / photo / zip")}<input type="file" accept=".pdf,.zip,.jpg,.jpeg,.png" multiple hidden onchange="suFiles(this)"></label>
   ${F.length?`<ul style="margin:8px 0 4px 18px;font-size:14px"><li>${L("配对到","Matched")}: <b>${cnt("ok")}</b></li><li>${L("已经有签名页","Already has a signed page")}: ${cnt("has")}</li><li>${L("已经上传过，跳过","Already uploaded")}: ${cnt("same")}</li>
-    ${cnt("reading")?`<li>${L("读取 PDF 中","Reading")}: ${cnt("reading")}</li>`:""}${cnt("none")?`<li><b style="color:var(--bad)">${L("配不到（可以在旁边打单号）","No match (type the invoice no.)")}: ${cnt("none")}</b></li>`:""}</ul>
+    ${cnt("reading")?`<li>⏳ ${L(`读取 / 认字中，还有 ${cnt("reading")} 个（扫描件每个约 10–20 秒）`,`Reading / OCR: ${cnt("reading")} left`)}</li>`:""}${F.some(x=>x.ocr&&!x.reading)?`<li><span class="tag bad">OCR</span> ${L("扫描件认字配对的，要检查单号对不对","Matched via OCR — check the number")}</li>`:""}${cnt("none")?`<li><b style="color:var(--bad)">${L("配不到（可以在旁边打单号）","No match (type the invoice no.)")}: ${cnt("none")}</b></li>`:""}</ul>
   <p style="font-size:13px;margin:6px 0"><a href="#" onclick="event.preventDefault();SU.files.forEach(x=>{if(['ok','has'].includes(x.st))SU.take.add(x.name)});suRender()">${L("全选","All")}</a> · <a href="#" onclick="event.preventDefault();SU.take.clear();suRender()">${L("全不选","None")}</a></p>
   <div class="tw" style="max-height:50vh;overflow:auto"><table><thead><tr><th></th><th>${L("状态","Status")}</th><th>${L("文件","File")}</th><th>Invoice No</th><th>${L("客户","Customer")}</th><th>${L("日期","Date")}</th><th class="num">Total</th></tr></thead><tbody>
   ${rows.map(x=>{const[t,l]=SU_ST[x.st],N=esc(JSON.stringify(x.name)),can=["ok","has"].includes(x.st),i=x.inv;
-    return `<tr><td>${can?`<input type="checkbox" ${SU.take.has(x.name)?"checked":""} onchange="SU.take[this.checked?'add':'delete'](${N});suRender()">`:""}</td><td><span class="tag ${t}">${L(...l)}</span></td>
+    return `<tr><td>${can?`<input type="checkbox" ${SU.take.has(x.name)?"checked":""} onchange="SU.take[this.checked?'add':'delete'](${N});suRender()">`:""}</td><td><span class="tag ${t}">${L(...l)}</span>${x.ocr&&!x.reading?' <span class="tag bad">OCR</span>':""}</td>
     <td><a href="#" onclick="window.open(URL.createObjectURL(SU.files.find(f=>f.name===${N}).file));return false">👁 ${esc(x.name.slice(0,36))}</a></td>
     <td>${x.st==="reading"?"":`<input class="tiin${i?"":" miss"}" list="suNos" style="width:170px" value="${esc(i?i.invoice_no:(x.manual||x.readNo||""))}" onchange="suSet(${N},this.value)">`}</td>
     <td>${i?esc(custName(i.customer_id)):""}</td><td>${i?dmy(i.invoice_date):""}</td><td class="num">${i?money(i.total):""}</td></tr>`}).join("")}</tbody></table></div>
@@ -3055,20 +3168,20 @@ function loadJSZip(){if(window.JSZip)return Promise.resolve();
   return jszipLoading||(jszipLoading=new Promise((res,rej)=>{const sc=document.createElement("script");sc.src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js";
     sc.onload=res;sc.onerror=()=>{jszipLoading=null;rej(new Error(L("Zip 工具载入失败，请检查网络","Could not load the zip library")))};document.head.appendChild(sc)}))}
 const TI_RX=/^(\d{4}-\d{2}-\d{2})_(.+)_([^_]+)_(-?[\d,]+(?:\.\d+)?)\.pdf$/i;
-function tiUp(){TI={files:[],take:new Set(),paidNew:false};tiRender()}
+function tiUp(){TI={files:[],take:new Set(),paidNew:false};tiRender();warmOCR()}
 async function tiFiles(input){const fs=[...input.files];input.value="";const add=[];const box=$("#tiProg");if(box)box.textContent=L("读取中…","Reading…");
   for(const f of fs){if(/\.zip$/i.test(f.name)){try{await loadJSZip();const z=await JSZip.loadAsync(await f.arrayBuffer());
         for(const e of Object.values(z.files)){if(e.dir||!/\.pdf$/i.test(e.name)||/(^|\/)__MACOSX\//.test(e.name))continue;add.push(new File([await e.async("blob")],e.name.split("/").pop(),{type:"application/pdf"}))}}
       catch(e){alert(f.name+": "+e.message)}}
-    else if(/\.pdf$/i.test(f.name))add.push(f)}
+    else if(/\.(pdf|jpe?g|png)$/i.test(f.name))add.push(f)}
   for(const f of add)if(!TI.files.some(x=>x.name===f.name))TI.files.push({name:f.name,file:f});
   tiAnalyse();tiRender();tiReadPdfs()}
 function tiAnalyse(){const an=s=>String(s??"").toUpperCase().replace(/[^A-Z0-9]/g,""),nz=s=>s.replace(/(^|[A-Z])0+(?=\d)/g,"$1");
   const sis=S.d.supplier_invoices,byAn=new Map();for(const si of sis){const k=an(si.invoice_no);if(!byAn.has(k))byAn.set(k,[]);byAn.get(k).push(si)}
   for(const x of TI.files){x.si=null;x.warn="";
     if(x.src==null){const m=x.name.match(TI_RX);if(m){x.src="name";x.date=m[1];x.sup=m[2].trim();x.no=m[3].trim();x.total=r2(numOr(m[4],0))}
-      else if(/\.pdf$/i.test(x.name)){const h=tiHint(x.name,sis,an);if(h){x.src="hint";x.date=h.invoice_date;x.sup=supName(h.supplier_id);x.no=h.invoice_no;x.total=r2(Number(h.total)||0)}else{x.src="pdf";x.reading=true}}else x.src="bad"}
-    x.std=x.date&&x.sup&&x.no&&x.total!=null?`${x.date}_${x.sup}_${String(x.no).replace(/[\\/:*?"<>|]+/g,"-")}_${Number(x.total).toFixed(2)}.pdf`.replace(/\s+/g," "):"";
+      else if(/\.(pdf|jpe?g|png)$/i.test(x.name)){const h=tiHint(x.name,sis,an);if(h){x.src="hint";x.date=h.invoice_date;x.sup=supName(h.supplier_id);x.no=h.invoice_no;x.total=r2(Number(h.total)||0)}else{x.src="pdf";x.reading=true}}else x.src="bad"}
+    x.std=x.date&&x.sup&&x.no&&x.total!=null?`${x.date}_${x.sup}_${String(x.no).replace(/[\\/:*?"<>|]+/g,"-")}_${Number(x.total).toFixed(2)}.${(x.name.match(/\.(pdf|jpe?g|png)$/i)||[0,"pdf"])[1].toLowerCase()}`.replace(/\s+/g," "):"";
     x.st=x.src==="bad"?"bad":x.reading?"reading":!x.std?"fill":"";
     if(!x.st){const k=an(x.no),ck=normCo(x.sup);
       const supOk=si=>simCo(ck,normCo(supName(si.supplier_id)))>=0.8,totOk=si=>Math.abs(Number(si.total)-x.total)<0.02;
@@ -3103,7 +3216,7 @@ function parseInvText(lines){const own=/L3H\s*RESOURCES|ETK\s*(RESOURCES|TRAFFIC
   if(!date)for(const l of lines){const d=dateIn2(l);if(d){date=d;break}}
   let no=null;const lab=[/(?:tax\s*)?invoice\s*(?:no|number|#)\.?\s*[:：#]?\s*/i,/\b(?:inv|bill|document|doc|debit\s*note)\.?\s*(?:no|number|#)\.?\s*[:：#]?\s*/i,/(?:^|\s)No\.?\s*[:：]\s*/i];
   const NOG=new RegExp(NO.source,"gi"),good=v=>v&&(/[A-Z]/i.test(v)&&/\d/.test(v)||/[\/\-]/.test(v));
-  outer:for(const rx of lab)for(let i=0;i<lines.length;i++){const l=lines[i],m=l.match(rx);if(!m)continue;const rest=l.slice(m.index+m[0].length).trim();
+  outer:for(const rx of lab)for(let i=0;i<lines.length;i++){const l=lines[i],m=l.match(rx);if(!m)continue;if(/(gst|uen|reg(n|istration)?|co|crn|a\/?c|acc(oun)?t?|p\/?o|d\/?o|tel|fax|phone|hp|mobile|vehicle|lorry|job|customer|account)\.?\s*$/i.test(l.slice(0,m.index).trim()))continue;const rest=l.slice(m.index+m[0].length).trim();
     let v=(rest.match(NO)||[])[1];
     if(!v&&!rest.replace(/[−\-–:]/g,"").trim()){const prev=i>0?(lines[i-1].match(NOG)||[]).at(-1):null,next=i+1<lines.length?(lines[i+1].match(NOG)||[])[0]:null;v=[prev,next].find(good)||next||prev}
     if(v){no=v.replace(/[.:_-]+$/,"");break outer}}
@@ -3115,24 +3228,24 @@ function parseInvText(lines){const own=/L3H\s*RESOURCES|ETK\s*(RESOURCES|TRAFFIC
   for(const x of S.d.suppliers){const n=normCo(x.name);if(n.length<3||own.test(x.name))continue;if((" "+T+" ").includes(" "+n+" ")&&n.length>bs){bs=n.length;sup=x.name}}
   if(!sup){const l=lines.slice(0,15).find(l=>/(pte\.?\s*ltd|p\/l|limited|sdn\.?\s*bhd|\bllp\b|co\.?\s*ltd)/i.test(l)&&!own.test(l));if(l)sup=l.replace(/^(to|from)\s*[:：]?\s*/i,"").slice(0,80)}
   return{date,no,total:total==null?null:r2(total),sup}}
-async function tiReadPdfs(){for(const x of TI.files.filter(f=>f.reading)){try{const lines=await pdfLines(x.file);const r=parseInvText(lines);x.textless=lines.join("").replace(/\s/g,"").length<30;
+async function tiReadPdfs(){if(TI._busy)return;TI._busy=true;try{await pool(TI.files.filter(f=>f.reading),OCR_N,async x=>{try{const{lines,ocr}=await readDocLines(x.file);const r=parseInvText(lines);x.ocr=ocr;x.textless=lines.join("").replace(/\s/g,"").length<30;
       for(const k of ["date","no","total","sup"])if(r[k]!=null&&r[k]!=="")x[k]=r[k]}catch(e){x.textless=true}
-    x.reading=false;tiAnalyse();if($("#tiGo")||$("#photoOv"))tiRender()}}
+    x.reading=false;tiAnalyse();if($("#tiGo")||$("#photoOv"))tiRender()})}finally{TI._busy=false}if(TI.files.some(f=>f.reading))setTimeout(tiReadPdfs,0)}
 function tiSet(name,k,v){const x=TI.files.find(f=>f.name===name);if(!x)return;v=String(v??"").trim();x[k]=k==="total"?(v===""?null:r2(numOr(v,0))):k==="date"?(toYMD(v)||null):(v||null);tiAnalyse();tiRender()}
 const TI_ST={ok:["ok",["配对到","Matched"]],has:["warn",["已经有 Tax Invoice 附件","Already has a tax invoice"]],same:["mute",["已经上传过（同文件名）","Already uploaded"]],new:["warn",["系统没有 → 新增","Not in system → create"]],bad:["bad",["不是 PDF","Not a PDF"]],reading:["mute",["读取中…","Reading…"]],fill:["bad",["要补资料","Fill in"]]};
 function tiRender(){const F=TI.files,cnt=k=>F.filter(x=>x.st===k).length,go=F.filter(x=>TI.take.has(x.name)&&["ok","has","new"].includes(x.st));
   const order={reading:0,fill:1,bad:2,new:3,has:4,ok:5,same:6},rows=[...F].sort((a,b)=>order[a.st]-order[b.st]||String(a.date).localeCompare(String(b.date)));
   pvOv(`<div class="pvhead"><h3 style="margin:0">⬆ ${L("上传 Tax Invoice","Upload tax invoices")} · ${S.company}</h3><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
-  <p class="mute" style="font-size:13px;margin-top:0">${L("可以一次选很多个 PDF，或直接选整包 zip（分好的那几包）。文件名要是「日期_供应商_Invoice No_金额.pdf」。文件名不是这个格式也可以：系统会读 PDF 里的字，帮你填日期、供应商、单号、金额，你核对一下就好（扫描 / 拍照的读不到字，要自己填）。系统按 Invoice No（不管 / - 空格）+ 供应商或金额自动配对，存成那张 supplier invoice 的「Tax Invoice」附件。同一个文件上传两次不会重复。","Pick many PDFs or whole zip packs. File names: date_supplier_invoiceNo_total.pdf. Each is matched by invoice no + supplier or amount and saved as that supplier invoice's Tax Invoice attachment.")}</p>
-  <label class="btn file">⬆ ${L("选 PDF / zip","Choose PDF / zip")}<input type="file" accept=".pdf,.zip" multiple hidden onchange="tiFiles(this)"></label>
+  <p class="mute" style="font-size:13px;margin-top:0">${L("可以一次选很多个 PDF，或直接选整包 zip（分好的那几包）。文件名要是「日期_供应商_Invoice No_金额.pdf」。文件名不是这个格式也可以：系统会读 PDF 里的字，帮你填日期、供应商、单号、金额，你核对一下就好（扫描 / 拍照的会用 OCR 认字，每张约 10–20 秒，认出来要仔细核对）。系统按 Invoice No（不管 / - 空格）+ 供应商或金额自动配对，存成那张 supplier invoice 的「Tax Invoice」附件。同一个文件上传两次不会重复。","Pick many PDFs or whole zip packs. File names: date_supplier_invoiceNo_total.pdf. Each is matched by invoice no + supplier or amount and saved as that supplier invoice's Tax Invoice attachment.")}</p>
+  <label class="btn file">⬆ ${L("选 PDF / 照片 / zip","Choose PDF / photo / zip")}<input type="file" accept=".pdf,.zip,.jpg,.jpeg,.png" multiple hidden onchange="tiFiles(this)"></label>
   ${F.length?`<ul style="margin:8px 0 4px 18px;font-size:14px"><li>${L("配对到","Matched")}: <b>${cnt("ok")}</b></li><li>${L("系统没有这张（打勾的会用文件名资料新增）","Not in system (ticked = create from file name)")}: ${cnt("new")}</li>
-    <li>${L("那张已经有 Tax Invoice 附件（要再放就打勾）","Already has a tax invoice (tick to add anyway)")}: ${cnt("has")}</li><li>${L("已经上传过，跳过","Already uploaded, skipped")}: ${cnt("same")}</li>${cnt("reading")?`<li>${L("读取 PDF 中","Reading PDFs")}: ${cnt("reading")}</li>`:""}${cnt("fill")?`<li><b style="color:var(--bad)">${L("要你补资料（读不到字的扫描件）","Need details (scans without text)")}: ${cnt("fill")}</b></li>`:""}${cnt("bad")?`<li>${L("不是 PDF","Not PDF")}: ${cnt("bad")}</li>`:""}
+    <li>${L("那张已经有 Tax Invoice 附件（要再放就打勾）","Already has a tax invoice (tick to add anyway)")}: ${cnt("has")}</li><li>${L("已经上传过，跳过","Already uploaded, skipped")}: ${cnt("same")}</li>${cnt("reading")?`<li>⏳ ${L(`读取 / 认字中，还有 ${cnt("reading")} 个（扫描件每个约 10–20 秒，可以先做别的）`,`Reading / OCR: ${cnt("reading")} left`)}</li>`:""}${F.some(x=>x.ocr&&!x.reading)?`<li><span class="tag bad">OCR</span> ${L("标 OCR 的是扫描件认字读出来的，比较容易错，要仔细对","OCR rows were read from scans — check carefully")}</li>`:""}${cnt("fill")?`<li><b style="color:var(--bad)">${L("要你补资料（读不到字的扫描件）","Need details (scans without text)")}: ${cnt("fill")}</b></li>`:""}${cnt("bad")?`<li>${L("不是 PDF","Not PDF")}: ${cnt("bad")}</li>`:""}
     ${F.some(x=>x.src==="pdf"||x.src==="hint")?`<li>${L("黄色格子是从 PDF 读到的，请核对，可以直接改","Yellow fields were read from the PDF — check and edit")}</li>`:""}</ul>
   ${cnt("new")?`<label style="font-size:14px"><input type="checkbox" ${TI.paidNew?"checked":""} onchange="TI.paidNew=this.checked"> ${L("新增的当作已付（付款日期 = invoice 日期）","Mark created ones as paid (payment date = invoice date)")}</label>`:""}
   <p style="font-size:13px;margin:6px 0"><a href="#" onclick="event.preventDefault();TI.files.forEach(x=>{if(['ok','new','has'].includes(x.st))TI.take.add(x.name)});tiRender()">${L("全选","All")}</a> · <a href="#" onclick="event.preventDefault();TI.take.clear();tiRender()">${L("全不选","None")}</a></p>
   <div class="tw" style="max-height:50vh;overflow:auto"><table><thead><tr><th></th><th>${L("状态","Status")}</th><th>${L("日期","Date")}</th><th>${L("供应商","Supplier")}</th><th>Invoice No</th><th class="num">Total</th><th>${L("系统里的","In system")}</th></tr></thead><tbody>
   ${rows.map(x=>{const[t,l]=TI_ST[x.st],can=["ok","has","new"].includes(x.st);return `<tr><td>${can?`<input type="checkbox" ${TI.take.has(x.name)?"checked":""} onchange="TI.take[this.checked?'add':'delete'](${esc(JSON.stringify(x.name))});tiRender()">`:""}</td>
-    <td><span class="tag ${t}">${L(...l)}</span>${x.src==="hint"?`<div class="mute" style="font-size:12px">${L("用文件名里的单号配对到","Matched by number in file name")}</div>`:""}${x.src==="pdf"||x.src==="hint"?`<div><a href="#" onclick="window.open(URL.createObjectURL(TI.files.find(f=>f.name===${esc(JSON.stringify(x.name))}).file));return false" style="font-size:12px">👁 ${esc(x.name.slice(0,28))}</a></div>`:""}</td>
+    <td><span class="tag ${t}">${L(...l)}</span>${x.ocr&&!x.reading?' <span class="tag bad">OCR</span>':""}${x.src==="hint"?`<div class="mute" style="font-size:12px">${L("用文件名里的单号配对到","Matched by number in file name")}</div>`:""}${x.src==="pdf"||x.src==="hint"?`<div><a href="#" onclick="window.open(URL.createObjectURL(TI.files.find(f=>f.name===${esc(JSON.stringify(x.name))}).file));return false" style="font-size:12px">👁 ${esc(x.name.slice(0,28))}</a></div>`:""}</td>
     ${(x.src==="pdf"||x.src==="hint")&&!x.reading?(()=>{const N=esc(JSON.stringify(x.name)),inp=(k,v,attr)=>`<input class="tiin${v==null||v===""?" miss":""}" ${attr} value="${esc(v??"")}" onchange="tiSet(${N},'${k}',this.value)">`;
       return `<td>${inp("date",x.date,'type="date" style="width:140px"')}</td><td>${inp("sup",x.sup,'list="tiSups" style="width:200px"')}</td><td>${inp("no",x.no,'style="width:170px"')}</td><td class="num">${inp("total",x.total,'type="number" step="0.01" style="width:110px;text-align:right"')}</td>`})()
     :`<td>${x.date?dmy(x.date):""}</td><td>${esc(x.sup||"")}</td><td>${esc(x.no||x.name)}</td><td class="num">${x.total!=null?money(x.total):""}</td>`}
@@ -3729,8 +3842,24 @@ async function storeJpeg(type,id,kind,blob,origName){const path=`${S.user.id}/${
 const kb=n=>n>=1048576?(n/1048576).toFixed(1)+" MB":Math.max(1,Math.round(n/1024))+" KB";
 
 /* ---- DO 照片 ---- */
+function parseDO(lines){const T=lines.join("\n"),U=T.toUpperCase();let no=null;
+  for(const rx of[/(?:D\s*\.?\s*\/?\s*O\s*\.?|DELIVERY\s*ORDER|D\s*\/\s*N|\bDN)\s*(?:NO\.?|NUMBER|#)?\s*[:：#.]?\s*([A-Z]{0,3}-?\d{4,7})\b/i,/\bN[O0][.:]?\s*[:：]?\s*(\d{4,7})\b/i]){const m=T.match(rx);if(m){no=m[1];break}}
+  if(!no){for(const l of lines.slice(0,12)){const m=l.match(/\b(\d{5,6})\b/);if(m&&!/tel|fax|singapore|\bs\(|postal|uen|reg/i.test(l)){no=m[1];break}}}
+  let date=null;for(const l of lines)if(/date/i.test(l)){const d=dateIn2(l);if(d){date=d;break}}if(!date)for(const l of lines){const d=dateIn2(l);if(d){date=d;break}}
+  const A=U.replace(/[^A-Z0-9]/g,"");let plate=(S.d.vehicles||[]).map(v=>v.plate).filter(p=>p&&A.includes(String(p).toUpperCase().replace(/[^A-Z0-9]/g,""))).sort((a,b)=>b.length-a.length)[0]||null;
+  if(!plate){const m=U.match(/\b([A-Z]{2,3}\s?\d{1,4}\s?[A-Z])\b/);if(m)plate=m[1].replace(/\s/g,"")}
+  let cust="",bl=0;const N=" "+normCo(T)+" ";for(const c of S.d.customers){const n=normCo(c.name);if(n.length>=4&&N.includes(" "+n+" ")&&n.length>bl){bl=n.length;cust=c.id}}
+  return{no,date,plate,cust}}
 async function pickDoPhotos(input){const files=[...input.files];input.value="";if(!files.length)return;const f=S.doForm;
-  if(!String(f.do_no||"").trim()){toast(L("先填 DO 号码再拍照，才不会对错","Fill in the DO number first"));document.querySelector('.grid [name="do_no"]')?.focus();return}
+  if(!String(f.do_no||"").trim()){toast(L("DO 号码还没填：先认照片上的字（约 10–20 秒）…","No DO number yet — reading the photo (10–20 s)…"));
+    let r=null,ocr=false;try{const x=await readDocLines(files[0],1);ocr=x.ocr;r=parseDO(x.lines)}catch(e){}
+    if(S.doForm!==f)return;const got=[];
+    if(r?.no){f.do_no=r.no;got.push(L(`DO ${r.no}`,`DO ${r.no}`))}
+    if(r?.date&&(!f.do_date||f.do_date===today())&&r.date!==f.do_date){f.do_date=r.date;got.push(dmy(r.date))}
+    if(r?.plate&&!f.plate){f.plate=r.plate;got.push(r.plate)}
+    if(r?.cust&&!f.customer_id){f.customer_id=r.cust;got.push(custName(r.cust))}
+    if(!r?.no){if(got.length){recompute(f);render()}toast(L("照片上认不到 DO 号码，请先填 DO 号码再上传照片","Couldn't find the DO number — type it first, then add the photo"));document.querySelector('.grid [name="do_no"]')?.focus();return}
+    f._ocrMsg=L(`从照片认到：${got.join(" · ")}${ocr?"（OCR，请检查）":""}`,`Read from photo: ${got.join(" · ")}`);recompute(f);render();toast(f._ocrMsg)}
   const tag=`DO ${f.do_no.trim()} · ${custName(f.customer_id)||"—"} · ${dmy(f.do_date)}${f.plate?" · "+f.plate:""}`;
   try{toast(L("处理照片中…","Processing…"));const blobs=[];let n=0;const raw=[];for(const file of files)for(const b of await toJpegs(file,6))raw.push({b,name:file.name});
     for(const x of raw){n++;const c=await cropImage(x.b,tag+(raw.length>1?` (${n}/${raw.length})`:""),f.do_no.trim());if(c)blobs.push({blob:c,name:`DO-${f.do_no.trim()}${raw.length>1?"-"+n:""}.jpg`})}
@@ -3742,7 +3871,7 @@ function doPhotoBox(f){const list=f.id?doPhotos(f.id):[],pend=f._pending||[];
   return `<div class="att" style="margin-top:10px"><h3>${L("DO 照片","DO photo")}${f.do_no?` · DO ${esc(f.do_no)}`:""} ${list.length||pend.length?`<span class="tag ok">${list.length+pend.length}</span>`:`<span class="tag warn">${L("还没有","None yet")}</span>`}</h3>
   ${list.length?`<ul>${list.map(a=>`<li><a href="#" onclick="viewDoPhoto('${f.id}',['${f.id}']);return false">📷 ${esc(a.file_name||"DO")}</a> <button class="x" onclick="delAtt('${a.id}')" title="Delete">✕</button></li>`).join("")}</ul>`:""}
   ${pend.length?`<p class="mute">${L(`已选 ${pend.length} 张（${kb(pend.reduce((s,x)=>s+x.blob.size,0))}），按「保存」时上传`,`${pend.length} ready, uploads on save`)} <button class="btn sec sm" onclick="S.doForm._pending=[];render()">${L("清除","Clear")}</button></p>`:""}
-  ${f.do_no?"":`<p class="mute" style="font-size:13px;margin:4px 0">${L("先填 DO 号码，才可以拍照。","Fill in the DO number before taking the photo.")}</p>`}
+  ${f._ocrMsg?`<p style="font-size:13px;margin:4px 0"><span class="tag warn">🔍 ${esc(f._ocrMsg)}</span></p>`:""}${f.do_no?"":`<p class="mute" style="font-size:13px;margin:4px 0">${L("还没填 DO 号码也可以直接拍照 / 选照片：系统会先认照片上的 DO 号码、日期、车牌（手写的不一定认得到）。","No DO number yet? Just add the photo — the system will try to read the DO no., date and vehicle.")}</p>`}
   <div class="attadd"><label class="btn sm file">📷 ${L("拍照","Take photo")}<input type="file" hidden accept="image/*" capture="environment" onchange="pickDoPhotos(this)"></label>
     <label class="btn sec sm file">📎 ${L("选照片 / PDF","Choose photo / PDF")}<input type="file" hidden accept="image/*,application/pdf" multiple onchange="pickDoPhotos(this)"></label></div></div>`}
 
