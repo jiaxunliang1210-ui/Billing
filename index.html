@@ -330,7 +330,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-16";
+const APP_VER="2026-10-16b";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -461,7 +461,15 @@ const mfApplies=m=>c=>c.active&&c.start_month<=m&&(!c.end_month||c.end_month>=m)
 const mfLog=(cid,m)=>S.d.monthly_fix_log.find(l=>l.monthly_fix_id===cid&&l.bill_month===m);
 
 /* ================= 资料 ================= */
-async function fetchAll(build){let out=[],i=0;for(;;){const{data,error}=await build().range(i,i+999);if(error)throw error;out=out.concat(data);if(data.length<1000)break;i+=1000}return out}
+/* 一次最多 1000 笔，分页拿。每页都加 id 排序：排序栏位有重复（例：line_no 都是 1）时，分页会漏掉或重复某些笔 */
+const NO_ID=new Set();
+async function fetchAll(build){let out=[],i=0,useId=true;
+  for(;;){let b=build();const tbl=b?.url?.pathname?.split("/").pop()||"";if(useId&&!NO_ID.has(tbl)&&typeof b.order==="function")b=b.order("id",{ascending:true});
+    const{data,error}=await b.range(i,i+999);
+    if(error){if(useId&&/\bid\b/i.test(error.message||"")&&/column|does not exist/i.test(error.message||"")){NO_ID.add(tbl);useId=false;out=[];i=0;continue}throw error}
+    out=out.concat(data);if(data.length<1000)break;i+=1000}
+  if(out.length>1000&&out[0]&&out[0].id!=null){const seen=new Set();out=out.filter(r=>seen.has(r.id)?false:(seen.add(r.id),true))}
+  return out}
 async function loadAll(){
   const co=S.company,q=(t,f)=>fetchAll(()=>{const b=sb.from(t).select("*");return f?f(b):b});
   try{
@@ -2098,9 +2106,11 @@ Save anyway?`)))return}
       if(!edits.length)edits.push({invoice_id:id,field:"lines",old_value:"",new_value:"",reason});
       const e1=await sb.from("invoice_edits").insert(edits);if(e1.error)return w.textContent=e1.error.message}
     const{error}=await sb.from("invoices").update(row).eq("id",id);if(error)return w.textContent=error.message;
-    await sb.from("invoice_lines").delete().eq("invoice_id",id);
   }else{const{data,error}=await sb.from("invoices").insert(row).select().single();if(error)return w.textContent=error.message;id=data.id}
-  const e2=await sb.from("invoice_lines").insert(f.lines.map((l,i)=>({invoice_id:id,line_no:i+1,description:l.description||"",qty:l.qty,unit:l.unit||null,unit_price:l.unit==="hrs"||(isL3()&&l.unit_price==null)?null:(l.unit_price??l.amount),amount:Number(l.amount)||0})));if(e2.error)return w.textContent=e2.error.message;
+  {const{data:oldL}=await sb.from("invoice_lines").select("id").eq("invoice_id",id);
+    const e2=await sb.from("invoice_lines").insert(f.lines.map((l,i)=>({invoice_id:id,line_no:i+1,description:l.description||"",qty:l.qty,unit:l.unit||null,unit_price:l.unit==="hrs"||(isL3()&&l.unit_price==null)?null:(l.unit_price??l.amount),amount:Number(l.amount)||0}))).select("id");
+    if(e2.error){alert(L("明细保存失败（旧明细保留不动）：","Lines not saved (old lines kept): ")+e2.error.message);return w.textContent=e2.error.message}
+    const oids=(oldL||[]).map(x=>x.id);if(oids.length)await sb.from("invoice_lines").delete().in("id",oids)}
   if(isL3()&&f.kind==="machine"&&f._mchosen){await sb.from("machine_bills").delete().eq("invoice_id",id);
     const mb=f._mchosen.map(r=>({company:S.company,log_id:r.l.id,invoice_id:id,period_from:r.from,period_to:r.to,days:r.days,rate_type:r.type,rate:r.rate,amount:r.amount}));
     if(mb.length){const e3=await sb.from("machine_bills").insert(mb);if(e3.error)return w.textContent=e3.error.message}}
@@ -2137,9 +2147,11 @@ async function invRecalcSave(r,reason){const inv=r.inv,id=inv.id;if(!r.f.lines.l
   if(inv.checked||inv.sent_at){const edits=[["amount_before_gst",inv.amount_before_gst,row.amount_before_gst],["gst_amount",inv.gst_amount,row.gst_amount],["total",inv.total,row.total],["due_date",inv.due_date,row.due_date]]
       .filter(([,o,n])=>typeof n==="number"?Math.abs((Number(o)||0)-n)>0.005:String(o??"")!==String(n??"")).map(([field,o,n])=>({invoice_id:id,field,old_value:String(o??""),new_value:String(n??""),reason}));
     if(!edits.length)edits.push({invoice_id:id,field:"lines",old_value:"",new_value:"",reason});const e0=await sb.from("invoice_edits").insert(edits);if(e0.error)throw e0.error}
-  let e=await sb.from("invoices").update(row).eq("id",id);if(e.error)throw e.error;
-  e=await sb.from("invoice_lines").delete().eq("invoice_id",id);if(e.error)throw e.error;
-  e=await sb.from("invoice_lines").insert(r.f.lines.map((l,i)=>({invoice_id:id,line_no:i+1,description:l.description||"",qty:l.qty,unit:l.unit||null,unit_price:l.unit==="hrs"||(isL3()&&l.unit_price==null)?null:(l.unit_price??l.amount),amount:Number(l.amount)||0})));if(e.error)throw e.error}
+  const{data:oldL}=await sb.from("invoice_lines").select("id").eq("invoice_id",id);
+  let e=await sb.from("invoice_lines").insert(r.f.lines.map((l,i)=>({invoice_id:id,line_no:i+1,description:l.description||"",qty:l.qty,unit:l.unit||null,unit_price:l.unit==="hrs"||(isL3()&&l.unit_price==null)?null:(l.unit_price??l.amount),amount:Number(l.amount)||0}))).select("id");if(e.error)throw e.error;
+  if(!(e.data||[]).length)throw new Error(L("新明细没存进去，旧明细保留不动","New lines not saved — old lines kept"));
+  const oids=(oldL||[]).map(x=>x.id);if(oids.length){const d=await sb.from("invoice_lines").delete().in("id",oids);if(d.error)throw d.error}
+  e=await sb.from("invoices").update(row).eq("id",id);if(e.error)throw e.error}
 function rcDiffHTML(r){const row=l=>`<tr><td class="wrap" style="white-space:pre-line">${esc(String(l.description||"").replace(NOUL,""))}</td><td class="num">${l.qty??""} ${esc(l.unit||lineUnit(l))}</td><td class="num">${l.unit_price!=null?money(l.unit_price):""}</td><td class="num">${money(l.amount)}</td></tr>`;
   const tbl=(ls,tot,ttl)=>`<div style="flex:1;min-width:260px"><h3>${ttl}</h3><div class="tw"><table><thead><tr><th>Description</th><th class="num">Qty</th><th class="num">${L("单价","Price")}</th><th class="num">${L("金额","Amount")}</th></tr></thead><tbody>${ls.map(row).join("")}</tbody><tfoot><tr><td colspan="3">Total（${L("含 GST","incl. GST")}）</td><td class="num">${money(tot)}</td></tr></tfoot></table></div></div>`;
   return `${r.plan.length?`<p><b>${L("DO 价钱换成 Master List 现在的价钱：","DO prices from current Master List:")}</b><br>${r.plan.slice(0,10).map(x=>`DO ${esc(x.d.do_no||"")} · ${dmy(x.d.do_date)}：$${money(x.d.amount)} → <b>$${money(x.amount)}</b>`).join("<br>")}${r.plan.length>10?`<br>… ${L("还有","and")} ${r.plan.length-10}`:""}</p>`:""}
@@ -2159,6 +2171,13 @@ async function invRefreshGo(){const r=RC1;if(!r)return;let reason="";
   if(r.inv.checked||r.inv.sent_at){reason=prompt(L("这张已检查或已发送，请输入修改原因：","Checked or sent — reason for the change:"),L("按最新资料重算","Recalculated with latest data"));if(!reason)return}
   try{await invRecalcSave(r,reason)}catch(e){return toast(e.message)}
   document.querySelector("#photoOv")?.remove();RC1=null;await loadAll();await syncStatuses([r.inv.id]);toast(L("已更新","Updated"));openInv(r.inv.id)}
+/* 客户付款天数改了：只更新还没寄出单的 Due date，不动明细 */
+async function dueScan(cid){const c=custOf(cid),t=Number(c.payment_terms_days??30);
+  const list=S.d.invoices.filter(i=>i.customer_id===cid&&!i.sent_at&&paidOf(i)<0.005&&!["Cancelled","CN"].includes(i.status)&&i.invoice_date).map(i=>({i,nd:addDays(i.invoice_date,t)})).filter(x=>x.nd!==x.i.due_date);
+  if(!list.length)return;
+  if(!confirm(L(`${c.name} 的付款天数改成 ${t} 天。\n${list.length} 张还没寄出的单 Due date 要跟着改吗？（只改 Due date，明细和金额不动）\n\n${list.slice(0,8).map(x=>`${x.i.invoice_no}：${dmy(x.i.due_date)} → ${dmy(x.nd)}`).join("\n")}${list.length>8?"\n…":""}`,`Update due dates of ${list.length} unsent invoices?`)))return;
+  for(const x of list){const{error}=await sb.from("invoices").update({due_date:x.nd}).eq("id",x.i.id);if(error)return toast(error.message)}
+  await loadAll();render();toast(L(`已改 ${list.length} 张的 Due date`,`${list.length} due dates updated`))}
 async function invScan(o){o=o||{};
   let cands=S.d.invoices.filter(i=>i.company===S.company&&!["Cancelled","CN"].includes(i.status)&&(!o.customer_id||i.customer_id===o.customer_id));
   cands=cands.filter(i=>!i.sent_at&&paidOf(i)<0.005&&!isMachInv(i)&&!invOrig(i));
@@ -2676,11 +2695,11 @@ async function saveGen(ent){const cfg=ENT[ent],fd=new FormData($("#gForm")),row=
   if(miss.length)return $("#gWarn").textContent=L("请填写：","Please fill in: ")+miss.join(", ");
   if(ent==="rates"){const cd=cSvc(row.service);if(cd&&"unit" in row)row.unit=cd.unit}
   const err=cfg.before?.(row,S.gEdit);if(typeof err==="string")return $("#gWarn").textContent=err;
-  const wasNew=!S.gEdit.id;
+  const wasNew=!S.gEdit.id,oldTerms=S.gEdit.payment_terms_days;
   const{data,error}=S.gEdit.id?await sb.from(ent).update(row).eq("id",S.gEdit.id).select().single():await sb.from(ent).insert(row).select().single();
   if(error)return $("#gWarn").textContent=error.message;
   if(ent==="supplier_invoices"&&S.gEdit?._pdf&&data?.id){try{await attUploadFile("supplier_invoices",data.id,S.gEdit._pdf,"Tax Invoice")}catch(e){toast(L("已保存，但 PDF 附件上传失败：","Saved, but PDF upload failed: ")+(e.message||e))}}
-  toast(L("已保存","Saved"));await loadAll();if(ent==="rates")setTimeout(()=>rateChanged(data),300);if(ent==="customers"&&!wasNew)setTimeout(()=>invScan({customer_id:data.id,quiet:true,why:L("你刚改了这个客户的资料。客户名称、地址、Attn 下载 PDF 时本来就会用最新的；下面是付款期限或明细受影响的单：","You changed this customer.")}),300);if(ent==="services"&&!wasNew)setTimeout(()=>invScan({quiet:true,why:L("你刚改了 Service 设定，下面这些还没寄出的单用的是旧的写法 / 单位：","You changed a service setting.")}),300);
+  toast(L("已保存","Saved"));await loadAll();if(ent==="rates")setTimeout(()=>rateChanged(data),300);if(ent==="customers"&&!wasNew&&Number(oldTerms??30)!==Number(data.payment_terms_days??30))setTimeout(()=>dueScan(data.id),300);if(ent==="services"&&!wasNew)setTimeout(()=>invScan({quiet:true,why:L("你刚改了 Service 设定，下面这些还没寄出的单用的是旧的写法 / 单位：","You changed a service setting.")}),300);
   if(wasNew&&cfg.att){S.gEdit={...data};S.dirty=true;toast(L("已保存，现在可以上传附件","Saved. You can upload attachments now."))}else done();render()}
 async function delGen(ent,id){if(!confirm(L("确定删除？","Delete this record?")))return;const keep=JSON.parse(JSON.stringify(S.d[ent].find(r=>r.id===id)||null));if(keep)await binSave(ent,keep);const{error}=await sb.from(ent).delete().eq("id",id);
   if(error)return toast(error.message.includes("foreign key")?L("还有其他资料在用这笔，不能删除。","Other records still use this; can't delete."):error.message);
