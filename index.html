@@ -93,6 +93,7 @@ main .tw thead th{z-index:2}
 #toTop{position:fixed;right:18px;bottom:18px;z-index:120;width:44px;height:44px;border-radius:50%;border:1px solid var(--line);background:var(--panel2);color:inherit;font-size:18px;cursor:pointer;display:none;box-shadow:0 6px 18px rgba(0,0,0,.3)}
 #toTop.show{display:block}
 .rcw{color:var(--red,#e5484d);font-weight:600;margin:6px 0}
+.bkbar{background:#c62828;color:#fff;padding:6px 14px;font-weight:600;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 #updBar{position:fixed;left:50%;transform:translateX(-50%);top:8px;z-index:9999;background:#f5b301;color:#1a1a1a;font-weight:600;padding:8px 12px;border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.35);display:flex;gap:8px;align-items:center;flex-wrap:wrap;max-width:calc(100vw - 24px)}
 .brand .ver{font-size:11px;font-weight:400;opacity:.55;margin-left:6px}
 [data-drop].dropping{outline:3px dashed var(--amber,#f5a623);outline-offset:3px}
@@ -329,7 +330,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-15j";
+const APP_VER="2026-10-16";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -516,6 +517,7 @@ function render(){
     <button class="ghost" onclick="toggleLang()">${L("EN","中文")}</button>
     <button class="ghost" onclick="toggleTheme()">${S.theme==="dark"?L("☀️ 浅色","☀️ Light"):L("🌙 深色","🌙 Dark")}</button>
     <button class="ghost" onclick="logout()">${L("登出","Log out")}</button></header>
+  ${(()=>{const a=backupAge();return a==null||a>7?`<div class="bkbar">⚠ ${a==null?L("这台电脑还没备份过资料","This device has never made a backup"):L(`已经 ${a} 天没备份资料`,`No backup for ${a} days`)} <button class="btn sm" onclick="backupNow()">⬇ ${L("现在备份","Back up now")}</button></div>`:""})()}
   <nav class="tabs">${TABS.filter(([k])=>k!=="exc"||isL3()).map(([k,zh,en])=>`<button class="${S.tab===k?"on":""}" onclick="setTab('${k}')">${L(zh,en)}${k==="sum"&&urgent?`<span class="badge">${urgent}</span>`:""}</button>`).join("")}</nav>
   <main>${V[S.tab]()}</main><div id="modalRoot">${S.modal?modalView():""}</div><button id="toTop" title="${L("回到顶部","Back to top")}" onclick="toTop()">⬆</button>`;
   updSync();afterRender(prevTab,prevScr);
@@ -667,7 +669,7 @@ async function saveDO(){
   document.querySelector('.grid [name="do_no"]')?.focus();
 }
 async function delDO(id){const dd=S.d.delivery_orders.find(x=>x.id===id);if(dd?.invoice_id)return toast(L(`这张 DO 已开在 ${invById(dd.invoice_id)?.invoice_no||"invoice"}，要先从 invoice 拿出来才可以删除。`,"Billed DO — remove it from the invoice first."));
-  if(!confirm(L("确定删除这张 DO？","Delete this DO?")))return;
+  if(!confirm(L("确定删除这张 DO？","Delete this DO?")))return;if(dd)await binSave("delivery_orders",JSON.parse(JSON.stringify(dd)));
   const{error}=await sb.from("delivery_orders").delete().eq("id",id);if(error)return toast(error.message);
   const ph=doPhotos(id);if(ph.length){await sb.storage.from("attachments").remove(ph.map(a=>a.file_path));await sb.from("attachments").delete().in("id",ph.map(a=>a.id));S.d.attachments=S.d.attachments.filter(a=>!ph.includes(a))}
   toast(L("已删除","Deleted"));S.doForm=null;done();await loadDO();render()}
@@ -2071,6 +2073,19 @@ async function saveInv(){
   if(!f.lines.length){w.textContent=L("至少要有一行明细","Add at least one line");return}
   {const dup=S.d.invoices.find(i=>normNo(i.invoice_no)===normNo(f.invoice_no)&&i.id!==f.id);if(dup){w.textContent=L(`Invoice No 已经存在：${dup.invoice_no}（${dmy(dup.invoice_date)} · ${custName(dup.customer_id)} · $${money(dup.total)}）`,`Invoice number already exists: ${dup.invoice_no}`);return}}
   const t=invTotals(f);
+  {const warn=[];if(!(t.total>0.005))warn.push(L(`Total 是 $${money(t.total)}`,`Total is $${money(t.total)}`));
+    if(Number(f.gst_rate)!==9&&Number(f.gst_rate)!==0)warn.push(L(`GST 是 ${f.gst_rate}%（一般 9%）`,`GST ${f.gst_rate}%`));
+    const chosen=(f.dos||[]).filter(d=>f.sel?.has(d.id));if(chosen.length&&!(isL3()&&f.kind==="machine")){const ds=r2(sum(chosen,d=>Number(d.amount)||0));if(Math.abs(ds-t.sub)>0.01)warn.push(L(`勾选的 ${chosen.length} 张 DO 合计 $${money(ds)}，明细合计 $${money(t.sub)}，差 $${money(r2(t.sub-ds))}`,`DO total $${money(ds)} ≠ lines $${money(t.sub)}`))}
+    if(f.lines.some(l=>!String(l.description||"").replace(NOUL,"").trim()))warn.push(L("有明细没写 Description","A line has no description"));
+    if(warn.length&&!confirm(L(`保存前检查：
+
+• ${warn.join("\n• ")}
+
+确定这样保存？`,`Check before saving:
+
+• ${warn.join("\n• ")}
+
+Save anyway?`)))return}
   const row={company:S.company,customer_id:f.customer_id,invoice_no:f.invoice_no.trim(),invoice_date:f.invoice_date,due_date:f.due_date||null,customer_po:f.customer_po||null,
     our_ref:f.our_ref||null,description:f.description||null,project:f.project||null,period_from:f.period_from||null,period_to:f.period_to||null,
     amount_before_gst:t.sub,gst_rate:Number(f.gst_rate)||0,gst_amount:t.gst,total:t.total,remark:f.remark||null,interest_enabled:!!f.interest_enabled,monthly_fix_id:f.monthly_fix_id||null};
@@ -2211,8 +2226,22 @@ const signName=s=>s.sign_name||"Jia Xun";
 const fileBase=inv=>{const c=custOf(inv.customer_id),sn=String(c.short_name||"").trim().replace(/[\\/:*?"<>|\s]+/g,"");return inv.invoice_no.replace(/[\\/:*?"<>|]+/g,"-")+(sn?"-"+sn:"")};
 function openOut(via,c,subj,text){if(via==="WhatsApp"){if(!c.whatsapp)toast(L("客户没有 WhatsApp 号码，请在 Master List 加","No WhatsApp number for this customer"));window.open(waLink(c.whatsapp,text),"_blank")}
   else{if(!c.email)toast(L("客户没有 email，请在 Master List 加","No email for this customer"));location.href=mailLink(c.email,subj,text,c.email_cc)}}
+/* ---- 寄出前检查 ---- */
+async function preflight(id,what){const i=invById(id);if(!i)return false;const iss=[];
+  const lines=S.d.invoice_lines.filter(l=>l.invoice_id===id),ls=r2(sum(lines,l=>Number(l.amount)||0));
+  if(!i.checked)iss.push(L("金额还没「标记已检查」","Amount not marked as checked"));
+  if(!signedOf(i))iss.push(L("还没上传 Chris 签名的第一页","No signed first page uploaded"));
+  if(!(Number(i.total)>0.005))iss.push(L(`金额是 $${money(i.total)}`,`Total is $${money(i.total)}`));
+  if(!lines.length&&!invOrig(i))iss.push(L("没有明细","No lines"));
+  else if(lines.length&&Math.abs(ls-(Number(i.amount_before_gst)||0))>0.01)iss.push(L(`明细合计 $${money(ls)} ≠ Amt before GST $${money(i.amount_before_gst)}`,`Lines $${money(ls)} ≠ subtotal`));
+  {const g=r2((Number(i.amount_before_gst)||0)*(Number(i.gst_rate)||0)/100);if(Math.abs(g-(Number(i.gst_amount)||0))>0.02)iss.push(L(`GST $${money(i.gst_amount)} 跟 ${i.gst_rate}% 算出来的 $${money(g)} 不一样`,`GST mismatch`))}
+  if(Number(i.gst_rate)!==9&&Number(i.gst_rate)!==0)iss.push(L(`GST 是 ${i.gst_rate}%（一般是 9%）`,`GST ${i.gst_rate}%`));
+  if(!isMachInv(i)&&!invOrig(i)){try{const{data}=await sb.from("delivery_orders").select("amount").eq("invoice_id",id);if(data&&data.length){const ds=r2(sum(data,d=>Number(d.amount)||0));
+      if(Math.abs(ds-(Number(i.amount_before_gst)||0))>0.01)iss.push(L(`${data.length} 张 DO 合计 $${money(ds)} ≠ Invoice $${money(i.amount_before_gst)}`,`DO total $${money(ds)} ≠ invoice`))}}catch(e){}}
+  if(!iss.length)return true;
+  return confirm(L(`${i.invoice_no} ${what||"寄出"}前检查，发现：\n\n• ${iss.join("\n• ")}\n\n确定还是要继续？`,`${i.invoice_no} pre-send check:\n\n• ${iss.join("\n• ")}\n\nContinue anyway?`))}
 async function sendInv(id,via){const i=invById(id),c=custOf(i.customer_id),s=settingsOf(i.company);
-  if(!signedOf(i)&&!confirm(L("这张 invoice 还没上传 Chris 签名的第一页。确定现在就发？","No signed page uploaded for this invoice yet. Send anyway?")))return;
+  if(!await preflight(id,L("寄出","sending")))return;
   const text=`Dear Team,\n\nPlease find the attached invoice for your reference.\n\n\nThank you.\n\nBest regards,\n${signName(s)}`;
   openOut(via,c,`Tax Invoice For ${i.invoice_no}`,text);
   setTimeout(async()=>{if(confirm(L(`已经用 ${via} 发送了吗？按确定记录今天的发送日期。\n（PDF 请自己附上）`,`Sent by ${via}? Press OK to record today's date.\n(Attach the PDF yourself)`))){
@@ -2222,9 +2251,28 @@ async function remind(id,via){const i=invById(id),c=custOf(i.customer_id),s=sett
   openOut(via,c,`Payment Reminder For ${i.invoice_no}`,text);
   setTimeout(async()=>{if(confirm(L("已经发送提醒了吗？按确定记录。","Reminder sent? Press OK to record it."))){
     const{error}=await sb.from("reminders").insert({invoice_id:id,sent_at:today(),sent_via:via});if(error)return toast(error.message);await loadAll();render()}},900)}
+/* ---- 🗑 回收站：删除前先存一份（要跑 SQL 建 deleted_log） ---- */
+async function binSave(entity,row,extra){try{const{error}=await sb.from("deleted_log").insert({company:row?.company||S.company,entity,row,extra:extra||null,label:binLabel(entity,row)});if(error&&!S._binWarned){S._binWarned=1;console.warn(error.message)}}catch(e){}}
+function binLabel(ent,r){if(!r)return ent;return ent==="invoices"?`Invoice ${r.invoice_no} · ${custName(r.customer_id)} · $${money(r.total)}`:ent==="delivery_orders"?`DO ${r.do_no} · ${dmy(r.do_date)} · ${custName(r.customer_id)} · $${money(r.amount)}`:ent==="payments"?`${L("收款","Payment")} ${dmy(r.payment_date)} · ${custName(r.customer_id)} · $${money(r.amount)}`:ent==="supplier_invoices"?`Supplier ${r.invoice_no} · ${supName(r.supplier_id)} · $${money(r.total)}`:`${ent} · ${r.name||r.invoice_no||r.do_no||r.id}`}
+async function binOpen(){let rows=[];try{const{data,error}=await sb.from("deleted_log").select("*").order("deleted_at",{ascending:false}).range(0,199);if(error)throw error;rows=(data||[]).filter(r=>!r.restored_at&&(!r.deleted_at||daysBetween(String(r.deleted_at).slice(0,10),today())<=90))}
+  catch(e){return alert(L("回收站还没开：请先在 Supabase 跑「补充-回收站-Supabase.sql」。","Recycle bin not set up — run the recycle-bin SQL first."))}
+  pvOv(`<div class="pvhead"><h3 style="margin:0">🗑 ${L("回收站（90 天内删除的）","Recycle bin (last 90 days)")}</h3><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
+    ${rows.length?`<div class="tw" style="max-height:65vh;overflow:auto"><table><thead><tr><th>${L("删除时间","Deleted")}</th><th>${L("公司","Co")}</th><th>${L("内容","What")}</th><th></th></tr></thead><tbody>
+    ${rows.map(r=>`<tr><td style="white-space:nowrap">${tHM(r.deleted_at)}</td><td>${esc(r.company||"")}</td><td class="wrap">${esc(r.label||r.entity)}</td><td><button class="btn sm" onclick="binRestore('${r.id}')">↩ ${L("恢复","Restore")}</button></td></tr>`).join("")}</tbody></table></div>`:`<p class="mute">${L("回收站是空的。","Nothing here.")}</p>`}`)}
+async function binRestore(bid){const{data:b,error}=await sb.from("deleted_log").select("*").eq("id",bid).single();if(error||!b)return toast(error?.message||"?");
+  if(!confirm(L(`恢复：${b.label}？`,`Restore ${b.label}?`)))return;
+  try{const r1=await sb.from(b.entity).insert(b.row);if(r1.error)throw r1.error;const x=b.extra||{};
+    if(x.lines?.length){const r=await sb.from("invoice_lines").insert(x.lines);if(r.error)throw r.error}
+    if(x.allocs?.length){const r=await sb.from("payment_allocations").insert(x.allocs);if(r.error)throw r.error}
+    if(x.dos?.length)await sb.from("delivery_orders").update({invoice_id:b.row.id}).in("id",x.dos);
+    await sb.from("deleted_log").update({restored_at:new Date().toISOString()}).eq("id",bid);
+    await loadAll();if(x.allocs?.length)await syncStatuses(x.allocs.map(a=>a.invoice_id));document.querySelector("#photoOv")?.remove();render();toast(L("已恢复","Restored"))}
+  catch(e){alert(L("恢复失败：","Restore failed: ")+(e.message||e)+L("\n（可能已经有同号码的资料）","\n(maybe a record with the same number exists)"))}}
 async function delInv(id){const i=invById(id);
   if(paidOf(i)>0)return alert(L("这张 invoice 已有收款，先到「收款」删除或改分配，才能删除。","This invoice has payments. Remove them in Payments first."));
   if(!confirm(L(`确定删除 ${i.invoice_no}？里面的 DO 会变回未开单。`,`Delete ${i.invoice_no}? Its DOs return to unbilled.`)))return;
+  {let dos=[];try{const{data}=await sb.from("delivery_orders").select("id").eq("invoice_id",id);dos=(data||[]).map(d=>d.id)}catch(e){}
+    await binSave("invoices",JSON.parse(JSON.stringify(i)),{lines:JSON.parse(JSON.stringify(S.d.invoice_lines.filter(l=>l.invoice_id===id))),dos})}
   await sb.from("delivery_orders").update({invoice_id:null}).eq("invoice_id",id);
   await sb.from("monthly_fix_log").update({invoice_id:null,status:"Confirmed"}).eq("invoice_id",id);
   if(isMachInv(i))await sb.from("machine_bills").delete().eq("invoice_id",id);
@@ -2332,7 +2380,7 @@ async function savePay(){const f=S.modal.f,w=$("#payWarn");
   if(!f.id){openPayForm(S.d.payments.find(p=>p.id===id));toast(L("已保存，现在可以上传收据","Saved. You can upload the receipt now."))}else render()}
 async function syncStatuses(ids){for(const id of new Set(ids)){const i=invById(id);if(!i)continue;const s=statusOf(i);if(s==="CN")continue;if(s!==i.status){await sb.from("invoices").update({status:s}).eq("id",id);i.status=s}}}
 async function delPay(id){if(!confirm(L("确定删除这笔收款？","Delete this payment?")))return;const ids=S.d.payment_allocations.filter(a=>a.payment_id===id).map(a=>a.invoice_id);
-  const keep=JSON.parse(JSON.stringify(S.d.payments.find(p=>p.id===id)||null)),keepA=JSON.parse(JSON.stringify(S.d.payment_allocations.filter(a=>a.payment_id===id)));
+  const keep=JSON.parse(JSON.stringify(S.d.payments.find(p=>p.id===id)||null)),keepA=JSON.parse(JSON.stringify(S.d.payment_allocations.filter(a=>a.payment_id===id)));if(keep)await binSave("payments",keep,{allocs:keepA});
   const{error}=await sb.from("payments").delete().eq("id",id);if(error)return toast(error.message);await loadAll();await syncStatuses(ids);await closeModal();
   if(keep)undoToast(L("收款已删除","Payment deleted"),async()=>{const r1=await sb.from("payments").insert(keep);if(r1.error)return toast(r1.error.message);
     if(keepA.length){await sb.from("payment_allocations").delete().eq("payment_id",id);const r2=await sb.from("payment_allocations").insert(keepA);if(r2.error)return toast(r2.error.message)}
@@ -2634,7 +2682,7 @@ async function saveGen(ent){const cfg=ENT[ent],fd=new FormData($("#gForm")),row=
   if(ent==="supplier_invoices"&&S.gEdit?._pdf&&data?.id){try{await attUploadFile("supplier_invoices",data.id,S.gEdit._pdf,"Tax Invoice")}catch(e){toast(L("已保存，但 PDF 附件上传失败：","Saved, but PDF upload failed: ")+(e.message||e))}}
   toast(L("已保存","Saved"));await loadAll();if(ent==="rates")setTimeout(()=>rateChanged(data),300);if(ent==="customers"&&!wasNew)setTimeout(()=>invScan({customer_id:data.id,quiet:true,why:L("你刚改了这个客户的资料。客户名称、地址、Attn 下载 PDF 时本来就会用最新的；下面是付款期限或明细受影响的单：","You changed this customer.")}),300);if(ent==="services"&&!wasNew)setTimeout(()=>invScan({quiet:true,why:L("你刚改了 Service 设定，下面这些还没寄出的单用的是旧的写法 / 单位：","You changed a service setting.")}),300);
   if(wasNew&&cfg.att){S.gEdit={...data};S.dirty=true;toast(L("已保存，现在可以上传附件","Saved. You can upload attachments now."))}else done();render()}
-async function delGen(ent,id){if(!confirm(L("确定删除？","Delete this record?")))return;const keep=JSON.parse(JSON.stringify(S.d[ent].find(r=>r.id===id)||null));const{error}=await sb.from(ent).delete().eq("id",id);
+async function delGen(ent,id){if(!confirm(L("确定删除？","Delete this record?")))return;const keep=JSON.parse(JSON.stringify(S.d[ent].find(r=>r.id===id)||null));if(keep)await binSave(ent,keep);const{error}=await sb.from(ent).delete().eq("id",id);
   if(error)return toast(error.message.includes("foreign key")?L("还有其他资料在用这笔，不能删除。","Other records still use this; can't delete."):error.message);
   done();await loadAll();render();
   if(keep)undoToast(L("已删除","Deleted"),async()=>{const{error}=await sb.from(ent).insert(keep);if(error)return toast(error.message);await loadAll();render();toast(L("已恢复","Restored"))})}
@@ -3573,8 +3621,26 @@ async function importExcel(input){const file=input.files[0];if(!file)return;inpu
 /* ================= 备份 / 还原 ================= */
 const BK_TABLES=["customers","vehicles","suppliers","company_settings","rates","customer_surcharges","diesel_surcharges","monthly_fix","invoices","delivery_orders",
   "invoice_lines","invoice_edits","payments","payment_allocations","reminders","soa_sends","monthly_fix_log","supplier_invoices","attachments",
-  "payment_vouchers","payment_voucher_lines","projects","drivers","machines","machine_logs","machine_bills"];
+  "payment_vouchers","payment_voucher_lines","projects","drivers","machines","machine_logs","machine_bills","services","deleted_log"];
 const backupAge=()=>{const d=pref("lastBackup","");return d?daysBetween(d,today()):null};
+/* ---- 扫描件备份：一个月的文件打包 zip ---- */
+async function scanBackup(m){m=m||prompt(L("要备份哪个月的扫描件？（例：2026-09）","Which month? (e.g. 2026-09)"),prevMonthRange()[0].slice(0,7));if(!m||!/^\d{4}-\d{2}$/.test(m))return;
+  const from=`${m}-01`,to=lastDayOf(m),co=S.company,inM=d=>d&&d>=from&&d<=to,pick=[];
+  for(const a of S.d.attachments){let ok=false,folder="",nm="";
+    if(a.entity_type==="invoice"||a.entity_type==="invoices"){const i=invById(a.entity_id);if(i&&i.company===co&&inM(i.invoice_date)){ok=true;folder="Sales Invoice";nm=i.invoice_no}}
+    else if(a.entity_type==="supplier_invoices"){const x=S.d.supplier_invoices.find(z=>z.id===a.entity_id);if(x&&siMine(x)&&inM(siRecv(x))){ok=true;folder="Tax Invoice (Supplier)";nm=`${supName(x.supplier_id)} ${x.invoice_no}`}}
+    else if(a.entity_type==="payment"){const x=S.d.payments.find(z=>z.id===a.entity_id);if(x&&(x.company===co||!x.company)&&inM(x.payment_date)){ok=true;folder="Payment";nm=`${custName(x.customer_id)} ${x.payment_date}`}}
+    else if(a.entity_type==="pv"){const x=(S.d.pvs||[]).find(z=>z.id===a.entity_id);if(x&&inM(x.pv_date)){ok=true;folder="PV";nm=x.pv_no||x.pv_date}}
+    if(ok)pick.push({a,folder,nm})}
+  let dos=[];try{dos=await fetchAll(()=>sb.from("delivery_orders").select("id,do_no,do_date").eq("company",co).gte("do_date",from).lte("do_date",to))}catch(e){}
+  const dm=new Map(dos.map(d=>[d.id,d]));let doAtt=[];try{const ids=dos.map(d=>d.id);for(let k=0;k<ids.length;k+=150){const{data}=await sb.from("attachments").select("*").eq("entity_type","do").in("entity_id",ids.slice(k,k+150));doAtt=doAtt.concat(data||[])}}catch(e){}
+  for(const a of doAtt){const d=dm.get(a.entity_id);pick.push({a,folder:"DO Photos",nm:`DO ${d?.do_no||""} ${d?.do_date||""}`})}
+  if(!pick.length)return toast(L("这个月没有扫描件","No files this month"));
+  if(!confirm(L(`${co} ${m}：共 ${pick.length} 个文件，打包下载？（文件多会要几分钟）`,`${pick.length} files — download as zip?`)))return;
+  try{await loadJSZip();const z=new JSZip(),seen={};let n=0,fail=0;
+    for(const x of pick){toast(`${L("打包中","Zipping")} ${++n}/${pick.length}`);try{const ext=(String(x.a.file_name||x.a.file_path).match(/\.[a-z0-9]{2,5}$/i)||[".pdf"])[0];let fn=`${x.folder}/${String(x.nm).replace(/[\\/:*?"<>|]+/g,"-").trim()}${x.a.kind?" - "+x.a.kind:""}`;seen[fn]=(seen[fn]||0)+1;if(seen[fn]>1)fn+=` (${seen[fn]})`;
+      z.file(fn+ext,await siBlob(x.a))}catch(e){fail++}}
+    const blob=await z.generateAsync({type:"blob"});saveBlob(blob,`${co} scans ${m}.zip`);setPref("lastScanBk_"+co,m);toast(`${co} scans ${m}.zip · ${kb(blob.size)}${fail?` · ⚠ ${fail} ${L("个下载失败","failed")}`:""}`)}catch(e){toast(e.message||String(e))}}
 async function backupNow(){toast(L("备份中，请稍等…","Backing up…"));
   try{const wb=XLSX.utils.book_new(),counts=[];
     for(const t of BK_TABLES){let rows;try{rows=await fetchAll(()=>sb.from(t).select("*"))}catch(e){continue}counts.push([t,rows.length]);
@@ -3737,9 +3803,9 @@ function setView(){const s=settingsOf(S.company);
   <section class="panel"><h2>${L("备份 / 还原","Backup / restore")}</h2>
   <p style="margin-top:0">${(()=>{const a=backupAge();return a==null?`<span class="tag bad">${L("这台设备还没备份过","Never backed up on this device")}</span>`
     :a>7?`<span class="tag warn">${L(`上次备份 ${a} 天前`,`Last backup ${a} days ago`)}</span>`:`<span class="tag ok">${L(`上次备份：${dmy(pref("lastBackup",""))}`,`Last backup: ${dmy(pref("lastBackup",""))}`)}</span>`})()}</p>
-  <p class="mute" style="font-size:14px">${L("备份会把 ETK 和 L3H 全部资料下载成一个 Excel（每个表格一个 sheet）。建议每星期备份一次，存在电脑和 Google Drive。附件文件本身还在云端，备份里只有附件记录。",
+  <p class="mute" style="font-size:14px">${L("备份会把 ETK 和 L3H 全部资料下载成一个 Excel（每个表格一个 sheet）。建议每星期备份一次，存在电脑和 Google Drive。附件文件本身还在云端，备份里只有附件记录，所以每个月也按「扫描件备份」把那个月的扫描件、DO 照片、签名页打包下载一次。",
     "Downloads all ETK and L3H data as one Excel file, one sheet per table. Back up weekly and keep a copy on your computer and Google Drive. Attachment files stay in the cloud; the backup lists them.")}</p>
-  <div class="actions"><button class="btn" onclick="backupNow()">⬇ ${L("立即备份","Back up now")}</button>
+  <div class="actions"><button class="btn" onclick="backupNow()">⬇ ${L("立即备份","Back up now")}</button><button class="btn sec" onclick="scanBackup()">🗂 ${L("扫描件备份（一个月打包 zip）","Scan backup (month zip)")}</button><button class="btn sec" onclick="binOpen()">🗑 ${L("回收站","Recycle bin")}</button>
     <label class="btn sec file">⬆ ${L("从备份还原","Restore from backup")}<input type="file" accept=".xlsx" hidden onchange="restoreBackup(this)"></label></div>
   <p class="mute" style="font-size:13px">${L("还原：选之前下载的备份文件。备份里的资料会写回去，备份之后新增的资料不会被删掉。","Restore: choose a backup file. Its records are written back; anything added after the backup is kept.")}</p></section>
   <section class="panel"><h2>${L("账号","Account")}</h2><p>${esc(S.user.email)}</p></section>`}
@@ -4021,7 +4087,7 @@ async function doOnlyPdf(id){const inv=invById(id),name=fileBase(inv)+"_DO.pdf";
     const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},2000);
     toast(`${name} · ${kb(blob.size)}${warn.length?" · ⚠️ "+warn.join("；"):""}`)}catch(e){toast(e.message||String(e))}}
 async function custCopy(id,share){const inv=invById(id),name=fileBase(inv)+".pdf";
-  if(!signedOf(inv)&&!confirm(L("这张还没上传 Chris 签名的第一页。还是要下载没签名的版本吗？","No signed page uploaded yet. Download the unsigned version anyway?")))return;
+  if(!await preflight(id,L("下载寄客户版本","customer copy")))return;
   if(inv.customer_po&&!poDocsOf(inv).list.length&&!confirm(L(`这张有 PO 号码（${inv.customer_po}），但还没上传 PO 文件。还是要继续吗？`,`PO ${inv.customer_po} has no file uploaded. Continue anyway?`)))return;
   try{toast(L("正在合成 PDF…","Building PDF…"));const{blob,warn}=await buildCustomerPdf(inv),file=new File([blob],name,{type:"application/pdf"});
     if(share&&navigator.canShare?.({files:[file]})){try{await navigator.share({files:[file],title:name,text:`Invoice ${inv.invoice_no}`})}catch(e){if(e.name!=="AbortError")throw e;return}}
@@ -4324,13 +4390,18 @@ async function closeModal(){S.modal=null;done();await reload()}
 async function doLogin(e){e.preventDefault();const fd=new FormData(e.target);const{error}=await sb.auth.signInWithPassword({email:fd.get("email"),password:fd.get("password")});
   if(error)toast(L("登录失败：","Login failed: ")+error.message)}
 async function logout(){await sb.auth.signOut()}
+/* 8 小时没动就自动登出 */
+const IDLE_MAX=8*3600*1000;const touch=()=>{try{localStorage.setItem("lastAct",String(Date.now()))}catch(e){}};let touchT=0;
+["click","keydown","touchstart"].forEach(ev=>document.addEventListener(ev,()=>{const n=Date.now();if(n-touchT>60000){touchT=n;touch()}},{passive:true}));
+function idleCheck(){if(!S.user)return;let t=0;try{t=+localStorage.getItem("lastAct")||0}catch(e){}if(t&&Date.now()-t>IDLE_MAX){try{localStorage.removeItem("lastAct")}catch(e){}toast(L("超过 8 小时没用，已自动登出","Signed out after 8 hours idle"));logout()}}
+setInterval(idleCheck,5*60*1000);
 function confirmLeave(){return !S.dirty||confirm(L("还没保存，确定离开？","You have unsaved changes. Leave anyway?"))}
 function setTab(x){if(!confirmLeave())return;S.scr[S.tab]=scrSnap();S.tab=x;S.doForm=null;done();if(S.pending){S.pending=false;reload()}else render()}
 async function setCompany(c){if(!confirmLeave())return;S.company=c;if(c!=="L3H"&&S.tab==="exc")S.tab="do";setPref("company",c);S.doForm=null;S.modal=null;done();await reload()}
 async function setMonth(m){S.month=m;await loadDO();render()}
 function toggleLang(){S.lang=S.lang==="zh"?"en":"zh";setPref("lang",S.lang);document.documentElement.lang=S.lang;render()}
 function toggleTheme(){S.theme=S.theme==="dark"?"light":"dark";setPref("theme",S.theme);document.documentElement.dataset.theme=S.theme;render()}
-sb.auth.onAuthStateChange((_ev,session)=>{const was=S.user?.id;S.user=session?.user||null;
+sb.auth.onAuthStateChange((_ev,session)=>{const was=S.user?.id;S.user=session?.user||null;if(S.user&&!was){setTimeout(()=>{if(_ev==="SIGNED_IN")touch();else{idleCheck();if(S.user)touch()}},0)}
   if(S.user&&S.user.id!==was){setTimeout(async()=>{await reload();startRealtime()},0)}
   if(!S.user){if(rt)sb.removeChannel(rt);render()}});
 loadUI();render();
