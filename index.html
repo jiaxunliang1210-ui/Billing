@@ -330,7 +330,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-16b";
+const APP_VER="2026-10-16c";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -1352,7 +1352,9 @@ function pvForm(id){const p=id?pvById(id):null;
   pvFormRender()}
 function pvFormTotal(){const f=PVF;return r2(sum(S.d.supplier_invoices.filter(si=>f.sel.has(si.id)),si=>Number(si.total)||0)+sum(f.extra,x=>Number(x.a)||0))}
 function pvFormRender(){const f=PVF,list=f.supplier_id?pvOpenSIs(f):[];
+  const ost=f.id?(pvById(f.id)?.status||"Pending"):"Pending";
   pvOv(`<div class="pvhead"><h3 style="margin:0">${f.id?L("修改 PV","Edit PV"):L("新 PV（提交付款）","New PV")}</h3><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
+  ${ost!=="Pending"?`<div class="note">${L(`这张 PV 已经是「${ost}」。可以改，保存时要写原因（会记在 Remark）。${ost==="Paid"?"改了付哪些 invoice，那些 invoice 的付款日期会跟着改。":""}改了金额或 invoice 的话，签好的 PV 就跟新内容不一样，要重新印出来签。`,`This PV is ${ost}. Saving asks for a reason.`)}</div>`:""}
   <div class="grid">
     <label class="f">Pay to（${L("供应商","Supplier")}） *<select onchange="PVF.supplier_id=this.value;PVF.sel.clear();PVF.account=supAcct(supById(this.value));pvFormRender()">${optList(S.d.suppliers.map(s=>[s.id,s.name]),f.supplier_id,"—")}</select></label>
     <label class="f">${L("日期","Date")} *<input type="date" value="${f.pv_date}" onchange="PVF.pv_date=this.value"></label>
@@ -1370,7 +1372,7 @@ function pvFormRender(){const f=PVF,list=f.supplier_id?pvOpenSIs(f):[];
   <button class="btn sec sm" onclick="PVF.extra.push({d:'',a:null});pvFormRender()">＋ ${L("加一行","Add line")}</button>
   <div class="calc" style="margin-top:10px"><div class="total">${L("合计","Total")}<b>$${money(pvFormTotal())}</b></div><div style="font-size:12px">${esc(pvWords(pvFormTotal()))}</div></div>
   <div class="warn" id="pvWarn"></div>
-  <div class="actions"><button class="btn" onclick="pvSave()">${L("保存（待批准）","Save (pending approval)")}</button><button class="btn sec" data-a="x">${L("取消","Cancel")}</button></div>`)}
+  <div class="actions"><button class="btn" onclick="pvSave()">${ost==="Pending"?L("保存（待批准）","Save (pending approval)"):L("保存修改","Save changes")}</button><button class="btn sec" data-a="x">${L("取消","Cancel")}</button></div>`)}
 async function pvSave(){const f=PVF,w=$("#pvWarn");
   if(!f.supplier_id||!f.pv_date)return w.textContent=L("请选供应商和日期","Choose supplier and date");
   const sis=S.d.supplier_invoices.filter(si=>f.sel.has(si.id)).sort((a,b)=>String(a.invoice_date).localeCompare(String(b.invoice_date))),ex=f.extra.filter(x=>x.d||x.a);
@@ -1379,16 +1381,24 @@ async function pvSave(){const f=PVF,w=$("#pvWarn");
     ...sis.filter(si=>Number(si.total)<0).map(si=>({supplier_invoice_id:si.id,description:`LESS:CREDIT NOTE/INVOICE#${si.invoice_no}`,amount:Number(si.total)||0})),
     ...ex.map(x=>({supplier_invoice_id:null,description:x.d||"",amount:Number(x.a)||0}))].map((l,i)=>({...l,line_no:i+1}));
   const row={company:S.company,supplier_id:f.supplier_id,pv_date:f.pv_date,account:f.account||null,cheque_no:f.cheque_no||null,prepared_by:f.prepared_by||null,remark:f.remark||null,total:r2(sum(lines,l=>l.amount))};
-  let id=f.id;
-  if(id){const{error}=await sb.from("payment_vouchers").update(row).eq("id",id);if(error)return w.textContent=error.message;await sb.from("payment_voucher_lines").delete().eq("pv_id",id)}
+  let id=f.id;const old=id?pvById(id):null,oldIds=id?pvLines(id).map(l=>l.supplier_invoice_id).filter(Boolean):[];
+  if(old&&(old.status||"Pending")!=="Pending"){const why=prompt(L(`这张 PV 已经是「${old.status}」。修改原因：`,`PV is ${old.status}. Reason for the change:`),"");if(!why)return;
+    row.remark=[old.remark||"",`[${dmy(today())} ${L("修改","edited")}: ${why}]`].filter(Boolean).join(" ")}
+  if(id){const{error}=await sb.from("payment_vouchers").update(row).eq("id",id);if(error)return w.textContent=error.message}
   else{const{data,error}=await sb.from("payment_vouchers").insert({...row,status:"Pending"}).select().single();if(error)return w.textContent=error.message;id=data.id}
-  const{error}=await sb.from("payment_voucher_lines").insert(lines.map(l=>({...l,pv_id:id})));if(error)return w.textContent=error.message;
-  await loadAll();toast(L("PV 已保存（待批准）","PV saved"));pvOpen(id);render()}
+  {const oldL=id&&f.id?pvLines(id).map(l=>l.id):[];const{error}=await sb.from("payment_voucher_lines").insert(lines.map(l=>({...l,pv_id:id})));if(error)return w.textContent=error.message;
+    if(oldL.length)await sb.from("payment_voucher_lines").delete().in("id",oldL)}
+  if(old&&old.status==="Paid"){const now=new Set(lines.map(l=>l.supplier_invoice_id).filter(Boolean)),rem=oldIds.filter(x=>!now.has(x)),add=[...now].filter(x=>!oldIds.includes(x));
+    if(rem.length)await sb.from("supplier_invoices").update({payment_date:null,status:"Unpaid"}).in("id",rem);
+    if(add.length)await sb.from("supplier_invoices").update({payment_date:old.paid_at||today(),status:"Paid"}).in("id",add)}
+  await loadAll();toast(old&&(old.status||"Pending")!=="Pending"?L("PV 已修改","PV updated"):L("PV 已保存（待批准）","PV saved"));pvOpen(id);render()}
 /* ---- PV 详情 + 流程 ---- */
 function pvOpen(id){const p=pvById(id);if(!p)return;const st=p.status||"Pending";
   pvOv(`<div class="pvhead"><h3 style="margin:0">PV · ${esc(supName(p.supplier_id))} · $${money(p.total)}</h3>${pvTag(p)}<span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
-  <div class="actions"><button class="btn sec" onclick="pvPdf(['${id}'],1)">⬇ ${L("PV PDF（印出来签）","PV PDF (print to sign)")}</button><button class="btn sec" onclick="pvListingXlsx(['${id}'])">⬇ PV Excel</button>
-    ${st==="Pending"?`<button class="btn sec" onclick="pvForm('${id}')">${L("修改","Edit")}</button>`:""}</div>
+  <div class="actions"><button class="btn sec" onclick="pvPdf(['${id}'],1)">⬇ ${L("PV PDF（印出来签）","PV PDF (print to sign)")}</button>${pvSigned(p)?`<button class="btn" onclick="pvPdf(['${id}'])">⬇ ${L("签好的 PV","Signed PV")}${pref("pvInv","1")!=="0"?L(" + invoice"," + invoices"):""}</button>`:""}<button class="btn sec" onclick="pvListingXlsx(['${id}'])">⬇ PV Excel</button>
+    <button class="btn sec" onclick="pvForm('${id}')">✏️ ${L("修改","Edit")}</button></div>
+  <div style="font-size:13px;margin:-4px 0 8px;display:flex;gap:16px;flex-wrap:wrap"><label class="chk"><input type="checkbox" ${pref("pvInv","1")!=="0"?"checked":""} onchange="setPref('pvInv',this.checked?'1':'0');pvOpen('${id}')">${L("下载时附上 invoice 第一页","Attach invoice page 1 when downloading")}</label>
+    <label class="chk"><input type="checkbox" ${pref("pvSgFirst","1")!=="0"?"checked":""} onchange="setPref('pvSgFirst',this.checked?'1':'0')">${L("签好的 PV 扫描件只用第 1 页（后面的 invoice 页不重复）","Signed PV scan: page 1 only")}</label></div>
   <div class="tw"><table><thead><tr><th>Description</th><th class="num">Amount</th></tr></thead><tbody>${pvLines(id).map(l=>`<tr><td>${esc(l.description)}</td><td class="num">${money(l.amount)}</td></tr>`).join("")}</tbody>
     <tfoot><tr><td>A/C: ${esc(p.account||"")} · Cheque No.: ${esc(p.cheque_no||"")}</td><td class="num">${money(p.total)}</td></tr></tfoot></table></div>
   <p style="font-size:13px">${esc(pvWords(p.total))}</p>
@@ -1439,7 +1449,11 @@ async function buildPdf(items,filename,opt={}){await loadPdfLibs();const{jsPDF}=
 const monTag=d=>`${MONL[+d.slice(5,7)-1].slice(0,3).toUpperCase()} ${d.slice(0,4)}`;
 const sameMonth=ds=>ds.length&&ds.every(d=>d.slice(0,7)===ds[0].slice(0,7));
 async function pvPdf(ids,blank){const list=ids.map(pvById).filter(Boolean).sort((a,b)=>a.pv_date.localeCompare(b.pv_date));if(!list.length)return toast(L("没有 PV","No PVs"));
-  const items=list.map(p=>{const sg=blank?null:pvSigned(p);return sg?{att:sg,html:pvHTML(p),label:supName(p.supplier_id)}:{html:pvHTML(p)}});
+  const withInv=pref("pvInv","1")!=="0",sgFirst=pref("pvSgFirst","1")!=="0",items=[],miss=[];
+  for(const p of list){const sg=blank?null:pvSigned(p);items.push(sg?{att:sg,html:pvHTML(p),label:supName(p.supplier_id),max:sgFirst?1:20}:{html:pvHTML(p)});
+    if(withInv)for(const l of pvLines(p.id)){if(!l.supplier_invoice_id)continue;const si=S.d.supplier_invoices.find(x=>x.id===l.supplier_invoice_id);if(!si)continue;const a=siMainAtt(si);
+      if(a)items.push({att:a,label:si.invoice_no,max:1});else miss.push(`${supName(si.supplier_id)} ${si.invoice_no}`)}}
+  if(miss.length)toast(L(`${miss.length} 张 invoice 还没上传扫描件，没附到：${miss.slice(0,3).join("、")}${miss.length>3?"…":""}`,`${miss.length} invoice scans missing`));
   const ds=list.map(p=>p.pv_date);try{await buildPdf(items,list.length===1?`${S.company} PV ${supName(list[0].supplier_id)} ${dmy(ds[0]).replace(/\//g,"-")}`:sameMonth(ds)?`${S.company} PV FOR ${monTag(ds[0])}`:`${S.company} PV ${ds[0]} to ${ds.at(-1)}`)}catch(e){toast(e.message)}}
 /* PV Excel：每张 PV 一个 sheet（照她的格式）+ PV Listing */
 function pvSheet(wb,p){const s=settingsOf(p.company||S.company),ws=wb.addWorksheet(xlName(wb,`${S.company}-${supName(p.supplier_id).split(/\s+/)[0]}`.toUpperCase())),ls=pvLines(p.id);
