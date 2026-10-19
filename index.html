@@ -330,7 +330,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-19b";
+const APP_VER="2026-10-19c";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -432,6 +432,9 @@ function recompute(f){{const d=cSvc(f.service);if(d)return recomputeSvc(f,d)}if(
     f.amount=(f.billable_hours!=null&&f.rate!=null)?r2(Number(f.rate)+ot*f._otRate+(Number(f.surcharge)||0)):null}
   else{f._otHours=null;f._otRate=null;
     f.amount=(f.billable_hours!=null&&f.rate!=null)?r2(f.billable_hours*f.rate+(Number(f.surcharge)||0)):null}
+  {const sp=shareOf(f);f._shHrs=null;f._shSur=null;f._shFull=null;
+    if(sp){const k=sp/100,sur=Number(f.surcharge)||0;f._shFull=f.amount;f._shHrs=f.billable_hours==null?null:r2(f.billable_hours*k);f._shSur=r2(sur*k);
+      if(f.amount!=null)f.amount=r2((f.amount-sur)*k+f._shSur)}}
   return f;
 }
 const paidOf=inv=>sum(S.d.payment_allocations.filter(a=>a.invoice_id===inv.id),a=>a.amount);
@@ -594,7 +597,7 @@ function doView(){
     ${fld("rate","Rate",f.rate??"","number",'step="0.01"')}
     ${fld("surcharge","Surcharge",f.surcharge??0,"number",'step="0.01"')}
     ${fld("remark","Remark",f.remark)}
-    ${isL3()&&!cSvc(f.service)?fld("share_pct",L("分摊 %（同一张 DO 分给两个 Project，例 50；空白 = 100%）","Share % (one DO split between projects; blank = 100%)"),f.share_pct??"","number",'step="1" min="1" max="99"'):""}
+    ${!cSvc(f.service)?fld("share_pct",L("分摊 %（同一张 DO 分给两个 Project，例 50；空白 = 100%）","Share % (one DO split between projects; blank = 100%)"),f.share_pct??"","number",'step="1" min="1" max="99"'):""}
     ${isL3()&&f.service==="Tipper"?fld("loads",L("Load 数量（没写时间才按 load 算）","Loads (if no time)"),f.loads??"","number",'step="0.5"'):""}
     ${isL3()?fld("price_note",L("改价原因（价钱跟 Master List 不一样才要填）","Price change reason"),f.price_note||"","text","",f._priceChanged?"need":""):""}
     ${isL3()?`<div class="wide l3chk">${f.service==="Lorry Crane"?`<label class="chk"><input type="checkbox" name="lifting_sup" ${f.lifting_sup?"checked":""}>${L("有 Lifting Supervisor","With lifting supervisor")} <small class="mute">${f._supTouched?L("手动","manual"):L("自动：司机 / 17:00 前开工","auto: driver / start before 17:00")}</small></label>`:""}
@@ -607,8 +610,8 @@ function doView(){
   ${doPhotoBox(f)}${(setTimeout(checkOverlap,0),"")}
   ${billed?`<div class="note">${L(`这张 DO 已开在 invoice ${esc(billed.invoice_no)}，改金额后要到 Invoice 重新生成明细。`,`Billed on ${esc(billed.invoice_no)}. Rebuild the invoice lines after changing amounts.`)}</div>`:""}
   <div class="warn" id="doWarn"></div>
-  ${isL3()&&f.id&&shareOf(f)?(()=>{const sib=S.d.delivery_orders.find(x=>x.id===f.share_of||x.share_of===f.id);return sib?`<div class="note">↔ ${L(`同一张 DO 的另一半：${esc(sib.project||"—")} · ${shareOf(sib)||100}% · $${money(sib.amount)}`,`Other half: ${esc(sib.project||"—")} · ${shareOf(sib)||100}% · $${money(sib.amount)}`)} <a href="#" onclick="editDO('${sib.id}');return false">${L("打开","Open")}</a></div>`:""})():""}
-  <div class="actions"><button class="btn" onclick="saveDO()">${L("保存","Save")}</button>${isL3()&&f.id&&shareOf(f)&&!S.d.delivery_orders.some(x=>x.id===f.share_of||x.share_of===f.id)?`<button class="btn sec" onclick="shareTwin()">↔ ${L(`另一半（${100-shareOf(f)}%）开给其他 Project`,`Other ${100-shareOf(f)}% to another project`)}</button>`:""}
+  ${f.id&&shareOf(f)?(()=>{const sib=S.d.delivery_orders.find(x=>x.id===f.share_of||x.share_of===f.id);return sib?`<div class="note">↔ ${L(`同一张 DO 的另一半：${esc(sib.project||"—")} · ${shareOf(sib)||100}% · $${money(sib.amount)}`,`Other half: ${esc(sib.project||"—")} · ${shareOf(sib)||100}% · $${money(sib.amount)}`)} <a href="#" onclick="editDO('${sib.id}');return false">${L("打开","Open")}</a></div>`:""})():""}
+  <div class="actions"><button class="btn" onclick="saveDO()">${L("保存","Save")}</button>${f.id&&shareOf(f)&&!S.d.delivery_orders.some(x=>x.id===f.share_of||x.share_of===f.id)?`<button class="btn sec" onclick="shareTwin()">↔ ${L(`另一半（${100-shareOf(f)}%）开给其他 Project`,`Other ${100-shareOf(f)}% to another project`)}</button>`:""}
     <button class="btn sec" onclick="S.doForm=null;done();render()">${L("取消","Cancel")}</button>
     ${f.id?`<button class="btn del" onclick="delDO('${f.id}')">${L("删除","Delete")}</button>`:""}</div></section>
   ${doList()}`;
@@ -618,6 +621,7 @@ function calcView(f){{const d=cSvc(f.service);if(d)return calcSvc(f,d)}if(isL3()
   <div>${L("实际小时","Actual hrs")}<b>${f.actual_hours??"—"}</b></div>
   <div>${L("计费小时","Billable hrs")}<b>${f.billable_hours??"—"}${f.hours_overridden?` <small class="mute" style="font-size:12px">${L("手动","manual")}</small>`:""}</b></div>
   ${f._otHours!=null?`<div>OT<b>${f._otHours} hr × $${money(f._otRate)}</b></div>`:""}
+  ${shareOf(f)?`<div>${L("分摊","Share")}<b>${shareOf(f)}% → ${f._shHrs??"—"} hr</b></div><div>${L("全额","Full")}<b>${f._shFull!=null?"$"+money(f._shFull):"—"}</b></div>`:""}
   <div class="total">${L("金额","Amount")}<b>${f.amount!=null?"$"+money(f.amount):"—"}</b></div>`}
 function doInput(e){
   const el=e.target,f=S.doForm;if(!el.name)return;S.dirty=true;let v=el.value;
@@ -661,7 +665,8 @@ async function saveDO(){
     charges:(f.charges||[]).map(({item,material,desc,qty,uom,rate,amount,_rt,_qt})=>({item,material:material||null,desc:desc||null,qty,uom,rate,amount,_rt:!!_rt,_qt:!!_qt})),
     loads:f.service==="Tipper"&&f.loads!=null&&f.loads!==""?Number(f.loads):null,record_only:!!f.record_only,price_note:f._priceChanged?(f.price_note||null):null,
     share_pct:shareOf(f)||null,share_of:f.share_of||null});
-  if(isL3()&&shareOf(f)&&!f.record_only){row.billable_hours=f._shHrs;row.surcharge=f._shSur}
+  if(!isL3()&&!cSvc(f.service))Object.assign(row,{share_pct:shareOf(f)||null,share_of:f.share_of||null});
+  if(shareOf(f)&&!f.record_only&&!cSvc(f.service)){row.billable_hours=f._shHrs;row.surcharge=f._shSur}
   if(f.id&&f.invoice_id){const old=S.d.delivery_orders.find(x=>x.id===f.id)||{},ch=doChanges(old,row);
     if(Object.keys(ch).length){const inv=invById(f.invoice_id),reason=prompt(L(`这张 DO 已开在 ${inv?.invoice_no||"invoice"}。改了什么、为什么改？（会留记录，改金额后要到 invoice 重新生成明细）`,`This DO is billed on ${inv?.invoice_no}. Reason for the change?`));
       if(!reason)return;row.edit_log=[...(old.edit_log||[]),{at:new Date().toISOString(),reason,changes:ch}]}}
@@ -4383,20 +4388,23 @@ function breakdownHTML(inv,dos){if(coOf(settingsOf(inv.company))==="L3H"){if(isM
     if(svcDef(svc)&&svcKind(svcDef(svc))!=="time")return svcRecordsHTML(inv,svc,list,c);
     if(svc==="TMA"&&!inv.project){
       const rows=list.map(d=>{const rr=findRate(d.customer_id,`TMA ${d.shift||"Day"}`,d.do_date),mx=baseHrsOf(rr),bh=Number(d.billable_hours)||0,sur=Number(d.surcharge)||0,tot=r2(Number(d.amount)||0),ot=r2(Math.max(0,bh-mx));
+        {const k=shareOf(d)/100;if(k){const fb=r2(bh/k),fo=r2(Math.max(0,fb-mx));
+          if(isDayRate(rr)){const day=Number(d.rate)||0,otr=Number(rr.ot_rate)||0,amt=r2(day*k);return{d,mx,th:r2(Math.min(fb,mx)*k),ot:r2(fo*k),day,hr:otr,amt,otAmt:r2(tot-sur-amt),sur,tot}}
+          const hr=Number(d.rate)||0,otAmt=r2(fo*k*hr);return{d,mx,th:r2(Math.min(fb,mx)*k),ot:r2(fo*k),day:r2(hr*mx),hr,amt:r2(tot-otAmt-sur),otAmt,sur,tot}}}
         if(isDayRate(rr)){const day=Number(d.rate)||0,otAmt=r2(tot-sur-day),otr=ot?r2(otAmt/ot):(Number(rr.ot_rate)||0);return{d,mx,th:Math.min(bh,mx),ot,day,hr:otr,amt:day,otAmt,sur,tot}}
         const hr=Number(d.rate)||0,otAmt=r2(ot*hr);return{d,mx,th:Math.min(bh,mx),ot,day:r2(hr*mx),hr,amt:r2(tot-otAmt-sur),otAmt,sur,tot}});
       const S2=k=>sum(rows,x=>x[k]);
       return chunkPages(rows,16,(rs,pi,last)=>`${sumHead([`Hire Of TMA Truck Summary Report For ${month}`,`INV NO : ${inv.invoice_no}`,`Customer : ${c.name||""}`])}
       <table class="sm"><colgroup><col style="width:4%"><col style="width:8%"><col style="width:8%"><col style="width:6.5%"><col style="width:6.5%"><col style="width:6.5%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:8%"><col style="width:7%"><col style="width:8%"><col style="width:7%"><col style="width:6.5%"><col style="width:8%"></colgroup>
       <thead><tr><th>S/N</th><th>DATE</th><th>VEHICLE NO</th><th>DO NO</th><th>START TIME</th><th>END TIME</th><th>TOTAL HR</th><th>MAX HR</th><th>OT HOUR</th><th>RATE</th><th>OT RATE</th><th>AMOUNT</th><th class="dk">OT AMT</th><th class="dk">Diesel Surcharge</th><th class="dk">TOTAL AMOUNT</th></tr></thead><tbody>
-      ${rs.map((x,i)=>`<tr><td>${pi*16+i+1}</td><td>${dmy(x.d.do_date)}</td><td>${esc(x.d.plate||"")}</td><td>${esc(x.d.do_no)}</td><td>${tShort(x.d.start_time)}</td><td>${tShort(x.d.end_time)}</td><td>${r2(x.th)}</td><td>${x.mx}</td><td>${r2(x.ot)}</td>
+      ${rs.map((x,i)=>`<tr><td>${pi*16+i+1}</td><td>${dmy(x.d.do_date)}</td><td>${esc(x.d.plate||"")}</td><td>${esc(x.d.do_no)}${shareOf(x.d)?` (${shareOf(x.d)}%)`:""}</td><td>${tShort(x.d.start_time)}</td><td>${tShort(x.d.end_time)}</td><td>${r2(x.th)}</td><td>${x.mx}</td><td>${r2(x.ot)}</td>
         <td class="a">${acc(x.day)}</td><td class="a">${acc(x.hr)}</td><td class="a">${acc(x.amt)}</td><td class="a">${acc(x.otAmt)}</td><td class="a">${acc(x.sur)}</td><td class="a">${acc(x.tot)}</td></tr>`).join("")}
       ${last?`<tr class="tt"><td colspan="10"></td><td class="lb">Total</td><td class="u a">${acc(S2("amt"))}</td><td class="u a">${acc(S2("otAmt"))}</td><td class="u a">${acc(S2("sur"))}</td><td class="u a">${acc(S2("tot"))}</td></tr>`:""}</tbody></table>`)}
     const tma=svc==="TMA",hasSur=list.some(d=>Number(d.surcharge)),title=(L3H_DESC[svc]&&svc!=="Excavator")?`${svc} Transportation Record (G.S.G)`:`${svc} Transportation Record`;
     const head=[`${title} For ${month}`,`INV NO : ${inv.invoice_no}`,`Customer : ${c.name||""}`];if(inv.project)head.push(`Project : ${inv.project}`);
     const cols=tma?12:11;
     return chunkPages(list,16,(rs,pi,last)=>`${sumHead(head)}<table class="sm"><thead><tr><th>S/N</th><th>D/N</th><th>Date</th><th>From</th><th>To</th><th>Vehicle No</th><th>In</th><th>Out</th>${tma?"<th>TMA Day/Night Work</th>":""}<th>Rate</th><th>Total Hr</th><th>UOM</th>${hasSur?`<th class="dk">Diesel Surcharge</th>`:""}<th class="dk">Amount</th></tr></thead><tbody>
-      ${rs.map((d,i)=>`<tr><td>${pi*16+i+1}</td><td>${esc(d.do_no)}</td><td>${dMonYY(d.do_date)}</td><td>${esc(d.from_loc||"")}</td><td>${esc(d.to_loc||"")}</td><td>${esc(d.plate||"")}</td>
+      ${rs.map((d,i)=>`<tr><td>${pi*16+i+1}</td><td>${esc(d.do_no)}${shareOf(d)?` (${shareOf(d)}%)`:""}</td><td>${dMonYY(d.do_date)}</td><td>${esc(d.from_loc||"")}</td><td>${esc(d.to_loc||"")}</td><td>${esc(d.plate||"")}</td>
       <td>${tShort(d.start_time)}</td><td>${tShort(d.end_time)}</td>${tma?`<td>${d.shift?d.shift+" Work":""}</td>`:""}<td class="a">${acc(d.rate)}</td><td>${Number(d.billable_hours||0).toFixed(2)}</td><td>hr</td>
       ${hasSur?`<td class="a">${acc(d.surcharge)}</td>`:""}<td class="a">${acc(d.amount)}</td></tr>`).join("")}
       ${last?`<tr class="tt"><td colspan="${tma?9:8}"></td><td class="lb">HRS</td><td class="u">${sum(list,d=>d.billable_hours).toFixed(2)}</td><td class="lb">TOTAL</td>${hasSur?`<td class="u a">${acc(sum(list,d=>d.surcharge))}</td>`:""}<td class="u a">${acc(sum(list,d=>d.amount))}</td></tr>`:""}</tbody></table>`)}).join("")}
