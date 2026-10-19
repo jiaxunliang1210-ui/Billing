@@ -330,7 +330,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-16c";
+const APP_VER="2026-10-19";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -3985,6 +3985,42 @@ async function pdfToJpegs(file,maxPages=6,q=0.75){
     await pg.render({canvasContext:cx,viewport:v}).promise;out.push(await canvasJpeg(cv,q))}
   return out}
 async function toJpegs(file,maxPages){return /pdf$/i.test(file.type)||/\.pdf$/i.test(file.name)?pdfToJpegs(file,maxPages,0.9):[await compressImage(file,3200,0.92)]}
+/* ---- 从 Invoice 一次上传很多张 DO（扫描 PDF / 照片），认 DO 号码配对 ---- */
+let IDU=null;const doKey=n=>String(n||"").toUpperCase().replace(/[^A-Z0-9]/g,"").replace(/^0+(?=\d)/,"");
+async function invDoUp(invId,input){const files=[...(input.files||[])];input.value="";if(!files.length)return;
+  let dos=[];try{dos=await fetchAll(()=>sb.from("delivery_orders").select("id,do_no,do_date,plate").eq("invoice_id",invId).order("do_date"))}catch(e){return toast(e.message)}
+  if(!dos.length)return toast(L("这张 Invoice 没有 DO","No DOs on this invoice"));
+  IDU={invId,dos,pages:[],mode:"add"};toast(L("读取文件中…","Reading files…"));warmOCR();
+  for(const f of files){let blobs=[];try{blobs=await toJpegs(f,30)}catch(e){toast(`${f.name}: ${e.message||e}`);continue}
+    blobs.forEach((b,k)=>IDU.pages.push({blob:b,url:URL.createObjectURL(b),src:f.name+(blobs.length>1?` p${k+1}`:""),do_id:"",st:"read"}))}
+  if(!IDU.pages.length)return;
+  /* 先用文件名猜（例：DO-03263.jpg） */
+  for(const pg of IDU.pages){const hit=dos.find(d=>doKey(d.do_no).length>=3&&doKey(pg.src).includes(doKey(d.do_no)));if(hit){pg.do_id=hit.id;pg.st="name"}}
+  idRender();
+  await pool(IDU.pages.filter(p=>!p.do_id),OCR_N,async pg=>{try{const lines=await ocrLines(new File([pg.blob],"p.jpg",{type:"image/jpeg"})),T=lines.join(" "),A=doKey(T);
+      const r=parseDO(lines);let hit=r?.no?dos.find(d=>doKey(d.do_no)===doKey(r.no)):null;
+      if(!hit)hit=dos.filter(d=>doKey(d.do_no).length>=4&&A.includes(doKey(d.do_no))).sort((a,b)=>doKey(b.do_no).length-doKey(a.do_no).length)[0];
+      if(hit&&!IDU.pages.some(x=>x!==pg&&x.do_id===hit.id&&x.st!=="none")){pg.do_id=hit.id;pg.st="ocr"}else pg.st=hit?"dup":"none";if(hit&&!pg.do_id){pg.do_id=hit.id}}catch(e){pg.st="none"}
+    if(IDU)idRender()})}
+function idRender(){if(!IDU)return;const{dos,pages}=IDU,used=new Map();pages.forEach(p=>{if(p.do_id)used.set(p.do_id,(used.get(p.do_id)||0)+1)});
+  const reading=pages.filter(p=>p.st==="read").length,has=d=>doPhotos(d.id).length;
+  pvOv(`<div class="pvhead"><h3 style="margin:0">⬆ ${L("上传 DO","Upload DOs")} · ${esc(invById(IDU.invId)?.invoice_no||"")}</h3><span class="mute" style="font-size:13px">${L(`${pages.length} 页 · ${dos.length} 张 DO`,`${pages.length} pages · ${dos.length} DOs`)}${reading?` · ⏳ ${L(`认字中，还有 ${reading} 页`,`reading ${reading}`)}`:""}</span><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px;max-height:60vh;overflow:auto">
+  ${pages.map((p,k)=>{const d=dos.find(x=>x.id===p.do_id),dup=p.do_id&&used.get(p.do_id)>1;return `<div class="panel" style="padding:6px;margin:0${!p.do_id&&p.st!=="read"?";outline:2px solid #f5b301":""}">
+    <img src="${p.url}" style="width:100%;height:150px;object-fit:contain;background:#fff;border-radius:4px;cursor:zoom-in" onclick="window.open('${p.url}')">
+    <div class="mute" style="font-size:11px;margin:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.src)}</div>
+    <select class="inp" onchange="IDU.pages[${k}].do_id=this.value;IDU.pages[${k}].st=this.value?'manual':'none';idRender()">${optList(dos.map(x=>[x.id,`DO ${x.do_no} · ${dmy(x.do_date)}`]),p.do_id,L("— 不要这页 —","— skip —"))}</select>
+    <div style="font-size:11px;margin-top:3px">${p.st==="read"?`<span class="mute">⏳ ${L("认字中…","reading…")}</span>`:p.st==="ocr"?`<span class="tag ok">${L("认到","read")} DO ${esc(d?.do_no||"")}</span>`:p.st==="name"?`<span class="tag ok">${L("文件名","file name")}</span>`:p.st==="manual"?`<span class="tag mute">${L("你选的","manual")}</span>`:`<span class="tag warn">${L("认不到，请选","not read — pick")}</span>`}
+      ${dup?` <span class="tag warn">${L("同一张 DO 有几页","several pages")}</span>`:""}${d&&has(d)?` <span class="tag mute">${L(`已有 ${has(d)} 张照片`,`has ${has(d)}`)}</span>`:""}</div></div>`}).join("")}</div>
+  <p style="font-size:13px;margin:8px 0">${L("已经有照片的 DO：","DOs that already have photos:")} <label class="chk"><input type="radio" name="idmode" ${IDU.mode==="add"?"checked":""} onchange="IDU.mode='add'">${L("再加一张","add")}</label> <label class="chk"><input type="radio" name="idmode" ${IDU.mode==="replace"?"checked":""} onchange="IDU.mode='replace'">${L("换掉旧的","replace old")}</label></p>
+  <p class="mute" style="font-size:12px;margin:0 0 6px">${L(`还没配到照片的 DO：${dos.filter(d=>!used.get(d.id)).map(d=>d.do_no).join("、")||"没有 ✓"}`,`DOs without a page: ${dos.filter(d=>!used.get(d.id)).map(d=>d.do_no).join(", ")||"none ✓"}`)}</p>
+  <div class="actions"><button class="btn" ${reading?"disabled":""} onclick="idSave()">${L(`保存 ${pages.filter(p=>p.do_id).length} 页`,`Save ${pages.filter(p=>p.do_id).length} pages`)}</button><button class="btn sec" data-a="x">${L("取消","Cancel")}</button></div>`)}
+async function idSave(){if(!IDU)return;const{dos,pages,mode,invId}=IDU,go=pages.filter(p=>p.do_id);if(!go.length)return toast(L("没有选任何 DO","Nothing assigned"));
+  try{if(mode==="replace"){for(const id of new Set(go.map(p=>p.do_id))){const old=doPhotos(id);if(old.length){await sb.storage.from("attachments").remove(old.map(a=>a.file_path));await sb.from("attachments").delete().in("id",old.map(a=>a.id));S.d.attachments=S.d.attachments.filter(a=>!old.includes(a))}}}
+    let n=0;const cnt={};for(const p of go){const d=dos.find(x=>x.id===p.do_id);cnt[p.do_id]=(cnt[p.do_id]||0)+1;toast(`${L("上传中","Uploading")} ${++n}/${go.length}`);
+      await storeJpeg("do",p.do_id,"DO",p.blob,`DO-${d?.do_no||""}${cnt[p.do_id]>1?"-"+cnt[p.do_id]:""}.jpg`)}
+    pages.forEach(p=>URL.revokeObjectURL(p.url));IDU=null;document.querySelector("#photoOv")?.remove();await loadAll();openInv(invId);toast(L(`已上传 ${n} 张 DO 照片`,`${n} DO photos uploaded`))}
+  catch(e){toast(e.message||String(e))}}
 async function storeJpeg(type,id,kind,blob,origName){const path=`${S.user.id}/${type}/${id}/${Date.now()}_${Math.random().toString(36).slice(2,7)}.jpg`;
   const up=await sb.storage.from("attachments").upload(path,blob,{contentType:"image/jpeg"});if(up.error)throw up.error;
   const{data,error}=await sb.from("attachments").insert({entity_type:type,entity_id:id,kind,file_path:path,file_name:origName||"photo.jpg"}).select().single();if(error)throw error;
@@ -4035,6 +4071,7 @@ function signBox(i){const sg=signedOf(i),dos=S.modal?.dos||S.d.delivery_orders.f
     <div><span>${L("DO 照片","DO photos")}</span>${dos.length?(noPic.length?`<a href="#" title="${L("预览 DO","Preview DOs")}" onclick="doPreview('${i.id}');return false"><b class="tag warn" style="display:inline-block;width:auto">${dos.length-noPic.length} / ${dos.length}</b></a> <em class="mute" style="font-size:12px;font-style:normal">${L("缺：","Missing: ")}${noPic.slice(0,6).map(d=>esc(d.do_no)).join(", ")}${noPic.length>6?" …":""}</em>`:`<a href="#" title="${L("预览 DO","Preview DOs")}" onclick="doPreview('${i.id}');return false"><b class="tag ok" style="display:inline-block;width:auto">${dos.length} / ${dos.length}</b></a>`):`<em class="mute" style="font-style:normal">${S.modal?.dos==null?L("载入中…","Loading…"):"—"}</em>`}</div>${poRow(i)}</div>
   <div class="actions" style="margin-top:10px"><label class="btn ${sg?"sec":""} file">✍️ ${sg?L("换签名页","Replace signed page"):L("上传签名页（PDF / 照片）","Upload signed page (PDF / photo)")}<input type="file" hidden accept="application/pdf,image/*" onchange="upSigned('${i.id}',this)"></label>
     <label class="btn sec file">📎 ${poDocsOf(i).src==="own"?L("加 / 换 PO","Add PO"):L("上传 PO","Upload PO")}<input type="file" hidden accept="application/pdf,image/*" onchange="upPO('${i.id}',this)"></label>
+    ${dos.length?`<label class="btn sec file">⬆ ${L("上传 DO（PDF / 照片）","Upload DOs (PDF / photos)")}<input type="file" hidden multiple accept="application/pdf,image/*" onchange="invDoUp('${i.id}',this)"></label>`:""}
     ${dos.length?`<button class="btn sec" onclick="doPreview('${i.id}')">👁 ${L("预览 DO","Preview DOs")}</button>`:""}
     <button class="btn sec" onclick="custPreview('${i.id}')">👁 ${L("预览寄客户版本","Preview customer copy")}</button>
     <button class="btn ${sg?"":"sec"}" onclick="custCopy('${i.id}')">⬇ ${L("下载寄客户版本","Download customer copy")}</button>
