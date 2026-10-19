@@ -330,7 +330,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-19";
+const APP_VER="2026-10-19b";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -584,10 +584,10 @@ function doView(){
     <div style="grid-column:1/-1;height:0;margin:-6px 0"></div>
     ${(()=>{const sd=cSvc(f.service),k=svcKind(sd);if(!sd)return `${fld("start_time",L("开始时间","Start time"),f.start_time,"text",'inputmode="numeric" placeholder="2100"')}
     ${fld("end_time",L("结束时间","End time"),f.end_time,"text",'inputmode="numeric" placeholder="0500"')}
-    <div class="pair">${fld("from_loc","From",f.from_loc)}${fld("to_loc","To",f.to_loc)}</div>`;
+    <div class="pair">${fld("from_loc","From",f.from_loc,"text",'list="locList" autocomplete="off"')}${fld("to_loc","To",f.to_loc,"text",'list="locList" autocomplete="off"')}</div>${locBtns(f)}`;
       if(k==="rent")return `${fld("units",L("台数","Units"),f.units??1,"number",'step="1" min="1"')}${fld("end_date",L(`结束日期（${nightsOf(f)} 晚）`,`End date (${nightsOf(f)} nights)`),f.end_date||"","date")}
-    <div class="pair">${fld("from_loc","Location",f.from_loc)}${fld("to_loc",L("到（可空白）","To (optional)"),f.to_loc)}</div>`;
-      return `${fld("units",k==="trip"?L("趟数","Trips"):L("次数","Qty"),f.units??1,"number",'step="1" min="1"')}${k==="trip"?`<div class="pair">${fld("from_loc","From",f.from_loc)}${fld("to_loc","To",f.to_loc)}</div>`:""}
+    <div class="pair">${fld("from_loc","Location",f.from_loc,"text",'list="locList" autocomplete="off"')}${fld("to_loc",L("到（可空白）","To (optional)"),f.to_loc,"text",'list="locList" autocomplete="off"')}</div>${locBtns(f)}`;
+      return `${fld("units",k==="trip"?L("趟数","Trips"):L("次数","Qty"),f.units??1,"number",'step="1" min="1"')}${k==="trip"?`<div class="pair">${fld("from_loc","From",f.from_loc,"text",'list="locList" autocomplete="off"')}${fld("to_loc","To",f.to_loc,"text",'list="locList" autocomplete="off"')}</div>${locBtns(f)}`:""}
     ${sd.partner&&!isL3()?fld("partner_do_no",L("L3H DO 号码","L3H DO No"),f.partner_do_no||""):""}`})()}
     <label class="f wide">Description<input name="description" class="${f._descTouched?"":"auto"}" value="${esc(f.description)}"></label>
     ${cSvc(f.service)?"":fld("billable_hours",L("计费小时","Billable hrs"),f.billable_hours??"","number",'step="0.25"',"")}
@@ -728,6 +728,23 @@ async function recentLog(){let dos=[],sis=[];
     ${list.length?`<div class="tw" style="max-height:72vh;overflow:auto"><table><thead><tr><th>${L("几时 key","When")}</th><th>${L("类型","Type")}</th><th>${L("内容","What")}</th><th>${L("现在状态","Now")}</th></tr></thead><tbody>${list.map(row).join("")}</tbody></table></div>`
       :`<p class="mute">${L("还没有记录。","Nothing yet.")}</p>`}`)}
 async function recentDO(id,date){S.tab="do";if(date&&S.month!==date.slice(0,7)){S.month=date.slice(0,7);await loadDO()}render();editDO(id)}
+/* ---- DO 地址：以前用过的地址提示、用上一张的地址、对调 ---- */
+let LOCS=null;
+async function locLoad(){if(LOCS&&LOCS.co===S.company)return;LOCS={co:S.company,rows:[]};
+  try{const{data}=await sb.from("delivery_orders").select("id,do_no,do_date,start_time,plate,project,customer_id,from_loc,to_loc").eq("company",S.company).order("do_date",{ascending:false}).range(0,2999);LOCS.rows=data||[];if(S.doForm)render()}catch(e){}}
+function locRows(){const m=new Map();for(const d of[...S.d.delivery_orders,...(LOCS?.rows||[])])m.set(d.id,d);return[...m.values()]}
+function locList(f){const sc=new Map();for(const d of locRows())for(const a of[d.from_loc,d.to_loc]){const t=String(a||"").trim();if(!t)continue;
+    const w=(d.project&&d.project===f.project?100:0)+(d.customer_id&&d.customer_id===f.customer_id?10:0)+1;sc.set(t,(sc.get(t)||0)+w)}
+  return[...sc.entries()].sort((a,b)=>b[1]-a[1]).slice(0,300).map(x=>x[0])}
+function locLast(f){const rows=locRows().filter(d=>d.id!==f.id&&(d.from_loc||d.to_loc)).sort((a,b)=>String(b.do_date).localeCompare(String(a.do_date))||String(b.start_time||"").localeCompare(String(a.start_time||"")));
+  return rows.find(d=>f.plate&&d.plate===f.plate&&d.customer_id===f.customer_id)||rows.find(d=>f.project&&d.project===f.project)||rows.find(d=>f.customer_id&&d.customer_id===f.customer_id)||null}
+function locBtns(f){if(!LOCS||LOCS.co!==S.company)setTimeout(locLoad,0);const last=locLast(f);
+  return `<datalist id="locList">${locList(f).map(a=>`<option value="${esc(a)}">`).join("")}</datalist><div class="actions" style="grid-column:1/-1;margin:-4px 0 0;gap:6px">
+    ${last?`<button type="button" class="btn sec sm" title="${esc(`DO ${last.do_no||""} · ${dmy(last.do_date)}`)}" onclick="locUseLast()">↺ ${L("用上一张的地址","Use last address")}：${esc([last.from_loc,last.to_loc].filter(Boolean).join(" → ").slice(0,60))}</button>`:""}
+    <button type="button" class="btn sec sm" onclick="locSwap()">⇄ ${L("From / To 对调","Swap From / To")}</button></div>`}
+function locSet(fr,to){const f=S.doForm;if(!f)return;f.from_loc=fr||"";f.to_loc=to||"";for(const[n,v]of[["from_loc",f.from_loc],["to_loc",f.to_loc]]){const x=document.querySelector(`.grid [name="${n}"]`);if(x)x.value=v}S.dirty=true}
+function locUseLast(){const f=S.doForm;if(!f)return;const d=locLast(f);if(d)locSet(d.from_loc,d.to_loc)}
+function locSwap(){const f=S.doForm;if(!f)return;locSet(f.to_loc,f.from_loc)}
 function editDO(id){const d0=S.d.delivery_orders.find(x=>x.id===id);if(!d0)return;const d=unshare(d0);
   S.doForm=recompute({...d,start_time:d.start_time?.slice(0,5)||"",end_time:d.end_time?.slice(0,5)||"",_rateTouched:true,_surTouched:true,_descTouched:true,_supTouched:d.lifting_sup!=null,
     charges:(d.charges||[]).map(x=>({...x,_rt:true,_qt:true}))});
