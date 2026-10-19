@@ -330,7 +330,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-19c";
+const APP_VER="2026-10-19d";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -1129,6 +1129,8 @@ function l3SummaryHTML(inv,title){const lines=S.d.invoice_lines.filter(l=>l.invo
   <thead><tr><th>S/N</th><th>DESCRIPTION</th><th>QTY</th><th>UOM</th><th>UNIT PRICE $</th><th>TOTAL AMOUNT $</th></tr></thead><tbody>
   ${lines.map((l,i)=>`<tr><td>${i+1}</td><td class="a">${esc(String(l.description||"").replace(/\n/g," "))}</td><td>${lineUnit(l)==="hrs"?Number(l.qty||0).toFixed(2):l.qty??""}</td><td>${esc(lineUnit(l))}</td><td>${l.unit_price==null?"L/S":money(l.unit_price)}</td><td class="a">${acc(l.amount)}</td></tr>`).join("")}
   <tr class="tt"><td colspan="4"></td><td class="lb">TOTAL</td><td class="u a">${acc(inv.amount_before_gst)}</td></tr></tbody></table></div>`}
+/* 一页横向 record 表可以放多高（mm），每行 = 上下 padding + 每行字 */
+const REC_CAP=150,REC_TOT=9,recRowH=n=>3.7+4.6*n;
 function l3RecordsHTML(inv,dos){const c=custOf(inv.customer_id),no=inv.summary_no||"",per=13;
   const ds=[...dos].sort((a,b)=>a.do_date.localeCompare(b.do_date)||String(a.start_time||"").localeCompare(String(b.start_time||"")));
   const mon=(()=>{const a=inv.period_from||ds[0]?.do_date||inv.invoice_date;return `${MONL[+a.slice(5,7)-1].toUpperCase()} ${a.slice(0,4)}`})();
@@ -1137,16 +1139,18 @@ function l3RecordsHTML(inv,dos){const c=custOf(inv.customer_id),no=inv.summary_n
   if(inv.project)out.push(l3SummaryHTML(inv));
   const hourlySheet=(k,rows)=>{
     const T=f=>sum(rows,f);
-    out.push(chunkPages(rows,per,(rs,pi,last)=>`${head(k)}<table class="sm rec"><colgroup><col style="width:3.5%"><col style="width:5.5%"><col style="width:6.5%"><col style="width:9%"><col style="width:9%"><col style="width:6%"><col style="width:4.5%"><col style="width:4.5%"><col><col style="width:5.5%"><col style="width:4.5%"><col style="width:3.5%"><col style="width:4.5%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:6.5%"><col style="width:4%"></colgroup>
+    out.push(chunkPages(rows,per,(rs,pi,last,st0)=>`${head(k)}<table class="sm rec"><colgroup><col style="width:3.5%"><col style="width:5.5%"><col style="width:6.5%"><col style="width:9%"><col style="width:9%"><col style="width:6%"><col style="width:4.5%"><col style="width:4.5%"><col><col style="width:5.5%"><col style="width:4.5%"><col style="width:3.5%"><col style="width:4.5%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:6.5%"><col style="width:4%"></colgroup>
       <thead><tr><th class="y">S/N</th><th class="y">D/N</th><th class="y">Date</th><th class="y">From</th><th class="y">To</th><th>Vehicle No</th><th>In</th><th>Out</th><th class="y">Description</th><th>Rate</th><th>Total Hr 1</th><th>UOM</th><th class="o">Total Hr 2</th><th class="o">Rate2</th><th class="o">Diesel Surcharge</th><th class="o">Amount</th><th>Remarks</th></tr></thead><tbody>
-      ${rs.map((d,i)=>{const amt=r2(mainAmt(d)+(Number(d.surcharge)||0)),h=Number(d.billable_hours||0).toFixed(2);return `<tr><td>${pi*per+i+1}</td><td>${esc(d.do_no)}</td><td>${dMonYY(d.do_date)}</td><td>${esc(d.from_loc||"")}</td><td>${esc(d.to_loc||"")}</td><td>${esc(d.plate||"")}</td>
+      ${rs.map((d,i)=>{const amt=r2(mainAmt(d)+(Number(d.surcharge)||0)),h=Number(d.billable_hours||0).toFixed(2);return `<tr><td>${st0+i+1}</td><td>${esc(d.do_no)}</td><td>${dMonYY(d.do_date)}</td><td>${esc(d.from_loc||"")}</td><td>${esc(d.to_loc||"")}</td><td>${esc(d.plate||"")}</td>
         <td>${tShort(d.start_time)}</td><td>${tShort(d.end_time)}</td><td>${esc(d.description||"")}</td><td class="a">${acc(d.rate)}</td><td>${h}</td><td>hr</td><td>${h}</td><td class="a">${acc(d.rate)}</td><td class="a">${acc(d.surcharge)}</td><td class="a">${acc(amt)}</td><td>${esc([shareOf(d)&&!/\d\s*%/.test(d.remark||"")?shareOf(d)+"% share":"",d.remark||""].filter(Boolean).join(" · "))}</td></tr>`}).join("")}
-      ${last?`<tr class="tt"><td colspan="9"></td><td class="lb">HRS</td><td class="u">${T(d=>d.billable_hours).toFixed(2)}</td><td></td><td class="u">${T(d=>d.billable_hours).toFixed(2)}</td><td class="lb">TOTAL</td><td class="u a">${acc(T(d=>d.surcharge))}</td><td class="u a">${acc(T(d=>mainAmt(d)+(Number(d.surcharge)||0)))}</td><td></td></tr>`:""}</tbody></table>`))};
-  const loadSheet=(k,lr)=>{out.push(chunkPages(lr,per+2,(rs,pi,last)=>`${head(k)}<table class="sm rec"><colgroup><col style="width:4%"><col style="width:8%"><col style="width:7%"><col style="width:11%"><col style="width:11%"><col style="width:5%"><col style="width:6%"><col><col style="width:5%"><col style="width:5%"><col style="width:7%"><col style="width:8%"><col style="width:6%"></colgroup>
+      ${last?`<tr class="tt"><td colspan="9"></td><td class="lb">HRS</td><td class="u">${T(d=>d.billable_hours).toFixed(2)}</td><td></td><td class="u">${T(d=>d.billable_hours).toFixed(2)}</td><td class="lb">TOTAL</td><td class="u a">${acc(T(d=>d.surcharge))}</td><td class="u a">${acc(T(d=>mainAmt(d)+(Number(d.surcharge)||0)))}</td><td></td></tr>`:""}</tbody></table>`,
+      {cap:REC_CAP,tot:REC_TOT,h:d=>recRowH(Math.max(wrapN(d.description,19),wrapN(d.from_loc,16),wrapN(d.to_loc,16),wrapN([shareOf(d)?shareOf(d)+"% share":"",d.remark||""].filter(Boolean).join(" · "),6)))}))};
+  const loadSheet=(k,lr)=>{out.push(chunkPages(lr,per+2,(rs,pi,last,st0)=>`${head(k)}<table class="sm rec"><colgroup><col style="width:4%"><col style="width:8%"><col style="width:7%"><col style="width:11%"><col style="width:11%"><col style="width:5%"><col style="width:6%"><col><col style="width:5%"><col style="width:5%"><col style="width:7%"><col style="width:8%"><col style="width:6%"></colgroup>
     <thead><tr><th>S/N</th><th>D/N</th><th>Date</th><th>From</th><th>To</th><th>Company</th><th>Vehicle No</th><th>Descriptions</th><th>Qty</th><th>UOM</th><th>Rate</th><th>Amount</th><th>Remarks</th></tr></thead><tbody>
-    ${rs.map((x,i)=>`<tr><td>${pi*(per+2)+i+1}</td><td>${esc(x.d.do_no)}</td><td>${dMonYY(x.d.do_date)}</td><td>${esc(x.d.from_loc||"")}</td><td>${esc(x.d.to_loc||"")}</td><td>L3H</td><td>${esc(x.d.plate||"")}</td>
+    ${rs.map((x,i)=>`<tr><td>${st0+i+1}</td><td>${esc(x.d.do_no)}</td><td>${dMonYY(x.d.do_date)}</td><td>${esc(x.d.from_loc||"")}</td><td>${esc(x.d.to_loc||"")}</td><td>L3H</td><td>${esc(x.d.plate||"")}</td>
       <td>${esc(x.t)}</td><td>${x.q.toFixed(2)}</td><td>${esc(x.u)}</td><td class="${x.rate!=null?"a":""}">${x.rate!=null?acc(x.rate):"NIL"}</td><td class="${x.amt?"a":""}">${x.amt?acc(x.amt):"NIL"}</td><td>${esc(x.d.remark||"")}</td></tr>`).join("")}
-    ${last?`<tr class="tt"><td colspan="10"></td><td class="lb">TOTAL</td><td class="u a">${acc(sum(lr,x=>x.amt))}</td><td></td></tr>`:""}</tbody></table>`));};
+    ${last?`<tr class="tt"><td colspan="10"></td><td class="lb">TOTAL</td><td class="u a">${acc(sum(lr,x=>x.amt))}</td><td></td></tr>`:""}</tbody></table>`,
+    {cap:REC_CAP,tot:REC_TOT,h:x=>recRowH(Math.max(wrapN(x.t,30),wrapN(x.d.from_loc,18),wrapN(x.d.to_loc,18),wrapN(x.d.remark,8)))}));};
   /* 非 CHC：Lorry Crane 用 MGC 那种 Summary Report（一个表） */
   const craneSum=!inv.project;
   if(craneSum){const rows=ds.filter(d=>/^crane/.test(kindOf(d)||""));if(rows.length)out.push(craneSummaryHTML(inv,rows))}
@@ -4381,8 +4385,15 @@ function invoiceHTML(inv,hasBd){const s=settingsOf(inv.company),c=custOf(inv.cus
 function sumMonth(inv,list){const a=inv.period_from||list[0].do_date,b=inv.period_to||list[list.length-1].do_date;
   return a.slice(0,7)===b.slice(0,7)?monthLong(a):`${MONL[+a.slice(5,7)-1]}${a.slice(0,4)!==b.slice(0,4)?" "+a.slice(0,4):""} & ${monthLong(b)}`}
 function sumHead(lines){return `<div class="sumh">${lines.map((t,i)=>i===0?`<div class="t"><span class="ul">${esc(t)}</span></div>`:`<div>${esc(t)}</div>`).join("")}</div>`}
-function chunkPages(rows,per,make){const ch=[];for(let i=0;i<rows.length;i+=per)ch.push(rows.slice(i,i+per));
-  return ch.map((r,pi)=>`<div class="doc pg land">${make(r,pi,pi===ch.length-1)}${ch.length>1?`<div class="pno">Page ${pi+1} of ${ch.length}</div>`:""}</div>`).join("")}
+/* 估计一行打印出来有几行字高（长 Description 会变高） */
+function wrapN(t,cpl){t=String(t||"").trim();if(!t)return 1;let n=0;for(const para of t.split(/\n/)){let cur=0,k=1;for(const w of para.split(/\s+/)){const l=w.length;if(!cur)cur=l;else if(cur+1+l<=cpl)cur+=1+l;else{k++;cur=l}while(cur>cpl){k++;cur-=cpl}}n+=k}return n}
+function chunkPages(rows,per,make,fit){const ch=[];
+  if(fit){let cur=[],h=0;for(const r of rows){const rh=fit.h(r);if(cur.length&&(h+rh>fit.cap||cur.length>=per*2)){ch.push(cur);cur=[];h=0}cur.push(r);h+=rh}if(cur.length)ch.push(cur);
+    /* 最后一页还要放 Total 那行 */
+    if(ch.length&&fit.tot){const L=ch.at(-1);if(L.length>1&&sum(L,fit.h)+fit.tot>fit.cap)ch.push([L.pop()])}}
+  else for(let i=0;i<rows.length;i+=per)ch.push(rows.slice(i,i+per));
+  const st=[];let acc0=0;for(const r of ch){st.push(acc0);acc0+=r.length}
+  return ch.map((r,pi)=>`<div class="doc pg land">${make(r,pi,pi===ch.length-1,st[pi])}${ch.length>1?`<div class="pno">Page ${pi+1} of ${ch.length}</div>`:""}</div>`).join("")}
 function breakdownHTML(inv,dos){if(coOf(settingsOf(inv.company))==="L3H"){if(isMachInv(inv))return machineRecordsHTML(inv);const cs=dos.filter(d=>cSvc(d.service)),st=dos.filter(d=>!cSvc(d.service)),cg={};for(const d of cs)(cg[d.service]=cg[d.service]||[]).push(d);const c0=custOf(inv.customer_id);return (st.length?l3RecordsHTML(inv,st):"")+Object.entries(cg).map(([svc,l])=>svcRecordsHTML(inv,svc,l,c0)).join("")}const g={};for(const d of dos)(g[d.service]=g[d.service]||[]).push(d);const c=custOf(inv.customer_id);
   return Object.entries(g).map(([svc,list])=>{const month=sumMonth(inv,list);
     if(svcDef(svc)&&svcKind(svcDef(svc))!=="time")return svcRecordsHTML(inv,svc,list,c);
