@@ -330,7 +330,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-19d";
+const APP_VER="2026-10-21a";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -2970,22 +2970,34 @@ function siContra(ids){const list=S.d.supplier_invoices.filter(x=>ids.includes(x
   if(sups.length>1)return alert(L("Contra 要同一个供应商。请只勾一个供应商的单。","Pick invoices from one supplier only."));
   const ok=list.filter(x=>!x.payment_date);if(!ok.length)return toast(L("勾选的都已经付了 / contra 了","All selected are already settled"));
   const sn=normCo(supName(sups[0]));let best=null,bs=0;for(const c of S.d.customers){const v=simCo(sn,normCo(c.name));if(v>bs){bs=v;best=c}}
-  CT={ids:ok.map(x=>x.id),cid:bs>=0.8?best.id:"",date:"",skip:list.length-ok.length};ctRender()}
+  CT={ids:ok.map(x=>x.id),cid:bs>=0.8?best.id:"",date:"",skip:list.length-ok.length,pick:{}};ctRender()}
 function ctPlan(){const sis=S.d.supplier_invoices.filter(x=>CT.ids.includes(x.id)).sort((a,b)=>String(a.invoice_date).localeCompare(String(b.invoice_date)));
   const inv=CT.cid?S.d.invoices.filter(i=>i.customer_id===CT.cid&&i.status!=="Cancelled"&&balOf(i)>0.005).sort((a,b)=>a.invoice_date.localeCompare(b.invoice_date)||String(a.invoice_no).localeCompare(String(b.invoice_no))):[];
   const left=new Map(inv.map(i=>[i.id,balOf(i)])),plan=[];
-  for(const si of sis){let amt=r2(Number(si.total)||0);const al=[];for(const i of inv){if(amt<=0.005)break;const b=left.get(i.id);if(b<=0.005)continue;const t=r2(Math.min(b,amt));al.push({inv:i,amt:t});left.set(i.id,r2(b-t));amt=r2(amt-t)}
-    plan.push({si,al,credit:amt})}
+  const pk=CT.pick||{};
+  /* 先处理你自己选了 invoice 的，再自动分配其他的 */
+  const order=[...sis.filter(x=>pk[x.id]),...sis.filter(x=>!pk[x.id])],res=new Map();
+  for(const si of order){let amt=r2(Number(si.total)||0);const al=[];
+    if(pk[si.id]){const i=S.d.invoices.find(v=>v.id===pk[si.id]);const b=i?(left.has(i.id)?left.get(i.id):Math.max(0,balOf(i))):0;const t=r2(Math.min(b,amt));if(i&&t>0.005){al.push({inv:i,amt:t});left.set(i.id,r2(b-t));amt=r2(amt-t)}
+      res.set(si.id,{si,al,credit:amt,picked:true});continue}
+    for(const i of inv){if(amt<=0.005)break;const b=left.get(i.id);if(b<=0.005)continue;const t=r2(Math.min(b,amt));al.push({inv:i,amt:t});left.set(i.id,r2(b-t));amt=r2(amt-t)}
+    res.set(si.id,{si,al,credit:amt})}
+  for(const si of sis)plan.push(res.get(si.id));
   return{plan,total:r2(sum(sis,x=>x.total)),owe:r2(sum(inv,balOf))}}
+function ctOpts(sid){const cur=(CT.pick||{})[sid]||"";
+  const all=S.d.invoices.filter(i=>i.customer_id===CT.cid&&i.status!=="Cancelled"&&Number(i.total)>0).sort((a,b)=>b.invoice_date.localeCompare(a.invoice_date)||String(b.invoice_no).localeCompare(String(a.invoice_no)));
+  return `<option value="">${L("自动（最早没付清的）","Auto (oldest unpaid)")}</option>`+all.map(i=>{const b=balOf(i),paid=b<=0.005;
+    return `<option value="${i.id}" ${i.id===cur?"selected":""} ${paid&&i.id!==cur?"disabled":""}>${esc(i.invoice_no)} · ${dmy(i.invoice_date)} · ${paid?L("已收齐","fully paid"):L(`欠 $${money(b)}`,`owes $${money(b)}`)}</option>`}).join("")}
 function ctRender(){const P=ctPlan();
   pvOv(`<div class="pvhead"><h3 style="margin:0">🔁 Contra · ${esc(supName(S.d.supplier_invoices.find(x=>x.id===CT.ids[0]).supplier_id))}</h3><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
-  <p class="mute" style="font-size:13px;margin-top:0">${L("对方开给我们的单，用来抵销他欠我们的钱：Supplier Invoice 会标成 Contra（算已付），客户那边自动记一笔 Contra 收款，从他最早没付的 invoice 开始扣。SOA 会显示「Contra 单号」在 CR 栏。","Their invoices offset what they owe us: supplier invoices are marked Contra (settled) and a Contra payment is recorded for the customer, applied to the oldest unpaid invoices.")}</p>
+  <p class="mute" style="font-size:13px;margin-top:0">${L("对方开给我们的单，用来抵销他欠我们的钱：Supplier Invoice 会标成 Contra（算已付），客户那边自动记一笔 Contra 收款，从他最早没付的 invoice 开始扣（每行可以自己选抵销哪一张）。SOA 会显示「Contra 单号」在 CR 栏。","Their invoices offset what they owe us: supplier invoices are marked Contra (settled) and a Contra payment is recorded for the customer, applied to the oldest unpaid invoices.")}</p>
   ${CT.skip?`<p class="tag warn">${L(`${CT.skip} 张已经付了，不算`,`${CT.skip} already settled, skipped`)}</p>`:""}
-  <div class="filters"><label class="f" style="min-width:280px">${L("抵销哪个客户（他欠我们的）","Customer to offset")}<select onchange="CT.cid=this.value;ctRender()">${optList(S.d.customers.map(c=>[c.id,c.name]),CT.cid,"—")}</select></label>
+  <div class="filters"><label class="f" style="min-width:280px">${L("抵销哪个客户（他欠我们的）","Customer to offset")}<select onchange="CT.cid=this.value;CT.pick={};ctRender()">${optList(S.d.customers.map(c=>[c.id,c.name]),CT.cid,"—")}</select></label>
     <label class="f">${L("Contra 日期（空白 = 用每张 supplier invoice 的日期）","Contra date (blank = each invoice's date)")}<input type="date" value="${CT.date}" onchange="CT.date=this.value"></label></div>
   <p>${L("Contra 金额","Contra amount")} <b>$${money(P.total)}</b>${CT.cid?` · ${L("客户现在欠","customer owes")} $${money(P.owe)}`:""}</p>
   ${CT.cid?`<div class="tw" style="max-height:45vh"><table><thead><tr><th>${L("Supplier Invoice","Supplier invoice")}</th><th class="num">${L("金额","Amount")}</th><th>${L("抵销客户的 invoice","Offsets")}</th></tr></thead><tbody>
-    ${P.plan.map(x=>`<tr><td>${esc(x.si.invoice_no)}<div class="mute" style="font-size:12px">${dmy(x.si.invoice_date)}</div></td><td class="num">${money(x.si.total)}</td><td>${x.al.map(a=>`${esc(a.inv.invoice_no)} $${money(a.amt)}`).join("<br>")}${x.credit>0.005?`<div><span class="tag warn">${L(`多出 $${money(x.credit)} 当作多付（credit）`,`$${money(x.credit)} left as credit`)}</span></div>`:""}</td></tr>`).join("")}</tbody></table></div>`
+    ${P.plan.map(x=>`<tr><td>${esc(x.si.invoice_no)}<div class="mute" style="font-size:12px">${dmy(x.si.invoice_date)}</div></td><td class="num">${money(x.si.total)}</td><td><select class="inp" style="max-width:360px;padding:5px 8px" onchange="CT.pick['${x.si.id}']=this.value;ctRender()">${ctOpts(x.si.id)}</select>
+      <div style="margin-top:4px">${x.al.map(a=>`${esc(a.inv.invoice_no)} $${money(a.amt)}`).join("<br>")}</div>${x.credit>0.005?`<div><span class="tag warn">${x.picked?L(`那张只欠 $${money(r2(Number(x.si.total)-x.credit))}，多出 $${money(x.credit)} 当作多付（credit）`,`Only $${money(r2(Number(x.si.total)-x.credit))} owing; $${money(x.credit)} left as credit`):L(`多出 $${money(x.credit)} 当作多付（credit）`,`$${money(x.credit)} left as credit`)}</span></div>`:""}</td></tr>`).join("")}</tbody></table></div>`
     :`<p class="tag warn">${L("找不到同名的客户，请在上面选。","No matching customer — pick one above.")}</p>`}
   <div class="actions" style="margin-top:10px"><button class="btn" id="ctGo" ${CT.cid?"":"disabled"} onclick="ctApply()">🔁 ${L("确定 Contra","Confirm contra")}</button></div>`)}
 async function ctApply(){const P=ctPlan(),co=S.company,b=$("#ctGo");if(b)b.disabled=true;const madePays=[],back=[];
