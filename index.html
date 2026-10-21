@@ -52,7 +52,7 @@ a{color:var(--amber)}
 nav.tabs{display:flex;gap:2px;padding:0 12px;background:var(--panel);border-bottom:1px solid var(--line);overflow-x:auto}
 nav.tabs button{border:0;background:none;padding:10px 12px;cursor:pointer;color:var(--mute);border-bottom:2px solid transparent;white-space:nowrap}
 nav.tabs button.on{color:var(--ink);border-bottom-color:var(--amber)}
-nav.tabs .badge{display:inline-block;min-width:18px;padding:0 5px;margin-left:4px;border-radius:9px;background:var(--bad);color:#fff;font-size:11px;line-height:18px;text-align:center}
+.btn .badge,nav.tabs .badge{display:inline-block;min-width:18px;padding:0 5px;margin-left:4px;border-radius:9px;background:var(--bad);color:#fff;font-size:11px;line-height:18px;text-align:center}
 
 main{max-width:1800px;margin:0 auto;padding:16px}
 h2{font-size:18px;margin:4px 0 12px} h3{font-size:15px;margin:16px 0 8px}
@@ -330,7 +330,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-21a";
+const APP_VER="2026-10-21b";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -1363,7 +1363,7 @@ function pvView(){const rows=sortRows("pv",(S.d.pvs||[]).filter(p=>p.company===S
   :`<div class="panel empty">${L("这段时间没有 PV。按「新 PV」开始。","No PVs in this period.")}</div>`}`}
 function supView(){const keys=["supplier_invoices","diesel_surcharges","suppliers"],cur=S.sub.sup;
   const tabs=`<div class="sub">${keys.map(k=>`<button class="${k===cur?"on":""}" onclick="S.sub.sup='${k}';S.gEdit=null;S.dirty=false;render()">${L(...ENT[k].label)}</button>`).join("")}<button class="${cur==="pv"?"on":""}" onclick="S.sub.sup='pv';S.gEdit=null;S.dirty=false;render()">💳 ${L("付款 / PV","Payments / PV")}</button></div>`;
-  return `<div class="actions" style="margin:0 0 6px"><button class="btn sec" data-drop="bulkUp" onclick="bulkUp()">⬆ ${L("批量上传 Excel（供应商 / 客户报告）","Bulk upload Excel")}</button><button class="btn sec" data-drop="tiUp" onclick="tiUp()">⬆ ${L("上传 Tax Invoice（PDF / zip）","Upload tax invoices")}</button></div>`+tabs+(cur==="pv"?pvView():genView([cur],"sup"))}
+  return `<div class="actions" style="margin:0 0 6px"><button class="btn sec" data-drop="bulkUp" onclick="bulkUp()">⬆ ${L("批量上传 Excel（供应商 / 客户报告）","Bulk upload Excel")}</button><button class="btn sec" data-drop="tiUp" onclick="tiUp()">⬆ ${L("上传 Tax Invoice（PDF / zip）","Upload tax invoices")}</button>${(()=>{const n=ctPending();return `<button class="btn sec" onclick="ctScan()">🔁 ${L("对 Contra","Match contras")}${n?` <span class="badge">${n}</span>`:""}</button>`})()}</div>`+tabs+(cur==="pv"?pvView():genView([cur],"sup"))}
 /* ---- 新 PV / 修改 ---- */
 let PVF=null;
 function pvOv(html){let ov=$("#photoOv");if(!ov){ov=document.createElement("div");ov.id="photoOv";document.body.appendChild(ov);ov.onclick=e=>{if(e.target===ov||e.target.closest("[data-a=x]"))ov.remove()}}
@@ -2401,6 +2401,7 @@ function payFormView(f){
   ${f.customer_id&&custCredits(f.customer_id,f.id).length?`<div class="note" style="margin:8px 0">${L("这个客户之前有多付的余款：","This customer has unapplied credit:")}
     ${custCredits(f.customer_id,f.id).map(p=>`<a href="#" onclick="event.preventDefault();openPayForm(S.d.payments.find(x=>x.id==='${p.id}'))">${dmy(p.payment_date)} ${esc(p.reference||p.method||"")} · $${money(payUnalloc(p))}</a>`).join(" &nbsp; ")}
     <br>${L("要用余款付新的 invoice：点上面那笔收款，在下面分配给新的 invoice，不用另外记一笔。","To use it on a new invoice, open that payment and apply it below — don't record a new payment.")}</div>`:""}
+  ${/contra/i.test(f.method||"")&&f.customer_id?payCtBox(f):""}
   <h3>${L("这笔钱付哪些 invoice","Apply to invoices")}</h3>
   ${f.customer_id?(list.length?`<div class="tw"><table><thead><tr><th>Invoice No</th><th>${L("日期","Date")}</th><th>Due</th><th class="num">Total</th><th class="num">${L("未付","Balance")}</th><th class="num">${L("这次付","Apply")}</th></tr></thead><tbody>
     ${list.map(i=>`<tr><td>${esc(i.invoice_no)}</td><td>${dmy(i.invoice_date)}</td><td>${dmy(i.due_date)}</td><td class="num">${money(i.total)}</td><td class="num">${money(balExcl(i,f.id))}</td>
@@ -2412,11 +2413,23 @@ function payFormView(f){
   <div class="actions"><button class="btn" onclick="savePay()">${L("保存","Save")}</button><button class="btn sec" onclick="closeModal()">${L("取消","Cancel")}</button>
     ${f.id?`<button class="btn del" onclick="delPay('${f.id}')">${L("删除","Delete")}</button>`:""}</div>`;
 }
+function payCtBox(f){if(f.ctSup===undefined)f.ctSup=supForCust(f.customer_id);if(!f.ctSis){f.ctSis=new Set(f.id?ctLinked(f).map(x=>x.id):[])}
+  const linked=new Set(f.id?ctLinked(f).map(x=>x.id):[]);
+  const list=f.ctSup?S.d.supplier_invoices.filter(x=>x.supplier_id===f.ctSup&&(!siSettled(x)||linked.has(x.id))).sort((a,b)=>String(a.invoice_date).localeCompare(String(b.invoice_date))):[];
+  const t=r2(sum(list.filter(x=>f.ctSis.has(x.id)),x=>Number(x.total)||0));
+  return `<h3>🔁 ${L("这笔 Contra 抵销哪张 Supplier Invoice","Which supplier invoices does this contra offset")}</h3>
+  <div class="filters"><label class="f" style="min-width:280px">${L("供应商","Supplier")}<select onchange="S.modal.f.ctSup=this.value;S.modal.f.ctSis=new Set();render()">${optList((S.d.suppliers||[]).map(x=>[x.id,x.name]),f.ctSup,"—")}</select></label></div>
+  ${f.ctSup?(list.length?`<div class="tw" style="max-height:30vh"><table><thead><tr><th></th><th>Invoice No</th><th>${L("日期","Date")}</th><th>Description</th><th class="num">Total</th></tr></thead><tbody>
+    ${list.map(x=>`<tr><td><input type="checkbox" ${f.ctSis.has(x.id)?"checked":""} onchange="payCtTick('${x.id}',this.checked)"></td><td>${esc(x.invoice_no)}</td><td>${dmy(x.invoice_date)}</td><td class="wrap">${esc(x.description||"")}</td><td class="num">${money(x.total)}</td></tr>`).join("")}</tbody></table></div>
+    <p style="font-size:13px">${L("勾了","Ticked")} <b>$${money(t)}</b>${Number(f.amount)>0&&f.ctSis.size&&Math.abs(t-Number(f.amount))>0.005?` <span class="tag warn">${L(`跟收款金额 $${money(f.amount)} 不一样`,`differs from $${money(f.amount)}`)}</span>`:""} · <span class="mute">${L("保存后这些会标成 Contra（付款日期 = 收款日期）","Saved as Contra (date = receipt date)")}</span></p>`
+    :`<p class="mute">${L("这个供应商没有未付的 supplier invoice。","No unpaid supplier invoices.")}</p>`):`<p class="tag warn">${L("找不到同名的供应商，请选。","Pick the supplier.")}</p>`}`}
+function payCtTick(id,on){const f=S.modal.f;on?f.ctSis.add(id):f.ctSis.delete(id);render()}
 function payTotHTML(f){const a=sum(Object.values(f.alloc),x=>x),un=r2((Number(f.amount)||0)-a);
   return `<div>${L("收到","Received")}<b>$${money(f.amount||0)}</b></div><div>${L("已分配","Applied")}<b>$${money(a)}</b></div>
   <div class="total">${L("未分配（多付）","Unallocated")}<b style="color:${un<-0.005?"var(--bad)":""}">$${money(un)}</b></div>`}
 function payIn(el,isChange){const f=S.modal.f,k=el.dataset.k;if(!k)return;f[k]=k==="amount"?(el.value===""?null:Number(el.value)):el.value;if(k==="amount")f._amtManual=el.value!=="";
-  if(k==="customer_id"&&isChange){f.alloc={};render();return}$("#payTot").innerHTML=payTotHTML(f)}
+  if(k==="customer_id"&&isChange){f.alloc={};f.ctSup=undefined;f.ctSis=null;render();return}
+  if(k==="method"&&isChange){render();return}$("#payTot").innerHTML=payTotHTML(f)}
 function payAlloc(id,v){const f=S.modal.f;if(v===""||Number(v)===0)delete f.alloc[id];else f.alloc[id]=Number(v);
   if(!f._amtManual){const t=r2(sum(Object.values(f.alloc),x=>x));f.amount=t||null;const a=document.querySelector('[data-k="amount"]');if(a)a.value=t?t:""}
   $("#payTot").innerHTML=payTotHTML(f)}
@@ -2433,6 +2446,8 @@ async function savePay(){const f=S.modal.f,w=$("#payWarn");
   else{const{data,error}=await sb.from("payments").insert(row).select().single();if(error)return w.textContent=error.message;id=data.id}
   const ins=Object.entries(f.alloc).filter(([,x])=>x>0).map(([invoice_id,amount])=>({payment_id:id,invoice_id,amount}));
   if(ins.length){const{error}=await sb.from("payment_allocations").insert(ins);if(error)return w.textContent=error.message}
+  if(/contra/i.test(f.method||"")&&f.ctSis?.size){const pay={...row,id,reference:row.reference},sis=S.d.supplier_invoices.filter(x=>f.ctSis.has(x.id)&&!siSettled(x));
+    if(sis.length){try{await ctLink(sis,pay)}catch(e){toast(L("收款已保存，但 Supplier Invoice 标 Contra 失败：","Saved, but marking supplier invoices failed: ")+e.message)}}}
   if(f._receipt){try{await attUploadFile("payment",id,f._receipt,"Receipt")}catch(e){toast(L("收款已保存，但收据上传失败：","Saved, but receipt upload failed: ")+(e.message||e))}}
   await loadAll();await syncStatuses([...before,...ins.map(x=>x.invoice_id)]);
   toast(L("收款已保存","Payment saved"));S.modal=null;done();
@@ -2988,7 +3003,12 @@ function ctOpts(sid){const cur=(CT.pick||{})[sid]||"";
   const all=S.d.invoices.filter(i=>i.customer_id===CT.cid&&i.status!=="Cancelled"&&Number(i.total)>0).sort((a,b)=>b.invoice_date.localeCompare(a.invoice_date)||String(b.invoice_no).localeCompare(String(a.invoice_no)));
   return `<option value="">${L("自动（最早没付清的）","Auto (oldest unpaid)")}</option>`+all.map(i=>{const b=balOf(i),paid=b<=0.005;
     return `<option value="${i.id}" ${i.id===cur?"selected":""} ${paid&&i.id!==cur?"disabled":""}>${esc(i.invoice_no)} · ${dmy(i.invoice_date)} · ${paid?L("已收齐","fully paid"):L(`欠 $${money(b)}`,`owes $${money(b)}`)}</option>`}).join("")}
-function ctRender(){const P=ctPlan();
+function ctExisting(){if(!CT.cid)return null;const sis=S.d.supplier_invoices.filter(x=>CT.ids.includes(x.id)),tot=r2(sum(sis,x=>Number(x.total)||0)),t=sis.map(x=>suAn(x.invoice_no));
+  const ps=S.d.payments.filter(p=>p.customer_id===CT.cid&&isCtPay(p)&&ctLeft(p)>0.005);
+  return ps.find(p=>{const r=suAn([p.reference,p.remark].join(" "));return t.every(n=>n.length>=4&&r.includes(n))})||ps.find(p=>Math.abs(ctLeft(p)-tot)<0.01)||null}
+async function ctOnlySup(){const p=ctExisting();if(!p)return;const sis=S.d.supplier_invoices.filter(x=>CT.ids.includes(x.id));
+  try{await ctLink(sis,p)}catch(e){return alert(e.message)}$("#photoOv")?.remove();S.siSel.clear();await loadAll();render();toast(L(`已标 ${sis.length} 张为 Contra（没有多记收款）`,`${sis.length} marked Contra (no new receipt)`))}
+function ctRender(){const P=ctPlan(),EX=ctExisting();
   pvOv(`<div class="pvhead"><h3 style="margin:0">🔁 Contra · ${esc(supName(S.d.supplier_invoices.find(x=>x.id===CT.ids[0]).supplier_id))}</h3><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
   <p class="mute" style="font-size:13px;margin-top:0">${L("对方开给我们的单，用来抵销他欠我们的钱：Supplier Invoice 会标成 Contra（算已付），客户那边自动记一笔 Contra 收款，从他最早没付的 invoice 开始扣（每行可以自己选抵销哪一张）。SOA 会显示「Contra 单号」在 CR 栏。","Their invoices offset what they owe us: supplier invoices are marked Contra (settled) and a Contra payment is recorded for the customer, applied to the oldest unpaid invoices.")}</p>
   ${CT.skip?`<p class="tag warn">${L(`${CT.skip} 张已经付了，不算`,`${CT.skip} already settled, skipped`)}</p>`:""}
@@ -2999,7 +3019,9 @@ function ctRender(){const P=ctPlan();
     ${P.plan.map(x=>`<tr><td>${esc(x.si.invoice_no)}<div class="mute" style="font-size:12px">${dmy(x.si.invoice_date)}</div></td><td class="num">${money(x.si.total)}</td><td><select class="inp" style="max-width:360px;padding:5px 8px" onchange="CT.pick['${x.si.id}']=this.value;ctRender()">${ctOpts(x.si.id)}</select>
       <div style="margin-top:4px">${x.al.map(a=>`${esc(a.inv.invoice_no)} $${money(a.amt)}`).join("<br>")}</div>${x.credit>0.005?`<div><span class="tag warn">${x.picked?L(`那张只欠 $${money(r2(Number(x.si.total)-x.credit))}，多出 $${money(x.credit)} 当作多付（credit）`,`Only $${money(r2(Number(x.si.total)-x.credit))} owing; $${money(x.credit)} left as credit`):L(`多出 $${money(x.credit)} 当作多付（credit）`,`$${money(x.credit)} left as credit`)}</span></div>`:""}</td></tr>`).join("")}</tbody></table></div>`
     :`<p class="tag warn">${L("找不到同名的客户，请在上面选。","No matching customer — pick one above.")}</p>`}
-  <div class="actions" style="margin-top:10px"><button class="btn" id="ctGo" ${CT.cid?"":"disabled"} onclick="ctApply()">🔁 ${L("确定 Contra","Confirm contra")}</button></div>`)}
+  ${EX?`<div class="note" style="margin:10px 0;border-color:var(--warn)">⚠ ${L(`客户那边已经记了这笔 Contra：${dmy(EX.payment_date)} · $${money(EX.amount)}${EX.reference?" · "+esc(EX.reference):""}${(()=>{const a=S.d.payment_allocations.filter(x=>x.payment_id===EX.id).map(x=>invById(x.invoice_id)?.invoice_no).filter(Boolean);return a.length?" → "+esc(a.join(", ")):""})()}。<br>只要把 Supplier Invoice 标成 Contra 就好，不要再记一次收款。`,`Already recorded on the customer side: ${dmy(EX.payment_date)} $${money(EX.amount)}. Just mark the supplier invoice.`)}
+    <div class="actions" style="margin-top:8px"><button class="btn" onclick="ctOnlySup()">✓ ${L("只标 Supplier Invoice 为 Contra","Mark supplier invoice only")}</button></div></div>`:""}
+  <div class="actions" style="margin-top:10px"><button class="btn ${EX?"sec":""}" id="ctGo" ${CT.cid?"":"disabled"} onclick="${EX?`if(confirm(L('客户那边已经有这笔 Contra，再记一次会重复。确定还要另外记一笔收款？','Already recorded — record another receipt anyway?')))ctApply()`:"ctApply()"}">🔁 ${EX?L("另外再记一笔收款 + Contra","Record another receipt + contra"):L("确定 Contra","Confirm contra")}</button></div>`)}
 async function ctApply(){const P=ctPlan(),co=S.company,b=$("#ctGo");if(b)b.disabled=true;const madePays=[],back=[];
   try{for(const x of P.plan){const si=x.si;back.push({id:si.id,payment_date:si.payment_date??null,status:si.status??null,remark:si.remark??null});
       const cd=CT.date||si.invoice_date||today();
@@ -3010,6 +3032,50 @@ async function ctApply(){const P=ctPlan(),co=S.company,b=$("#ctGo");if(b)b.disab
     undoToast(L(`Contra 完成：${P.plan.length} 张，$${money(P.total)}`,`Contra done: ${P.plan.length}, $${money(P.total)}`),async()=>{for(const id of madePays)await sb.from("payments").delete().eq("id",id);
       for(const r of back)await sb.from("supplier_invoices").update({payment_date:r.payment_date,status:r.status,remark:r.remark}).eq("id",r.id);await loadAll();await syncStatuses(ids);render();toast(L("已撤销 Contra","Contra undone"))})}
   catch(e){alert(L("Contra 中断：","Contra stopped: ")+e.message);await loadAll();render()}}
+/* ---- Contra 两边连起来：收款那边记的 Contra ↔ Supplier Invoice ---- */
+const isCtPay=p=>/contra/i.test([p.method,p.reference,p.remark].join(" "));
+const siSettled=x=>!!x.payment_date;
+function custForSup(sid){const n=normCo(supName(sid));let b=null,bs=0;for(const c of S.d.customers){const v=simCo(n,normCo(c.name));if(v>bs){bs=v;b=c}}return bs>=0.8?b.id:""}
+function supForCust(cid){const c=custOf(cid),n=normCo(c?.name||"");let b=null,bs=0;for(const x of S.d.suppliers||[]){const v=simCo(n,normCo(x.name));if(v>bs){bs=v;b=x}}return bs>=0.8?b.id:""}
+/* 哪些 supplier invoice 已经连到这笔收款（单号写在收款的 Reference / Remark 里，而且标了 Contra） */
+function ctLinked(p){const t=suAn([p.reference,p.remark].join(" "));if(!t)return[];return S.d.supplier_invoices.filter(x=>/contra/i.test(x.status||"")&&suAn(x.invoice_no).length>=4&&t.includes(suAn(x.invoice_no)))}
+const ctLeft=p=>r2(Number(p.amount)-sum(ctLinked(p),x=>Number(x.total)||0));
+/* 一笔 Contra 收款还没连好的部分，配哪几张 supplier invoice（单号对得上 → 金额一样 → 几张加起来刚好） */
+function ctGuess(p,pool){const left=ctLeft(p);if(left<=0.005)return[];const t=suAn([p.reference,p.remark].join(" "));
+  const byRef=pool.filter(x=>suAn(x.invoice_no).length>=4&&t.includes(suAn(x.invoice_no)));if(byRef.length&&Math.abs(sum(byRef,x=>Number(x.total)||0)-left)<0.01)return byRef;
+  const one=pool.filter(x=>Math.abs((Number(x.total)||0)-left)<0.01);if(one.length)return[one.sort((a,b)=>Math.abs(dayDiff(a.invoice_date,p.payment_date))-Math.abs(dayDiff(b.invoice_date,p.payment_date)))[0]];
+  const c=pool.filter(x=>String(x.invoice_date||"")<=String(p.payment_date||"9")).slice(0,14),n=c.length;let best=null;
+  for(let m=1;m<(1<<n);m++){let t2=0,k=[];for(let i=0;i<n;i++)if(m&(1<<i)){t2+=Number(c[i].total)||0;k.push(c[i])}if(Math.abs(t2-left)<0.01&&(!best||k.length<best.length))best=k}
+  return best||[]}
+const dayDiff=(a,b)=>(new Date(a)-new Date(b))/864e5||0;
+async function ctLink(sis,p){const ids=[];for(const x of sis){const{error}=await sb.from("supplier_invoices").update({payment_date:p.payment_date,status:"Contra",
+    remark:[x.remark,`Contra ${dmy(p.payment_date)} ↔ ${L("收款","receipt")} ${custName(p.customer_id)}`].filter(Boolean).join(" · ").slice(0,250)}).eq("id",x.id);if(error)throw error;ids.push(x.id)}
+  const have=suAn([p.reference,p.remark].join(" ")),add=sis.map(x=>x.invoice_no).filter(n=>!have.includes(suAn(n)));
+  if(add.length){const keep=/^\s*contra\s*$/i.test(p.reference||"")?"":(p.reference||"");const ref=[keep,...add].filter(Boolean).join(" / ").slice(0,200);
+    const{error}=await sb.from("payments").update({reference:ref}).eq("id",p.id);if(error)throw error;p.reference=ref}
+  return ids}
+/* 第 3 项：找出客户那边记了 Contra、Supplier 那边还没标的 */
+function ctScanRows(){const out=[],used=new Set();
+  for(const p of S.d.payments.filter(p=>p.company===S.company&&isCtPay(p)).sort((a,b)=>String(a.payment_date).localeCompare(String(b.payment_date)))){
+    const left=ctLeft(p);if(left<=0.005)continue;const sid=supForCust(p.customer_id);
+    const pool=sid?S.d.supplier_invoices.filter(x=>x.supplier_id===sid&&!siSettled(x)&&!used.has(x.id)).sort((a,b)=>String(a.invoice_date).localeCompare(String(b.invoice_date))):[];
+    const g=ctGuess(p,pool);g.forEach(x=>used.add(x.id));out.push({p,left,sid,g,on:g.length>0})}
+  return out}
+let CTS=null;
+function ctScan(){CTS={rows:ctScanRows()};ctsRender()}
+function ctsRender(){const R=CTS.rows,ok=R.filter(r=>r.g.length);
+  pvOv(`<div class="pvhead"><h3 style="margin:0">🔁 ${L("对 Contra：客户那边记了，Supplier 那边还没标","Match contras: recorded on customer side, supplier side not yet")}</h3><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
+  <p class="mute" style="font-size:13px;margin-top:0">${L("系统按客户名字找同名的供应商，再用单号 / 金额 / 几张加起来刚好来配。打勾的会把 Supplier Invoice 标成 Contra（付款日期 = 收款日期），收款的 Reference 会补上 supplier invoice 单号。不会多记收款。","Matched by name, then invoice no / amount / combination. Ticked rows mark the supplier invoices as Contra; no new receipts are recorded.")}</p>
+  ${R.length?`<div class="tw" style="max-height:55vh"><table><thead><tr><th></th><th>${L("客户那边的 Contra 收款","Customer contra receipt")}</th><th class="num">${L("还没对上","Unmatched")}</th><th>${L("配到的 Supplier Invoice","Supplier invoices")}</th></tr></thead><tbody>
+  ${R.map((r,i)=>`<tr><td>${r.g.length?`<input type="checkbox" ${r.on?"checked":""} onchange="CTS.rows[${i}].on=this.checked">`:""}</td>
+    <td>${esc(custName(r.p.customer_id))}<div class="mute" style="font-size:12px">${dmy(r.p.payment_date)} · ${esc(r.p.reference||r.p.method||"")} · $${money(r.p.amount)}</div></td><td class="num">${money(r.left)}</td>
+    <td>${r.g.length?r.g.map(x=>`${esc(x.invoice_no)} · ${dmy(x.invoice_date)} · $${money(x.total)}`).join("<br>"):`<span class="tag warn">${r.sid?L("找不到金额对得上的单，请到 Supplier Invoice 勾那几张，按 🔁 Contra","No match — tick them in Supplier Invoice and press 🔁 Contra"):L("找不到同名的供应商","No supplier with this name")}</span>`}</td></tr>`).join("")}</tbody></table></div>`
+  :`<p class="tag ok">${L("全部都对上了 👍","All matched")}</p>`}
+  ${ok.length?`<div class="actions" style="margin-top:10px"><button class="btn" id="ctsGo" onclick="ctsApply()">✓ ${L("把打勾的补好","Apply ticked")}</button></div>`:""}`)}
+async function ctsApply(){const b=$("#ctsGo");if(b)b.disabled=true;let n=0;
+  try{for(const r of CTS.rows.filter(r=>r.on&&r.g.length)){await ctLink(r.g,r.p);n+=r.g.length}}catch(e){alert(e.message)}
+  $("#photoOv")?.remove();await loadAll();render();toast(L(`已标 ${n} 张 Supplier Invoice 为 Contra`,`${n} supplier invoice(s) marked Contra`))}
+const ctPending=()=>{try{return ctScanRows().filter(r=>r.g.length).length}catch(e){return 0}};
 
 /* ================= 🏦 银行月结单对单 ================= */
 let BK=null;
