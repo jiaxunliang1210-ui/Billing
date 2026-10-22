@@ -123,6 +123,7 @@ td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
 td.wrap{white-space:normal;min-width:200px}
 tr.click{cursor:pointer} tr.off td{opacity:.45} tr.amb td{background:color-mix(in srgb,#f5a623 10%,transparent)} tr.click:hover td{background:var(--panel2)}
 tr.red td{background:color-mix(in srgb,var(--bad) 10%,transparent)}
+tr.soaOR td{background:color-mix(in srgb,var(--ok) 9%,transparent)}
 tfoot td{font-weight:600;background:var(--panel2)}
 main .tw td{white-space:normal}main .tw td.num{white-space:nowrap}
 .empty{padding:28px;text-align:center;color:var(--mute)}
@@ -330,7 +331,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-21b";
+const APP_VER="2026-10-22a";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -1348,6 +1349,7 @@ const pvSigned=p=>S.d.attachments.filter(a=>a.entity_type==="pv"&&a.entity_id===
 const defCheque=()=>S.company==="L3H"?"OCBC":"DBS Giro";
 function numWords(d){const p=[];for(const[v,w]of[[1e6,"Million"],[1e3,"Thousand"],[1,""]]){const q=Math.floor(d/v);if(q){p.push(w999(q)+(w?" "+w:""));d%=v}}return p.join(" ")||"Zero"}
 function pvWords(x){x=Math.abs(r2(x));const d=Math.floor(x+1e-9),c=Math.round((x-d)*100);return `${numWords(d)}${c?` And ${w999(c)} Cents`:""} Only.`}
+const pvDateTxt=p=>p.date_blank?"":dmy(p.pv_date);
 function pvView(){const rows=sortRows("pv",(S.d.pvs||[]).filter(p=>p.company===S.company&&dfIn("pv",p.pv_date)&&sqHit(SQ.pv,[...sqRow(p),supName(p.supplier_id),...pvLines(p.id).map(l=>l.description)])),{date:p=>p.pv_date,sup:p=>supName(p.supplier_id),amt:p=>Number(p.total)||0,st:p=>p.status});
   if(!S.d._pvOK)return `<div class="panel"><h2>${L("付款 / PV","Payments / PV")}</h2><p>${L("还没跑第二批的 SQL（第二批-付款PV-Supabase.sql）。跑完重新整理页面就可以用。","Run the batch-2 SQL first, then refresh.")}</p></div>`;
   return `<div class="actions" style="margin:0 0 8px"><button class="btn" onclick="pvForm()">＋ ${L("新 PV（提交付款）","New PV")}</button>
@@ -1356,7 +1358,7 @@ function pvView(){const rows=sortRows("pv",(S.d.pvs||[]).filter(p=>p.company===S
   <div class="filters" style="margin:0 0 6px">${sqBox("pv")}</div>${dfBar("pv",yearsOf(S.d.pvs||[],"pv_date"))}${sqNote("pv",rows.length,(S.d.pvs||[]).filter(p=>p.company===S.company).length)}
   <p class="mute" style="font-size:13px;margin:0 0 8px">${L("流程：新 PV → 印出来给批准人签 → 上传签好的 PV → 按「已批准」→ key in bank → 按「已付」（supplier invoice 会自动记付款日期）。","Flow: new PV → print & sign → upload signed PV → Approved → key in bank → Paid.")}</p>
   ${rows.length?`<div class="tw"><table><thead><tr>${thS("pv","date",L("日期","Date"))}${thS("pv","sup","Pay to")}<th>Invoice</th>${thS("pv","amt",L("金额","Amount"),"num")}${thS("pv","st",L("状态","Status"))}<th>${L("签名 PV","Signed PV")}</th><th>A/C · Cheque No.</th><th>${L("银行 Ref","Bank ref")}</th></tr></thead><tbody>
-    ${rows.map(p=>`<tr class="click" onclick="pvOpen('${p.id}')"><td>${dmy(p.pv_date)}</td><td>${esc(supName(p.supplier_id))}</td><td class="wrap">${pvLines(p.id).map(l=>esc(l.description)).join(", ")}</td><td class="num">${money(p.total)}</td>
+    ${rows.map(p=>`<tr class="click" onclick="pvOpen('${p.id}')"><td>${p.date_blank?`<span class="mute" title="${L("印出来日期空白","Date left blank on print")}">${dmy(p.pv_date)} ✎</span>`:dmy(p.pv_date)}</td><td>${esc(supName(p.supplier_id))}</td><td class="wrap">${pvLines(p.id).map(l=>esc(l.description)).join(", ")}</td><td class="num">${money(p.total)}</td>
       <td>${pvTag(p)}${p.approved_by?`<div class="mute" style="font-size:12px">${esc(p.approved_by)} ${dmy(p.approved_at)}</div>`:""}</td><td>${pvSigned(p)?`<span class="tag ok">✓</span>`:`<span class="tag warn">${L("未上传","No")}</span>`}</td>
       <td style="font-size:12px">${esc(p.account||"")}<br>${esc(p.cheque_no||"")}</td><td>${esc(p.bank_ref||"")}${p.paid_at?`<div class="mute" style="font-size:12px">${L("付","Paid")} ${dmy(p.paid_at)}</div>`:""}</td></tr>`).join("")}</tbody>
     <tfoot><tr><td colspan="3">${L("合计","Total")} ${rows.length}</td><td class="num">${money(sum(rows,p=>p.total))}</td><td colspan="4"></td></tr></tfoot></table></div>`
@@ -1372,9 +1374,9 @@ function pvOpenSIs(f){const used=new Set((S.d.pvl||[]).filter(l=>l.pv_id!==f.id&
   return S.d.supplier_invoices.filter(si=>si.supplier_id===f.supplier_id&&(!si.charged_to||si.charged_to===S.company)&&(!si.payment_date||f.sel.has(si.id))&&!used.has(si.id))
     .sort((a,b)=>String(a.invoice_date).localeCompare(String(b.invoice_date)))}
 function pvForm(id){const p=id?pvById(id):null;
-  PVF=p?{id:p.id,supplier_id:p.supplier_id,pv_date:p.pv_date,account:p.account||"",cheque_no:p.cheque_no||"",prepared_by:p.prepared_by||signName(settingsOf(S.company)),remark:p.remark||"",
+  PVF=p?{id:p.id,supplier_id:p.supplier_id,pv_date:p.date_blank?"":p.pv_date,account:p.account||"",cheque_no:p.cheque_no||"",prepared_by:p.prepared_by||signName(settingsOf(S.company)),remark:p.remark||"",
       sel:new Set(pvLines(p.id).map(l=>l.supplier_invoice_id).filter(Boolean)),extra:pvLines(p.id).filter(l=>!l.supplier_invoice_id).map(l=>({d:l.description,a:l.amount}))}
-    :{supplier_id:"",pv_date:today(),account:"",cheque_no:defCheque(),prepared_by:signName(settingsOf(S.company)),remark:"",sel:new Set(),extra:[]};
+    :{supplier_id:"",pv_date:"",account:"",cheque_no:defCheque(),prepared_by:signName(settingsOf(S.company)),remark:"",sel:new Set(),extra:[]};
   pvFormRender()}
 function pvFormTotal(){const f=PVF;return r2(sum(S.d.supplier_invoices.filter(si=>f.sel.has(si.id)),si=>Number(si.total)||0)+sum(f.extra,x=>Number(x.a)||0))}
 function pvFormRender(){const f=PVF,list=f.supplier_id?pvOpenSIs(f):[];
@@ -1383,7 +1385,7 @@ function pvFormRender(){const f=PVF,list=f.supplier_id?pvOpenSIs(f):[];
   ${ost!=="Pending"?`<div class="note">${L(`这张 PV 已经是「${ost}」。可以改，保存时要写原因（会记在 Remark）。${ost==="Paid"?"改了付哪些 invoice，那些 invoice 的付款日期会跟着改。":""}改了金额或 invoice 的话，签好的 PV 就跟新内容不一样，要重新印出来签。`,`This PV is ${ost}. Saving asks for a reason.`)}</div>`:""}
   <div class="grid">
     <label class="f">Pay to（${L("供应商","Supplier")}） *<select onchange="PVF.supplier_id=this.value;PVF.sel.clear();PVF.account=supAcct(supById(this.value));pvFormRender()">${optList(S.d.suppliers.map(s=>[s.id,s.name]),f.supplier_id,"—")}</select></label>
-    <label class="f">${L("日期","Date")} *<input type="date" value="${f.pv_date}" onchange="PVF.pv_date=this.value"></label>
+    <label class="f">${L("日期（空白 = 印出来留空）","Date (blank = blank on print)")}<input type="date" value="${f.pv_date||""}" onchange="PVF.pv_date=this.value"></label>
     <label class="f">A/C:<input value="${esc(f.account)}" placeholder="${L("供应商资料填了银行就会自动带出","Auto from supplier bank details")}" onchange="PVF.account=this.value"></label>
     <label class="f">Cheque No.:<input value="${esc(f.cheque_no)}" onchange="PVF.cheque_no=this.value"></label>
     <label class="f">Prepared by<input value="${esc(f.prepared_by)}" onchange="PVF.prepared_by=this.value"></label>
@@ -1400,18 +1402,20 @@ function pvFormRender(){const f=PVF,list=f.supplier_id?pvOpenSIs(f):[];
   <div class="warn" id="pvWarn"></div>
   <div class="actions"><button class="btn" onclick="pvSave()">${ost==="Pending"?L("保存（待批准）","Save (pending approval)"):L("保存修改","Save changes")}</button><button class="btn sec" data-a="x">${L("取消","Cancel")}</button></div>`)}
 async function pvSave(){const f=PVF,w=$("#pvWarn");
-  if(!f.supplier_id||!f.pv_date)return w.textContent=L("请选供应商和日期","Choose supplier and date");
+  if(!f.supplier_id)return w.textContent=L("请选供应商","Choose supplier");
   const sis=S.d.supplier_invoices.filter(si=>f.sel.has(si.id)).sort((a,b)=>String(a.invoice_date).localeCompare(String(b.invoice_date))),ex=f.extra.filter(x=>x.d||x.a);
   if(!sis.length&&!ex.length)return w.textContent=L("至少选一张 invoice 或加一行","Pick at least one invoice or line");
   const lines=[...sis.filter(si=>Number(si.total)>=0).map(si=>({supplier_invoice_id:si.id,description:String(si.invoice_no),amount:Number(si.total)||0})),
     ...sis.filter(si=>Number(si.total)<0).map(si=>({supplier_invoice_id:si.id,description:`LESS:CREDIT NOTE/INVOICE#${si.invoice_no}`,amount:Number(si.total)||0})),
     ...ex.map(x=>({supplier_invoice_id:null,description:x.d||"",amount:Number(x.a)||0}))].map((l,i)=>({...l,line_no:i+1}));
-  const row={company:S.company,supplier_id:f.supplier_id,pv_date:f.pv_date,account:f.account||null,cheque_no:f.cheque_no||null,prepared_by:f.prepared_by||null,remark:f.remark||null,total:r2(sum(lines,l=>l.amount))};
+  const row={company:S.company,supplier_id:f.supplier_id,pv_date:f.pv_date||(f.id&&pvById(f.id)?.pv_date)||today(),date_blank:!f.pv_date,account:f.account||null,cheque_no:f.cheque_no||null,prepared_by:f.prepared_by||null,remark:f.remark||null,total:r2(sum(lines,l=>l.amount))};
   let id=f.id;const old=id?pvById(id):null,oldIds=id?pvLines(id).map(l=>l.supplier_invoice_id).filter(Boolean):[];
   if(old&&(old.status||"Pending")!=="Pending"){const why=prompt(L(`这张 PV 已经是「${old.status}」。修改原因：`,`PV is ${old.status}. Reason for the change:`),"");if(!why)return;
     row.remark=[old.remark||"",`[${dmy(today())} ${L("修改","edited")}: ${why}]`].filter(Boolean).join(" ")}
-  if(id){const{error}=await sb.from("payment_vouchers").update(row).eq("id",id);if(error)return w.textContent=error.message}
-  else{const{data,error}=await sb.from("payment_vouchers").insert({...row,status:"Pending"}).select().single();if(error)return w.textContent=error.message;id=data.id}
+  const noCol=e=>e&&/date_blank/i.test(e.message||"");let warnDB=false;
+  if(id){let{error}=await sb.from("payment_vouchers").update(row).eq("id",id);if(noCol(error)){warnDB=true;delete row.date_blank;({error}=await sb.from("payment_vouchers").update(row).eq("id",id))}if(error)return w.textContent=error.message}
+  else{let{data,error}=await sb.from("payment_vouchers").insert({...row,status:"Pending"}).select().single();if(noCol(error)){warnDB=true;delete row.date_blank;({data,error}=await sb.from("payment_vouchers").insert({...row,status:"Pending"}).select().single())}if(error)return w.textContent=error.message;id=data.id}
+  if(warnDB&&!f.pv_date)alert(L("PV 已保存，但日期没办法留空：还没跑「补充-PV日期空白-Supabase.sql」。跑完再打开这张 PV 保存一次就好。","Saved, but run the PV blank-date SQL so the date can stay blank."));
   {const oldL=id&&f.id?pvLines(id).map(l=>l.id):[];const{error}=await sb.from("payment_voucher_lines").insert(lines.map(l=>({...l,pv_id:id})));if(error)return w.textContent=error.message;
     if(oldL.length)await sb.from("payment_voucher_lines").delete().in("id",oldL)}
   if(old&&old.status==="Paid"){const now=new Set(lines.map(l=>l.supplier_invoice_id).filter(Boolean)),rem=oldIds.filter(x=>!now.has(x)),add=[...now].filter(x=>!oldIds.includes(x));
@@ -1449,7 +1453,7 @@ async function pvDel(id){if(!confirm(L("确定删除这张 PV？","Delete this P
 /* ---- PV 样子（照她的 Excel） ---- */
 function pvHTML(p){const s=settingsOf(p.company||S.company),ls=pvLines(p.id),pad=Math.max(0,6-ls.length);
   return `<div class="doc pg pvd">${coHeader(s)}
-  <div class="pvt"><div></div><div class="h">PAYMENT VOUCHER</div><div class="m"><div>Voucher No.: <span class="u">${esc(p.voucher_no||"")}</span></div><div>Date: <span class="u">${dmy(p.pv_date)}</span></div></div></div>
+  <div class="pvt"><div></div><div class="h">PAYMENT VOUCHER</div><div class="m"><div>Voucher No.: <span class="u">${esc(p.voucher_no||"")}</span></div><div>Date: <span class="u">${pvDateTxt(p)||"&nbsp;".repeat(24)}</span></div></div></div>
   <div class="pto"><span>PAY TO</span><span class="u">${esc(supName(p.supplier_id))}</span></div>
   <table class="pvl"><colgroup><col><col style="width:26%"></colgroup><thead><tr><th>D E S C R I P T I O N</th><th>AMOUNT</th></tr></thead><tbody>
     <tr><td><b>Invoice :</b></td><td></td></tr>
@@ -1487,7 +1491,7 @@ function pvSheet(wb,p){const s=settingsOf(p.company||S.company),ws=wb.addWorkshe
   ws.mergeCells("A1:I1");const h=ws.getRow(1).getCell(1);h.value=`${s.name}\n${s.address||""}\nCo. Reg No: ${s.reg_no||""}   GST Reg No: ${s.gst_no||""}\n${s.tel?(S.company==="L3H"?"Tel: ":"Mobile: ")+s.tel:""} ${s.email?"Email: "+s.email:""}`;
   h.alignment={horizontal:"center",vertical:"middle",wrapText:true};h.font={bold:true,size:11};ws.getRow(1).height=70;
   const set=(a,v,o={})=>{const c=ws.getCell(a);c.value=v;if(o.b)c.font={bold:true,size:o.sz||11};if(o.al)c.alignment={horizontal:o.al};if(o.f)c.numFmt=o.f;if(o.bt)c.border={bottom:THIN};return c};
-  set("C3","PAYMENT VOUCHER",{b:1,sz:12});set("G3","Voucher No.:");set("H3",p.voucher_no||"");set("G4","Date:");set("H4",dmy(p.pv_date));
+  set("C3","PAYMENT VOUCHER",{b:1,sz:12});set("G3","Voucher No.:");set("H3",p.voucher_no||"");set("G4","Date:");set("H4",pvDateTxt(p));
   set("A6","PAY TO");ws.mergeCells("B6:H6");set("B6",supName(p.supplier_id),{bt:1});
   ws.mergeCells("A8:G8");set("A8","D E S C R I P T I O N",{b:1,al:"center"});ws.mergeCells("H8:I8");set("H8","AMOUNT",{b:1,al:"center"});
   ws.mergeCells("A9:G9");set("A9","Invoice : ",{b:1});ws.mergeCells("H9:I9");
@@ -1502,7 +1506,7 @@ function pvSheet(wb,p){const s=settingsOf(p.company||S.company),ws=wb.addWorkshe
 function pvListingSheet(wb,list){const s=settingsOf(S.company),ws=wb.addWorksheet(xlName(wb,`PV for ${S.company} Listing`));
   ws.getCell("B1").value=s.name;ws.getCell("B1").font={bold:true,size:12};
   ["S/N","Date ","Company Name","Description","Amount"].forEach((h,i)=>{const c=ws.getRow(3).getCell(i+1);c.value=h;c.font={bold:true};c.border=BOX;c.alignment={horizontal:"center"}});
-  list.forEach((p,k)=>{const r=4+k,row=ws.getRow(r);row.getCell(1).value={formula:"ROW()-3",result:k+1};row.getCell(2).value=dmy(p.pv_date);row.getCell(3).value=supName(p.supplier_id);
+  list.forEach((p,k)=>{const r=4+k,row=ws.getRow(r);row.getCell(1).value={formula:"ROW()-3",result:k+1};row.getCell(2).value=pvDateTxt(p);row.getCell(3).value=supName(p.supplier_id);
     row.getCell(4).value="Invoice : "+pvLines(p.id).map(l=>l.description).join(", ");row.getCell(5).value=Number(p.total)||0;row.getCell(5).numFmt=MONEY;for(let c=1;c<=5;c++)row.getCell(c).border=BOX});
   const tr=ws.getRow(4+list.length);tr.getCell(4).value="Total";tr.getCell(4).font={bold:true};tr.getCell(5).value={formula:`SUM(E4:E${3+list.length})`};tr.getCell(5).numFmt=MONEY;tr.getCell(5).font={bold:true};
   [6,12,38,46,14].forEach((w,i)=>ws.getColumn(i+1).width=w);return ws}
@@ -2475,7 +2479,7 @@ function soaView(){
   {const[,z]=dfRange("soa");if(z&&S._soaZ!==z){S.soaAsOf=z>today()?today():z;S._soaZ=z}}
   const cid=S.soaCust,asOf=S.soaAsOf;
   const head=`<div class="filters"><label class="f">${L("客户","Customer")}<select onchange="S.soaCust=this.value;render()">${custOpts(cid)}</select></label>
-    <label class="f">${L("截至日期","As at")}<input type="date" value="${asOf}" onchange="S.soaAsOf=this.value;render()"></label></div>${dfBar("soa",yearsOf(S.d.invoices,"invoice_date"))}<p class="mute" style="font-size:12px;margin:-4px 0 8px">${L("选月份 / 年份 = SOA 截至那个月 / 年的最后一天，下面只列那段时间开的 invoice。","Pick a period: the statement date becomes its last day and only invoices dated in that period are listed.")}</p>`;
+    <label class="f">${L("截至日期","As at")}<input type="date" value="${asOf}" onchange="S.soaAsOf=this.value;render()"></label></div>${dfBar("soa",yearsOf(S.d.invoices,"invoice_date"))}<p class="mute" style="font-size:12px;margin:-4px 0 8px">${L("选月份 / 年份 = SOA 截至那个月 / 年的最后一天。没付清的全部会列；那段时间已付清的 invoice 和付款也会列出来。","Pick a period: the statement date becomes its last day. All unpaid invoices are listed, plus invoices and payments settled in that period.")}</p>`;
   if(!cid)return head+`<div class="panel empty">${L("选一个客户来看 SOA。","Choose a customer to see the statement.")}</div>`;
   const D=soaData(cid,asOf),DA=soaData(cid,asOf,1),off=soaOff(cid),sends=S.d.soa_sends.filter(s=>s.customer_id===cid),saved=S.d.attachments.filter(a=>a.entity_type==="soa"&&a.entity_id===cid).sort((a,b)=>String(b.created_at||"").localeCompare(String(a.created_at||"")));
   return head+`<div class="cards"><div class="card"><h3>${L("未付总额","Outstanding")}</h3><b style="font-size:22px">$${money(D.total)}</b>
@@ -2485,14 +2489,22 @@ function soaView(){
     <button class="btn sec" onclick="exportSOA()">⬇ Excel</button><button class="btn sec" onclick="sendSOA('WhatsApp')">WhatsApp</button><button class="btn sec" onclick="sendSOA('Email')">Email</button></div>
   <div class="filters" style="margin:0 0 6px">${sqBox("soa",L("Invoice No / description / 金额","invoice no / description / amount"))}</div>
   ${off.size?`<p style="font-size:13px;margin:0 0 6px"><span class="tag warn">${L(`有 ${off.size} 张没勾，不会放进 SOA`,`${off.size} unticked, left out`)}</span> <a href="#" onclick="soaOff('${cid}').clear();render();return false">${L("全部放回","Include all")}</a></p>`:""}
-  ${(DA.rows=DA.rows.filter(i=>dfIn("soa",i.invoice_date)&&sqHit(SQ.soa,[i.invoice_no,i.description,invDesc(i),i.total,balOf(i),i.invoice_date,i.due_date,i.customer_po]))).length?`<div class="tw"><table><thead><tr><th onclick="event.stopPropagation()"><input type="checkbox" ${DA.rows.every(i=>!off.has(i.id))?"checked":""} onchange="soaTickAll('${cid}',${esc(JSON.stringify(DA.rows.map(i=>i.id)))},this.checked)"></th><th>${L("日期","Date")}</th><th>Invoice No</th><th>Description</th><th>Due</th><th class="num">Total</th><th class="num">${L("已付","Paid")}</th><th class="num">${L("余额","Balance")}</th><th class="num">${L("逾期天数","Days overdue")}</th><th class="num">Interest</th></tr></thead><tbody>
-    ${DA.rows.map(i=>`<tr class="click ${overdueDays(i,asOf)?"red":""}${off.has(i.id)?" off":""}" onclick="openInv('${i.id}')"><td onclick="event.stopPropagation()"><input type="checkbox" ${off.has(i.id)?"":"checked"} onchange="soaTick('${cid}','${i.id}',this.checked)"></td><td>${dmy(i.invoice_date)}</td><td>${esc(i.invoice_no)}</td><td class="wrap">${esc((i.description||"").replace(/\n/g," / "))}</td><td>${dmy(i.due_date)}</td>
-      <td class="num">${money(i.total)}</td><td class="num">${money(paidOf(i))}</td><td class="num">${money(balOf(i))}</td><td class="num">${overdueDays(i,asOf)||""}</td><td class="num">${interestOf(i,asOf)?money(interestOf(i,asOf)):""}</td></tr>`).join("")}</tbody></table></div>`
-  :`<div class="panel empty">${L("这个客户没有未付的 invoice。","Nothing outstanding for this customer.")}</div>`}
+  ${(()=>{const G=soaLedger(cid,asOf),rs=G.rows.filter(r=>sqHit(SQ.soa,r.inv?[r.inv.invoice_no,r.inv.description,invDesc(r.inv),r.inv.total,r.inv.invoice_date,r.inv.due_date,r.inv.customer_po]:[r.ref,r.desc,r.cr,r.date,r.pay?.remark]));
+    const blv=v=>Math.abs(v)<0.005?"-":v<0?`(${money(-v)})`:money(v);
+    if(!G.rows.length)return `<div class="panel empty">${L("这段时间没有 invoice / 付款。","Nothing in this period.")}</div>`;
+    return `<p class="mute" style="font-size:12px;margin:0 0 4px">${L("跟 PDF 一样：没付清的全部列；这段期间已付清的也列出来，付款（OR）紧接在它付的 invoice 下面。","Same as the PDF: all unpaid, plus invoices paid in this period with the payment right below them.")}</p>
+    <div class="tw"><table><thead><tr><th></th><th>${L("日期","Date")}</th><th></th><th>Ref</th><th>Description</th><th class="num">DR (Invoice)</th><th class="num">CR (Payment)</th><th class="num">Balance</th><th>Due</th><th class="num">${L("逾期天数","Days overdue")}</th><th class="num">Interest</th></tr></thead><tbody>
+    ${Math.abs(G.bf)>0.005?`<tr><td></td><td></td><td></td><td></td><td>Balance B/F</td><td></td><td></td><td class="num">${blv(G.bf)}</td><td></td><td></td><td></td></tr>`:""}
+    ${rs.map(r=>{if(!r.inv)return `<tr class="click soaOR" onclick="openPayForm(S.d.payments.find(x=>x.id==='${r.pay.id}'))"><td></td><td>${dmy(r.date)}</td><td class="mute">${esc(r.type)}</td><td>${esc(r.ref)}</td><td>${esc(r.desc)}</td><td></td><td class="num">${money(r.cr)}</td><td class="num">${blv(r.bal)}</td><td></td><td></td><td></td></tr>`;
+      const i=r.inv,od=balOf(i)>0.005?overdueDays(i,asOf):0;
+      return `<tr class="click ${od?"red":""}" onclick="openInv('${i.id}')"><td onclick="event.stopPropagation()"><input type="checkbox" checked onchange="soaTick('${cid}','${i.id}',this.checked)"></td><td>${dmy(i.invoice_date)}</td><td class="mute">IN</td><td>${esc(i.invoice_no)}${balOf(i)<=0.005&&Number(i.total)>0?` <span class="tag ok">${L("已付","Paid")}</span>`:""}</td><td class="wrap">${esc((i.description||"").replace(/\n/g," / "))}</td>
+        <td class="num">${money(r.dr)}</td><td></td><td class="num">${blv(r.bal)}</td><td>${dmy(i.due_date)}</td><td class="num">${od||""}</td><td class="num">${od&&interestOf(i,asOf)?money(interestOf(i,asOf)):""}</td></tr>`}).join("")}
+    <tr class="tt"><td colspan="7" style="text-align:right"><b>${L("截至","As at")} ${dmy(asOf)}</b></td><td class="num"><b>${blv(G.total)}</b></td><td colspan="3"></td></tr></tbody></table></div>`})()}
   <h3>${L("以前的 SOA（每次下载 / 发送自动存一份）","Earlier statements (saved on each download / send)")}</h3>
   ${saved.length?`<div class="tw" style="max-height:260px"><table><tbody>${saved.map(a=>`<tr class="click" onclick="soaOpenSaved('${a.id}')"><td>${dmy(String(a.created_at||"").slice(0,10))}</td><td>${esc(a.file_name||"")}</td><td style="white-space:nowrap"><button class="btn sec sm ib">👁</button></td></tr>`).join("")}</tbody></table></div>`:`<p class="mute">${L("还没有。下载或发送 SOA 后会出现在这里。","None yet.")}</p>`}
   <h3>${L("SOA 发送记录","Statement send history")}</h3>${sends.length?`<ul>${sends.map(s=>`<li>${dmy(s.sent_at)} · ${esc(s.sent_via)} · ${L("截至","as at")} ${dmy(s.as_of)}</li>`).join("")}</ul>`:`<p class="mute">${L("还没发过","Not sent yet")}</p>`}`;
 }
+/* SOA 屏幕：付款行颜色 */
 function soaTick(cid,id,on){const o=soaOff(cid);on?o.delete(id):o.add(id);render()}
 function soaTickAll(cid,ids,on){const o=soaOff(cid);ids.forEach(id=>on?o.delete(id):o.add(id));render()}
 async function soaOpenSaved(aid){const a=S.d.attachments.find(x=>x.id===aid);if(!a)return;const{data,error}=await sb.storage.from("attachments").createSignedUrl(a.file_path,900);if(error)return toast(error.message);
@@ -4524,17 +4536,27 @@ const w999=n=>[n>=100?W1[Math.floor(n/100)]+" Hundred":"",(n%=100)>=20?W10[Math.
 function amtWords(x){const neg=r2(x)<-0.005;x=Math.abs(r2(x));let d=Math.floor(x+1e-9);const c=Math.round((x-d)*100),p=[];
   for(const[v,w]of[[1e6,"Million"],[1e3,"Thousand"],[1,""]]){const q=Math.floor(d/v);if(q){p.push(w999(q)+(w?" "+w:""));d%=v}}
   return `${neg?"Credit Balance : ":""}Singapore Dollar ${p.join(" ")||"Zero"} Dollar${Math.floor(x)===1?"":"s"}${c?` and ${w999(c)} Cents`:""}.`}
-function soaLedger(cid,asOf){const off=soaOff(cid);
-  const inv=S.d.invoices.filter(i=>i.customer_id===cid&&i.company===S.company&&i.status!=="Cancelled"&&i.invoice_date<=asOf&&!off.has(i.id))
-    .map(i=>({date:i.invoice_date,type:"IN",ref:i.invoice_no,desc:/interest/i.test(i.description||"")?"Interest":"Invoice",dr:Number(i.total)||0,cr:0}));
-  const pay=S.d.payments.filter(p=>p.customer_id===cid&&p.payment_date<=asOf).map(p=>{const ct=/contra/i.test(p.method||"");let cr=Number(p.amount)||0;
-    if(off.size){const al=S.d.payment_allocations.filter(a=>a.payment_id===p.id);if(al.length){const inc=sum(al.filter(a=>!off.has(a.invoice_id)),a=>a.amount),un=r2(cr-sum(al,a=>a.amount));cr=r2(inc+Math.max(0,un))}}
-    return{date:p.payment_date,type:ct?"Contra":"OR",ref:p.reference||(ct?"CONTRA":/cheque/i.test(p.method||"")?"CHEQUE":/paynow/i.test(p.method||"")?"PAYNOW":"FUND TRANSFER"),desc:ct?"Contra":"RECEIVED",dr:0,cr}}).filter(e=>e.cr>0.005);
-  let all=[...inv,...pay].sort((a,b)=>a.date.localeCompare(b.date)||(a.type==="IN"?-1:1)-(b.type==="IN"?-1:1)||String(a.ref).localeCompare(String(b.ref)));
-  let bf=0;
-  if(all.length>34){const open=S.d.invoices.filter(i=>i.customer_id===cid&&i.status!=="Cancelled"&&i.invoice_date<=asOf&&balOf(i)>0.005).map(i=>i.invoice_date).sort()[0]||asOf;
-    const keep=[];for(const e of all){if(e.date<open)bf=r2(bf+e.dr-e.cr);else keep.push(e)}all=keep}
-  let bal=bf;for(const e of all){bal=r2(bal+e.dr-e.cr);e.bal=bal}
+/* SOA 帐：没付清的全部列；那段期间开的、已付清的也列，付款那行紧接在它付的 invoice 下面（照 DENZAI 那种排法） */
+function soaLedger(cid,asOf,from){const off=soaOff(cid);if(from===undefined)from=dfRange("soa")[0]||"";
+  const pays=S.d.payments.filter(p=>p.customer_id===cid&&p.payment_date<=asOf),pid=new Set(pays.map(p=>p.id));
+  const alAll=S.d.payment_allocations.filter(a=>pid.has(a.payment_id));
+  const paidAt=i=>sum(alAll.filter(a=>a.invoice_id===i.id),a=>Number(a.amount)||0);
+  const inv=S.d.invoices.filter(i=>i.customer_id===cid&&i.company===S.company&&i.status!=="Cancelled"&&i.invoice_date<=asOf&&!off.has(i.id)
+    &&(Number(i.total)-paidAt(i)>0.005||Number(i.total)<0||!from||i.invoice_date>=from));
+  const inSet=new Set(inv.map(i=>i.id)),placed=new Set(),rows=[];
+  const invRow=i=>({date:i.invoice_date,type:"IN",ref:i.invoice_no,desc:Number(i.total)<0?"Credit Note":/interest/i.test(i.description||"")?"Interest":"Invoice",dr:Number(i.total)||0,cr:0,inv:i});
+  const byDate=(a,b)=>a.invoice_date.localeCompare(b.invoice_date)||String(a.invoice_no).localeCompare(String(b.invoice_no));
+  for(const p of pays.slice().sort((a,b)=>a.payment_date.localeCompare(b.payment_date)||String(a.id).localeCompare(String(b.id)))){
+    const al=alAll.filter(a=>a.payment_id===p.id),mine=al.filter(a=>inSet.has(a.invoice_id)),un=r2((Number(p.amount)||0)-sum(al,a=>Number(a.amount)||0));
+    const cr=r2(sum(mine,a=>Number(a.amount)||0)+Math.max(0,un));if(cr<=0.005)continue;
+    const grp=inv.filter(i=>mine.some(a=>a.invoice_id===i.id)&&!placed.has(i.id)).sort(byDate);grp.forEach(i=>{placed.add(i.id);rows.push(invRow(i))});
+    const ct=/contra/i.test(p.method||"");
+    rows.push({date:p.payment_date,type:ct?"Contra":"OR",ref:p.reference||(ct?"CONTRA":/cheque/i.test(p.method||"")?"CHEQUE":/paynow/i.test(p.method||"")?"PAYNOW":"FUND TRANSFER"),desc:ct?"Contra":"RECEIVED",dr:0,cr,pay:p})}
+  for(const i of inv.filter(i=>!placed.has(i.id)).sort(byDate))rows.push(invRow(i));
+  let all=rows,bf=0,bal=0;for(const e of all){bal=r2(bal+e.dr-e.cr);e.bal=bal}
+  /* 太多行：最早那几组（已付清、余额回到 0 的地方）合成 Balance B/F */
+  if(all.length>34){const need=all.length-34;let cut=0;for(let k=need-1;k<all.length-8;k++)if(all[k].type!=="IN"){cut=k+1;break}
+    if(!cut)cut=need;bf=all[cut-1].bal;all=all.slice(cut)}
   return{bf,rows:all,total:bal}}
 async function printSOA(mode){const cid=S.soaCust,c=custOf(cid),s=settingsOf(S.company),D=soaData(cid,S.soaAsOf),G=soaLedger(cid,S.soaAsOf);
   const bank=String(s.bank||"").replace(/^(DBS\s*)(\d{4})(\d{3})(\d{3})$/,"$1$2-$3-$4");
