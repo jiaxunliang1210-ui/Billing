@@ -287,6 +287,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 #print table.sm th.dk{background:#bfbfbf!important}
 #print table.sm td{border:.75pt solid #000;padding:1.6mm 1.8mm;text-align:center;vertical-align:middle}
 #print table.sm td.a{text-align:left}
+#print table.rec.cmp{font-size:7pt}#print table.rec.cmp th{padding:1mm .5mm;line-height:1.15}#print table.rec.cmp td{padding:.6mm .5mm;line-height:1.2}#print .rech.cmp{font-size:9.5pt;margin:0 0 2mm}#print .sumlist.cmp table.rec{font-size:8.5pt}#print .sumlist.cmp table.rec td{padding:1.2mm 1.2mm}
 #print .rech{display:flex;justify-content:space-between;align-items:flex-end;font-family:Calibri,Carlito,Arial,sans-serif;font-size:11pt;margin:0 0 3mm}
 #print .rech div b{display:block;line-height:1.35}#print .sumlist{padding:22mm 16mm}#print .sumlist table.rec{font-size:10.5pt}#print .sumlist table.rec td{padding:2.4mm 1.6mm}#print .rech .no{font-size:11pt;padding-right:6mm}
 #print table.rec{font-size:9pt}#print table.rec th{padding:1.8mm 1mm}#print table.rec td{padding:1.4mm 1mm}
@@ -331,7 +332,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-22d";
+const APP_VER="2026-10-22e";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -1125,33 +1126,33 @@ function addLate(){const f=S.modal.f,late=f._chk?.late||[];for(const d of late)i
 /* ---- Summary list + 记录表（照 CHC Excel） ---- */
 function l3SummaryHTML(inv,title){const lines=S.d.invoice_lines.filter(l=>l.invoice_id===inv.id).sort((a,b)=>(a.line_no||0)-(b.line_no||0));
   const a=inv.period_from||inv.invoice_date,mon=`${MONL[+a.slice(5,7)-1].toUpperCase()} ${a.slice(0,4)}`;
-  return `<div class="doc pg sumlist"><div class="rech"><div><b>${esc(inv.project)}-SUMMARY</b><b>FOR MONTH ${mon}</b><b>${esc(inv.summary_title||title||sumTitleAuto(inv))}</b></div><b class="no">${inv.summary_no?"No."+esc(inv.summary_no):""}</b></div>
+  return `<div class="doc pg sumlist cmp"><div class="rech"><div><b>${esc(inv.project)}-SUMMARY</b><b>FOR MONTH ${mon}</b><b>${esc(inv.summary_title||title||sumTitleAuto(inv))}</b></div><b class="no">${inv.summary_no?"No."+esc(inv.summary_no):""}</b></div>
   <table class="sm rec"><colgroup><col style="width:7%"><col><col style="width:10%"><col style="width:8%"><col style="width:13%"><col style="width:16%"></colgroup>
   <thead><tr><th>S/N</th><th>DESCRIPTION</th><th>QTY</th><th>UOM</th><th>UNIT PRICE $</th><th>TOTAL AMOUNT $</th></tr></thead><tbody>
   ${lines.map((l,i)=>`<tr><td>${i+1}</td><td class="a">${esc(String(l.description||"").replace(/\n/g," "))}</td><td>${lineUnit(l)==="hrs"?Number(l.qty||0).toFixed(2):l.qty??""}</td><td>${esc(lineUnit(l))}</td><td>${l.unit_price==null?"L/S":money(l.unit_price)}</td><td class="a">${acc(l.amount)}</td></tr>`).join("")}
   <tr class="tt"><td colspan="4"></td><td class="lb">TOTAL</td><td class="u a">${acc(inv.amount_before_gst)}</td></tr></tbody></table></div>`}
 /* 一页横向 record 表可以放多高（mm），每行 = 上下 padding + 每行字 */
-const REC_CAP=150,REC_TOT=9,recRowH=n=>3.7+4.6*n;
-function l3RecordsHTML(inv,dos){const c=custOf(inv.customer_id),no=inv.summary_no||"",per=13;
+const REC_CAP=156,REC_TOT=6,recRowH=n=>1.5+3.0*n;
+function l3RecordsHTML(inv,dos){const c=custOf(inv.customer_id),no=inv.summary_no||"",per=20;
   const ds=[...dos].sort((a,b)=>a.do_date.localeCompare(b.do_date)||String(a.start_time||"").localeCompare(String(b.start_time||"")));
   const mon=(()=>{const a=inv.period_from||ds[0]?.do_date||inv.invoice_date;return `${MONL[+a.slice(5,7)-1].toUpperCase()} ${a.slice(0,4)}`})();
-  const head=k=>`<div class="rech"><div><b>${esc(inv.project||c.name||"")}</b><b>FOR MONTH ${mon}</b><b>${SHEETS[k]}</b></div><b class="no">${no?"No."+esc(no):""}</b></div>`;
+  const head=k=>`<div class="rech cmp"><div><b>${esc(inv.project||c.name||"")}</b><b>FOR MONTH ${mon}</b><b>${SHEETS[k]}</b></div><b class="no">${no?"No."+esc(no):""}</b></div>`;
   const out=[];
   if(inv.project)out.push(l3SummaryHTML(inv));
   const hourlySheet=(k,rows)=>{
     const T=f=>sum(rows,f);
-    out.push(chunkPages(rows,per,(rs,pi,last,st0)=>`${head(k)}<table class="sm rec"><colgroup><col style="width:3.5%"><col style="width:5.5%"><col style="width:6.5%"><col style="width:9%"><col style="width:9%"><col style="width:6%"><col style="width:4.5%"><col style="width:4.5%"><col><col style="width:5.5%"><col style="width:4.5%"><col style="width:3.5%"><col style="width:4.5%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:6.5%"><col style="width:4%"></colgroup>
+    out.push(chunkPages(rows,per,(rs,pi,last,st0)=>`${head(k)}<table class="sm rec cmp"><colgroup><col style="width:2.5%"><col style="width:5%"><col style="width:5.5%"><col style="width:8%"><col style="width:8%"><col style="width:5.5%"><col style="width:3.5%"><col style="width:3.5%"><col><col style="width:5%"><col style="width:4%"><col style="width:3%"><col style="width:4%"><col style="width:5%"><col style="width:5%"><col style="width:6%"><col style="width:5%"></colgroup>
       <thead><tr><th class="y">S/N</th><th class="y">D/N</th><th class="y">Date</th><th class="y">From</th><th class="y">To</th><th>Vehicle No</th><th>In</th><th>Out</th><th class="y">Description</th><th>Rate</th><th>Total Hr 1</th><th>UOM</th><th class="o">Total Hr 2</th><th class="o">Rate2</th><th class="o">Diesel Surcharge</th><th class="o">Amount</th><th>Remarks</th></tr></thead><tbody>
       ${rs.map((d,i)=>{const amt=r2(mainAmt(d)+(Number(d.surcharge)||0)),h=Number(d.billable_hours||0).toFixed(2);return `<tr><td>${st0+i+1}</td><td>${esc(d.do_no)}</td><td>${dMonYY(d.do_date)}</td><td>${esc(d.from_loc||"")}</td><td>${esc(d.to_loc||"")}</td><td>${esc(d.plate||"")}</td>
         <td>${tShort(d.start_time)}</td><td>${tShort(d.end_time)}</td><td>${esc(d.description||"")}</td><td class="a">${acc(d.rate)}</td><td>${h}</td><td>hr</td><td>${h}</td><td class="a">${acc(d.rate)}</td><td class="a">${acc(d.surcharge)}</td><td class="a">${acc(amt)}</td><td>${esc([shareOf(d)&&!/\d\s*%/.test(d.remark||"")?shareOf(d)+"% share":"",d.remark||""].filter(Boolean).join(" · "))}</td></tr>`}).join("")}
       ${last?`<tr class="tt"><td colspan="9"></td><td class="lb">HRS</td><td class="u">${T(d=>d.billable_hours).toFixed(2)}</td><td></td><td class="u">${T(d=>d.billable_hours).toFixed(2)}</td><td class="lb">TOTAL</td><td class="u a">${acc(T(d=>d.surcharge))}</td><td class="u a">${acc(T(d=>mainAmt(d)+(Number(d.surcharge)||0)))}</td><td></td></tr>`:""}</tbody></table>`,
-      {cap:REC_CAP,tot:REC_TOT,h:d=>recRowH(Math.max(wrapN(d.description,19),wrapN(d.from_loc,16),wrapN(d.to_loc,16),wrapN([shareOf(d)?shareOf(d)+"% share":"",d.remark||""].filter(Boolean).join(" · "),6)))}))};
-  const loadSheet=(k,lr)=>{out.push(chunkPages(lr,per+2,(rs,pi,last,st0)=>`${head(k)}<table class="sm rec"><colgroup><col style="width:4%"><col style="width:8%"><col style="width:7%"><col style="width:11%"><col style="width:11%"><col style="width:5%"><col style="width:6%"><col><col style="width:5%"><col style="width:5%"><col style="width:7%"><col style="width:8%"><col style="width:6%"></colgroup>
+      {cap:REC_CAP,tot:REC_TOT,h:d=>recRowH(Math.max(wrapN(d.description,52),wrapN(d.from_loc,20),wrapN(d.to_loc,20),wrapN([shareOf(d)?shareOf(d)+"% share":"",d.remark||""].filter(Boolean).join(" · "),9)))}))};
+  const loadSheet=(k,lr)=>{out.push(chunkPages(lr,per+2,(rs,pi,last,st0)=>`${head(k)}<table class="sm rec cmp"><colgroup><col style="width:4%"><col style="width:8%"><col style="width:7%"><col style="width:11%"><col style="width:11%"><col style="width:5%"><col style="width:6%"><col><col style="width:5%"><col style="width:5%"><col style="width:7%"><col style="width:8%"><col style="width:6%"></colgroup>
     <thead><tr><th>S/N</th><th>D/N</th><th>Date</th><th>From</th><th>To</th><th>Company</th><th>Vehicle No</th><th>Descriptions</th><th>Qty</th><th>UOM</th><th>Rate</th><th>Amount</th><th>Remarks</th></tr></thead><tbody>
     ${rs.map((x,i)=>`<tr><td>${st0+i+1}</td><td>${esc(x.d.do_no)}</td><td>${dMonYY(x.d.do_date)}</td><td>${esc(x.d.from_loc||"")}</td><td>${esc(x.d.to_loc||"")}</td><td>L3H</td><td>${esc(x.d.plate||"")}</td>
       <td>${esc(x.t)}</td><td>${x.q.toFixed(2)}</td><td>${esc(x.u)}</td><td class="${x.rate!=null?"a":""}">${x.rate!=null?acc(x.rate):"NIL"}</td><td class="${x.amt?"a":""}">${x.amt?acc(x.amt):"NIL"}</td><td>${esc(x.d.remark||"")}</td></tr>`).join("")}
     ${last?`<tr class="tt"><td colspan="10"></td><td class="lb">TOTAL</td><td class="u a">${acc(sum(lr,x=>x.amt))}</td><td></td></tr>`:""}</tbody></table>`,
-    {cap:REC_CAP,tot:REC_TOT,h:x=>recRowH(Math.max(wrapN(x.t,30),wrapN(x.d.from_loc,18),wrapN(x.d.to_loc,18),wrapN(x.d.remark,8)))}));};
+    {cap:REC_CAP,tot:REC_TOT,h:x=>recRowH(Math.max(wrapN(x.t,40),wrapN(x.d.from_loc,22),wrapN(x.d.to_loc,22),wrapN(x.d.remark,10)))}));};
   /* 非 CHC：Lorry Crane 用 MGC 那种 Summary Report（一个表） */
   const craneSum=!inv.project;
   if(craneSum){const rows=ds.filter(d=>/^crane/.test(kindOf(d)||""));if(rows.length)out.push(craneSummaryHTML(inv,rows))}
