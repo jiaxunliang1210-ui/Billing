@@ -331,7 +331,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-22c";
+const APP_VER="2026-10-22d";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -1125,7 +1125,7 @@ function addLate(){const f=S.modal.f,late=f._chk?.late||[];for(const d of late)i
 /* ---- Summary list + 记录表（照 CHC Excel） ---- */
 function l3SummaryHTML(inv,title){const lines=S.d.invoice_lines.filter(l=>l.invoice_id===inv.id).sort((a,b)=>(a.line_no||0)-(b.line_no||0));
   const a=inv.period_from||inv.invoice_date,mon=`${MONL[+a.slice(5,7)-1].toUpperCase()} ${a.slice(0,4)}`;
-  return `<div class="doc pg sumlist"><div class="rech"><div><b>${esc(inv.project)}-SUMMARY</b><b>FOR MONTH ${mon}</b><b>${esc(title||(mxBills(inv.id).length?"TRANSPORT SERVICES / MACHINERY RENTAL":"TRANSPORT SERVICES"))}</b></div><b class="no">${inv.summary_no?"No."+esc(inv.summary_no):""}</b></div>
+  return `<div class="doc pg sumlist"><div class="rech"><div><b>${esc(inv.project)}-SUMMARY</b><b>FOR MONTH ${mon}</b><b>${esc(inv.summary_title||title||sumTitleAuto(inv))}</b></div><b class="no">${inv.summary_no?"No."+esc(inv.summary_no):""}</b></div>
   <table class="sm rec"><colgroup><col style="width:7%"><col><col style="width:10%"><col style="width:8%"><col style="width:13%"><col style="width:16%"></colgroup>
   <thead><tr><th>S/N</th><th>DESCRIPTION</th><th>QTY</th><th>UOM</th><th>UNIT PRICE $</th><th>TOTAL AMOUNT $</th></tr></thead><tbody>
   ${lines.map((l,i)=>`<tr><td>${i+1}</td><td class="a">${esc(String(l.description||"").replace(/\n/g," "))}</td><td>${lineUnit(l)==="hrs"?Number(l.qty||0).toFixed(2):l.qty??""}</td><td>${esc(lineUnit(l))}</td><td>${l.unit_price==null?"L/S":money(l.unit_price)}</td><td class="a">${acc(l.amount)}</td></tr>`).join("")}
@@ -1843,6 +1843,7 @@ function machineLines(rows){return rows.map(r=>{const l=r.l,loc=l.loc_to||l.loc_
   return{description:`${head}\n${per}\n(${r.type==="Weekly"?L("Weekly","Weekly"):"Monthly"} $${money(r.rate)} ÷ ${r.type==="Weekly"?7:30} × ${r.days} days)`,qty:r.days,unit:"days",unit_price:null,amount:r.amount}})}
 const isMachInv=i=>i?.kind==="machine";
 /* ---- 运输 invoice 里面加 Excavator 月租 ---- */
+const sumTitleAuto=inv=>inv.kind==="machine"?"PROVIDE MACHINERY / EQUIPMENT":(inv.id&&mxBills(inv.id).length)||(inv.lines||[]).some(l=>l._mx)?"TRANSPORT SERVICES / MACHINERY RENTAL":"TRANSPORT SERVICES";
 const mxBills=invId=>S.d.mbills.filter(b=>b.invoice_id===invId);
 const mxRowsFromBills=invId=>mxBills(invId).map(b=>({l:S.d.mlogs.find(l=>l.id===b.log_id)||{machine_code:""},from:b.period_from,to:b.period_to,days:b.days,type:b.rate_type,rate:Number(b.rate),amount:Number(b.amount)})).sort((p,q)=>String(p.l.machine_code).localeCompare(String(q.l.machine_code))||p.from.localeCompare(q.from));
 function mxPeriod(f){const a=f.period_from||String(f.invoice_date||today()).slice(0,7)+"-01",b=f.period_to||(()=>{const y=+a.slice(0,4),m=+a.slice(5,7);return `${a.slice(0,7)}-${z2(lastDay(y,m))}`})();return[a,b]}
@@ -2088,7 +2089,7 @@ function invFormView(f){
   <button class="btn sec sm" onclick="invAddLine()">+ ${L("加一行","Add line")}</button>
   <div class="calc" id="invTot">${invTotHTML(f)}</div>
   ${isL3()?checklistHTML(f._chk):""}
-  ${isL3()&&f.project?`<div class="grid" style="margin-top:10px"><label class="f">Refer to summary list No.<input data-k="summary_no" value="${esc(f.summary_no||"")}"></label></div>`:""}
+  ${isL3()&&f.project?`<div class="grid" style="margin-top:10px"><label class="f">Refer to summary list No.<input data-k="summary_no" value="${esc(f.summary_no||"")}"></label><label class="f wide">${L("Summary 标题（空白 = 系统自动）","Summary title (blank = automatic)")}<input data-k="summary_title" value="${esc(f.summary_title||"")}" placeholder="${esc(sumTitleAuto(f))}"></label></div>`:""}
   ${false?`<h3>${L("记录表 No.（右上角）","Record sheet No.")}</h3><div class="grid">${Object.keys(f.record_nos).map(k=>`<label class="f">${esc(SHEETS[k]||k)}<input data-rn="${k}" value="${esc(f.record_nos[k]??"")}" placeholder="No."></label>`).join("")}</div>`:""}
   <div class="grid" style="margin-top:14px"><label class="f wide">Remark<textarea data-k="remark">${esc(f.remark||"")}</textarea></label>
     <label class="chk"><input type="checkbox" data-k="interest_enabled" ${f.interest_enabled?"checked":""}>${L("逾期收 interest（1.5% / 月）","Charge overdue interest (1.5% / month)")}</label></div>
@@ -2164,7 +2165,8 @@ Save anyway?`)))return}
   const row={company:S.company,customer_id:f.customer_id,invoice_no:f.invoice_no.trim(),invoice_date:f.invoice_date,due_date:f.due_date||null,customer_po:f.customer_po||null,
     our_ref:f.our_ref||null,description:f.description||null,project:f.project||null,period_from:f.period_from||null,period_to:f.period_to||null,
     amount_before_gst:t.sub,gst_rate:Number(f.gst_rate)||0,gst_amount:t.gst,total:t.total,remark:f.remark||null,interest_enabled:!!f.interest_enabled,monthly_fix_id:f.monthly_fix_id||null};
-  if(isL3()){row.summary_no=f.project?(f.summary_no||null):null;row.kind=f.kind||null}
+  if(isL3()){row.summary_no=f.project?(f.summary_no||null):null;row.kind=f.kind||null;if("summary_title" in f)row.summary_title=f.project&&String(f.summary_title||"").trim()?String(f.summary_title).trim():null}
+  const noST=e=>e&&/summary_title/i.test(e.message||"");
   let id=f.id;
   if(id){const old=invById(id);
     if(old.checked||old.sent_at){const reason=prompt(L("这张 invoice 已检查或已发送，请输入修改原因：","This invoice is checked or sent. Reason for the change:"));if(!reason)return;
@@ -2172,8 +2174,8 @@ Save anyway?`)))return}
         .filter(k=>String(old[k]??"")!==String(row[k]??"")&&!(typeof row[k]==="number"&&Number(old[k])===row[k])).map(k=>({invoice_id:id,field:k,old_value:String(old[k]??""),new_value:String(row[k]??""),reason}));
       if(!edits.length)edits.push({invoice_id:id,field:"lines",old_value:"",new_value:"",reason});
       const e1=await sb.from("invoice_edits").insert(edits);if(e1.error)return w.textContent=e1.error.message}
-    const{error}=await sb.from("invoices").update(row).eq("id",id);if(error)return w.textContent=error.message;
-  }else{const{data,error}=await sb.from("invoices").insert(row).select().single();if(error)return w.textContent=error.message;id=data.id}
+    let{error}=await sb.from("invoices").update(row).eq("id",id);if(noST(error)){const t=row.summary_title;delete row.summary_title;({error}=await sb.from("invoices").update(row).eq("id",id));if(!error&&t)alert(L("已保存，但 Summary 标题没存到：先在 Supabase 跑「补充-Summary标题-Supabase.sql」。","Saved, but run the summary-title SQL first."))}if(error)return w.textContent=error.message;
+  }else{let{data,error}=await sb.from("invoices").insert(row).select().single();if(noST(error)){const t=row.summary_title;delete row.summary_title;({data,error}=await sb.from("invoices").insert(row).select().single());if(!error&&t)alert(L("已保存，但 Summary 标题没存到：先在 Supabase 跑「补充-Summary标题-Supabase.sql」。","Saved, but run the summary-title SQL first."))}if(error)return w.textContent=error.message;id=data.id}
   {const{data:oldL}=await sb.from("invoice_lines").select("id").eq("invoice_id",id);
     const e2=await sb.from("invoice_lines").insert(f.lines.map((l,i)=>({invoice_id:id,line_no:i+1,description:l.description||"",qty:l.qty,unit:l.unit||null,unit_price:l.unit==="hrs"||(isL3()&&l.unit_price==null)?null:(l.unit_price??l.amount),amount:Number(l.amount)||0}))).select("id");
     if(e2.error){alert(L("明细保存失败（旧明细保留不动）：","Lines not saved (old lines kept): ")+e2.error.message);return w.textContent=e2.error.message}
