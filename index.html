@@ -331,7 +331,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-22a";
+const APP_VER="2026-10-22c";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -1125,7 +1125,7 @@ function addLate(){const f=S.modal.f,late=f._chk?.late||[];for(const d of late)i
 /* ---- Summary list + 记录表（照 CHC Excel） ---- */
 function l3SummaryHTML(inv,title){const lines=S.d.invoice_lines.filter(l=>l.invoice_id===inv.id).sort((a,b)=>(a.line_no||0)-(b.line_no||0));
   const a=inv.period_from||inv.invoice_date,mon=`${MONL[+a.slice(5,7)-1].toUpperCase()} ${a.slice(0,4)}`;
-  return `<div class="doc pg sumlist"><div class="rech"><div><b>${esc(inv.project)}-SUMMARY</b><b>FOR MONTH ${mon}</b><b>${esc(title||"TRANSPORT SERVICES")}</b></div><b class="no">${inv.summary_no?"No."+esc(inv.summary_no):""}</b></div>
+  return `<div class="doc pg sumlist"><div class="rech"><div><b>${esc(inv.project)}-SUMMARY</b><b>FOR MONTH ${mon}</b><b>${esc(title||(mxBills(inv.id).length?"TRANSPORT SERVICES / MACHINERY RENTAL":"TRANSPORT SERVICES"))}</b></div><b class="no">${inv.summary_no?"No."+esc(inv.summary_no):""}</b></div>
   <table class="sm rec"><colgroup><col style="width:7%"><col><col style="width:10%"><col style="width:8%"><col style="width:13%"><col style="width:16%"></colgroup>
   <thead><tr><th>S/N</th><th>DESCRIPTION</th><th>QTY</th><th>UOM</th><th>UNIT PRICE $</th><th>TOTAL AMOUNT $</th></tr></thead><tbody>
   ${lines.map((l,i)=>`<tr><td>${i+1}</td><td class="a">${esc(String(l.description||"").replace(/\n/g," "))}</td><td>${lineUnit(l)==="hrs"?Number(l.qty||0).toFixed(2):l.qty??""}</td><td>${esc(lineUnit(l))}</td><td>${l.unit_price==null?"L/S":money(l.unit_price)}</td><td class="a">${acc(l.amount)}</td></tr>`).join("")}
@@ -1842,9 +1842,30 @@ function machineLines(rows){return rows.map(r=>{const l=r.l,loc=l.loc_to||l.loc_
   if(r.type==="Daily")return{description:`${head}\n${per}`,qty:r.days,unit:"day",unit_price:r.rate,amount:r.amount};
   return{description:`${head}\n${per}\n(${r.type==="Weekly"?L("Weekly","Weekly"):"Monthly"} $${money(r.rate)} ÷ ${r.type==="Weekly"?7:30} × ${r.days} days)`,qty:r.days,unit:"days",unit_price:null,amount:r.amount}})}
 const isMachInv=i=>i?.kind==="machine";
-function machineRecordsHTML(inv){const bills=S.d.mbills.filter(b=>b.invoice_id===inv.id).map(b=>({...b,l:S.d.mlogs.find(l=>l.id===b.log_id)||{}})).sort((a,b)=>String(a.l.machine_code).localeCompare(String(b.l.machine_code))||a.period_from.localeCompare(b.period_from));
+/* ---- 运输 invoice 里面加 Excavator 月租 ---- */
+const mxBills=invId=>S.d.mbills.filter(b=>b.invoice_id===invId);
+const mxRowsFromBills=invId=>mxBills(invId).map(b=>({l:S.d.mlogs.find(l=>l.id===b.log_id)||{machine_code:""},from:b.period_from,to:b.period_to,days:b.days,type:b.rate_type,rate:Number(b.rate),amount:Number(b.amount)})).sort((p,q)=>String(p.l.machine_code).localeCompare(String(q.l.machine_code))||p.from.localeCompare(q.from));
+function mxPeriod(f){const a=f.period_from||String(f.invoice_date||today()).slice(0,7)+"-01",b=f.period_to||(()=>{const y=+a.slice(0,4),m=+a.slice(5,7);return `${a.slice(0,7)}-${z2(lastDay(y,m))}`})();return[a,b]}
+function mxLoad(){const f=S.modal.f;if(!f.project)return toast(L("先选 Project","Choose a project first"));const[a,b]=mxPeriod(f);
+  f._mx=machineBillRows(f.project,a,b,f.id);const had=new Set(mxBills(f.id).map(x=>x.log_id));
+  f.mxsel=new Set(f._mx.rows.map((r,i)=>had.size?(had.has(r.l.id)?i:-1):i).filter(i=>i>=0));
+  if(!f._mx.rows.length)toast(L(`${f.project} 在 ${dmy(a)}–${dmy(b)} 没有要 bill 的机械`,"Nothing to bill"));render()}
+function mxApply(){const f=S.modal.f;if(!f._mx)return;const rows=f._mx.rows.filter((_,i)=>f.mxsel.has(i));
+  const np=rows.filter(r=>r.rate==null);if(np.length)return toast(L(`${np.map(r=>r.l.machine_code).join(", ")} 没有价钱，先到 Excavator → 机器 & 价钱 填好`,"Missing rates"));
+  /* 拿掉之前加的月租明细（这次画面加的 + 已经存过的那几行） */
+  let keep=f.lines.filter(l=>!l._mx);if(!f._mxStripped&&f.id){const n=mxBills(f.id).length;if(n&&keep.length>n)keep=keep.slice(0,keep.length-n);f._mxStripped=true}
+  f.lines=[...keep,...machineLines(rows).map(l=>({...l,_mx:true}))];f._mxchosen=rows;mxDesc(f,rows.length>0);render();
+  toast(rows.length?L(`已加 ${rows.length} 行 Excavator 月租到明细`,`${rows.length} rental line(s) added`):L("已拿掉 Excavator 月租","Rental lines removed"))}
+function mxDesc(f,on){const[a]=mxPeriod(f),t=`PROVIDE MACHINERY / EQUIPMENT RENTAL FOR ${monthUpper(a)}`;let d=String(f.description||"").split("\n").filter(x=>!/^PROVIDE MACHINERY \/ EQUIPMENT RENTAL/i.test(x));if(on)d.push(t);f.description=d.join("\n")}
+function mxBoxHTML(f){const has=mxBills(f.id).length,rows=f._mx?.rows||[];
+  return `<div class="note" style="margin-top:10px">🚜 <b>${L("Excavator 月租（加进这张运输 invoice）","Excavator rental on this invoice")}</b>${has&&!f._mx?` · ${L(`现在有 ${has} 行`,`${has} line(s) now`)}`:""}
+    <div class="actions" style="margin-top:6px"><button class="btn sec sm" onclick="mxLoad()">${f._mx?"↻ ":"＋ "}${L(`载入 ${f.project} 的 Excavator 月租`,`Load ${f.project} rentals`)}</button>${f._mx?`<button class="btn sm" onclick="mxApply()">${L("用已选机械加进明细","Add selected to lines")}</button>`:""}</div>
+    ${f._mx?(rows.length?`<div class="tw" style="margin-top:8px"><table><thead><tr><th></th><th>${L("机器","Machine")}</th><th>${L("地点","Location")}</th><th>${L("期间","Period")}</th><th class="num">${L("天","Days")}</th><th>${L("计价","Type")}</th><th class="num">${L("价钱","Rate")}</th><th class="num">${L("金额","Amount")}</th></tr></thead><tbody>
+      ${rows.map((r,i)=>`<tr><td><input type="checkbox" ${f.mxsel.has(i)?"checked":""} onchange="this.checked?S.modal.f.mxsel.add(${i}):S.modal.f.mxsel.delete(${i})"></td><td>${esc(mName(r.l.machine_code,r.l.breaker))}</td><td>${esc(r.l.loc_to||r.l.loc_from||"")}</td><td>${dmy(r.from)} – ${dmy(r.to)}</td><td class="num">${r.days}</td><td>${esc(r.type||"")}</td><td class="num">${r.rate==null?`<span class="tag bad">${L("没价钱","no rate")}</span>`:money(r.rate)}</td><td class="num">${money(r.amount)}</td></tr>`).join("")}</tbody></table></div>`
+      :`<p class="mute">${L("这段期间没有要 bill 的机械。","Nothing to bill in this period.")}</p>`)+(f._mx.skipped.length?`<details style="font-size:12px;margin-top:4px"><summary>${L(`${f._mx.skipped.length} 笔不会放（已 bill / NA…）`,`${f._mx.skipped.length} skipped`)}</summary>${f._mx.skipped.map(x=>`<div>${esc(x.l.machine_code)}：${esc(x.why)}</div>`).join("")}</details>`:""):""}</div>`}
+function machineRecordsHTML(inv,noSum){const bills=S.d.mbills.filter(b=>b.invoice_id===inv.id).map(b=>({...b,l:S.d.mlogs.find(l=>l.id===b.log_id)||{}})).sort((a,b)=>String(a.l.machine_code).localeCompare(String(b.l.machine_code))||a.period_from.localeCompare(b.period_from));
   const a=inv.period_from||inv.invoice_date,mon=`${MONL[+a.slice(5,7)-1].toUpperCase()} ${a.slice(0,4)}`;
-  const out=[];if(inv.project)out.push(l3SummaryHTML(inv,"PROVIDE MACHINERY / EQUIPMENT"));
+  const out=[];if(inv.project&&!noSum)out.push(l3SummaryHTML(inv,"PROVIDE MACHINERY / EQUIPMENT"));
   if(bills.length)out.push(chunkPages(bills,16,(rs,pi,last)=>`<div class="rech"><div><b>${esc(inv.project||custName(inv.customer_id))}</b><b>FOR MONTH ${mon}</b><b>MACHINERY / EQUIPMENT RENTAL RECORD</b></div><b class="no">${inv.summary_no?"No."+esc(inv.summary_no):""}</b></div>
     <table class="sm rec"><thead><tr><th>S/N</th><th>Machine Code</th><th>Description</th><th>Person Request</th><th>Location</th><th>Start Date</th><th>End Date</th><th>Days</th><th>Rate Type</th><th>Rate</th><th>Total</th><th>Remarks</th></tr></thead><tbody>
     ${rs.map((b,i)=>`<tr><td>${pi*16+i+1}</td><td>${esc(b.l.machine_code||"")}</td><td>${esc(mName(b.l.machine_code,b.l.breaker))}</td><td>${esc(b.l.person||"")}</td><td>${esc(b.l.loc_to||b.l.loc_from||"")}</td>
@@ -2045,6 +2066,7 @@ function invFormView(f){
       <td>${esc(d.service)} ${d.shift?`<span class="tag ${d.shift}">${d.shift}</span>`:""}</td><td>${esc(d.plate)}</td><td>${d.start_time?.slice(0,5)||""}</td><td>${d.end_time?.slice(0,5)||""}</td>
       <td class="num">${d.billable_hours??""}</td><td class="num">${money(d.amount)}</td></tr>`).join("")}</tbody></table></div>`:""}
   ${isL3()&&f.kind==="machine"?machRowsHTML(f):""}
+  ${isL3()&&f.kind!=="machine"&&f.project?mxBoxHTML(f):""}
   <h3>2. Invoice ${L("资料","details")}</h3>
   <div class="grid"><label class="f">Invoice Date *<input type="date" data-k="invoice_date" value="${f.invoice_date||""}"></label>
     <label class="f">Invoice No *<input data-k="invoice_no" value="${esc(f.invoice_no)}"></label>
@@ -2108,7 +2130,8 @@ async function buildLines(f0,opt){opt=opt||{};const f=f0||S.modal.f;f._fail=null
   if(isL3()){chosen.sort((a,b)=>a.do_date.localeCompare(b.do_date));const csv=chosen.filter(d=>cSvc(d.service)),std=chosen.filter(d=>!cSvc(d.service)),cl=svcLines(csv).out;const np=noPriceList(std);
     if(np.length){f._chk={noPrice:np};R();T(L(`有 ${np.length} 张 DO 没有价钱，先到 Master List 设好价钱，或打开那张 DO 填价钱。`,`${np.length} DO(s) have no price.`));return}
     const from=f.period_from||chosen[0].do_date;
-    if(f.project){f.description=`PROJECT: ${f.project}\nPROVIDE TRANSPORT SERVICES FOR ${monthUpper(from)}`;f.lines=[...(std.length?l3LinesLS(std):[]),...cl];if(!f.summary_no)f.summary_no=projOf(f.project)?.no||""}
+    if(f.project){f.description=`PROJECT: ${f.project}\nPROVIDE TRANSPORT SERVICES FOR ${monthUpper(from)}`;f.lines=[...(std.length?l3LinesLS(std):[]),...cl];if(!f.summary_no)f.summary_no=projOf(f.project)?.no||"";
+      {const mx=f._mxchosen??(f.id?mxRowsFromBills(f.id):[]);if(mx.length){f.lines.push(...machineLines(mx).map(l=>({...l,_mx:true})));mxDesc(f,true)}f._mxStripped=true}}
     else{f.description="";f.lines=[...(std.length?l3LinesDetail(std):[]),...cl]}
     const pos=[...new Set(chosen.map(d=>d.customer_po).filter(Boolean))];if(!f.customer_po&&pos.length===1)f.customer_po=pos[0];
     f._chk=null;if(opt.quiet)return;R();f._chk=await l3Checklist(f,std);if(S.modal?.f===f)R();return}
@@ -2127,7 +2150,7 @@ async function saveInv(){
   const t=invTotals(f);
   {const warn=[];if(!(t.total>0.005))warn.push(L(`Total 是 $${money(t.total)}`,`Total is $${money(t.total)}`));
     if(Number(f.gst_rate)!==9&&Number(f.gst_rate)!==0)warn.push(L(`GST 是 ${f.gst_rate}%（一般 9%）`,`GST ${f.gst_rate}%`));
-    const chosen=(f.dos||[]).filter(d=>f.sel?.has(d.id));if(chosen.length&&!(isL3()&&f.kind==="machine")){const ds=r2(sum(chosen,d=>Number(d.amount)||0));if(Math.abs(ds-t.sub)>0.01)warn.push(L(`勾选的 ${chosen.length} 张 DO 合计 $${money(ds)}，明细合计 $${money(t.sub)}，差 $${money(r2(t.sub-ds))}`,`DO total $${money(ds)} ≠ lines $${money(t.sub)}`))}
+    const chosen=(f.dos||[]).filter(d=>f.sel?.has(d.id));if(chosen.length&&!(isL3()&&f.kind==="machine")){const ds=r2(sum(chosen,d=>Number(d.amount)||0)+sum(f.lines.filter(l=>l._mx),l=>Number(l.amount)||0));if(Math.abs(ds-t.sub)>0.01)warn.push(L(`勾选的 ${chosen.length} 张 DO 合计 $${money(ds)}，明细合计 $${money(t.sub)}，差 $${money(r2(t.sub-ds))}`,`DO total $${money(ds)} ≠ lines $${money(t.sub)}`))}
     if(f.lines.some(l=>!String(l.description||"").replace(NOUL,"").trim()))warn.push(L("有明细没写 Description","A line has no description"));
     if(warn.length&&!confirm(L(`保存前检查：
 
@@ -2155,6 +2178,9 @@ Save anyway?`)))return}
     const e2=await sb.from("invoice_lines").insert(f.lines.map((l,i)=>({invoice_id:id,line_no:i+1,description:l.description||"",qty:l.qty,unit:l.unit||null,unit_price:l.unit==="hrs"||(isL3()&&l.unit_price==null)?null:(l.unit_price??l.amount),amount:Number(l.amount)||0}))).select("id");
     if(e2.error){alert(L("明细保存失败（旧明细保留不动）：","Lines not saved (old lines kept): ")+e2.error.message);return w.textContent=e2.error.message}
     const oids=(oldL||[]).map(x=>x.id);if(oids.length)await sb.from("invoice_lines").delete().in("id",oids)}
+  if(isL3()&&f.kind!=="machine"&&f._mxchosen){await sb.from("machine_bills").delete().eq("invoice_id",id);
+    const mb=f._mxchosen.map(r=>({company:S.company,log_id:r.l.id,invoice_id:id,period_from:r.from,period_to:r.to,days:r.days,rate_type:r.type,rate:r.rate,amount:r.amount}));
+    if(mb.length){const e3=await sb.from("machine_bills").insert(mb);if(e3.error)return w.textContent=e3.error.message}}
   if(isL3()&&f.kind==="machine"&&f._mchosen){await sb.from("machine_bills").delete().eq("invoice_id",id);
     const mb=f._mchosen.map(r=>({company:S.company,log_id:r.l.id,invoice_id:id,period_from:r.from,period_to:r.to,days:r.days,rate_type:r.type,rate:r.rate,amount:r.amount}));
     if(mb.length){const e3=await sb.from("machine_bills").insert(mb);if(e3.error)return w.textContent=e3.error.message}}
@@ -2338,7 +2364,7 @@ async function delInv(id){const i=invById(id);
     await binSave("invoices",JSON.parse(JSON.stringify(i)),{lines:JSON.parse(JSON.stringify(S.d.invoice_lines.filter(l=>l.invoice_id===id))),dos})}
   await sb.from("delivery_orders").update({invoice_id:null}).eq("invoice_id",id);
   await sb.from("monthly_fix_log").update({invoice_id:null,status:"Confirmed"}).eq("invoice_id",id);
-  if(isMachInv(i))await sb.from("machine_bills").delete().eq("invoice_id",id);
+  if(isMachInv(i)||mxBills(id).length)await sb.from("machine_bills").delete().eq("invoice_id",id);
   const{error}=await sb.from("invoices").delete().eq("id",id);if(error)return toast(error.message);
   toast(L("已删除","Deleted"));closeModal()}
 
@@ -3094,6 +3120,14 @@ let BK=null;
 const BK_ID=(co,m)=>`00000000-0000-4000-8000-${co==="ETK"?"1":"2"}${String(m||"").replace("-","")}00000`;
 const bkDone=(co,m)=>S.d.attachments.some(a=>a.entity_type==="bank"&&a.entity_id===BK_ID(co,m));
 function bankUp(){BK={rows:[]};bkRender()}
+/* PDF 月结单 → Excel：每个月一个 sheet，最后一栏 Remark */
+function bkPdfBook(wb,R){const by={};R.forEach(x=>(by[x.date.slice(0,7)]=by[x.date.slice(0,7)]||[]).push(x));
+  for(const m of Object.keys(by).sort()){const ws=wb.addWorksheet(monTag(m+"-01").replace(/[\\/?*\[\]:]/g," ").slice(0,31));
+    ws.columns=[{header:"Date",width:12},{header:"Transaction Details",width:48},{header:"Withdrawal",width:14},{header:"Deposit",width:14},{header:"Balance",width:15},{header:"Remark",width:62}];
+    ws.getRow(1).font={bold:true};ws.getRow(1).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFD9E1F2"}};ws.views=[{state:"frozen",ySplit:1}];
+    for(const x of by[m]){const r=ws.addRow([dmy(x.date),x.desc,x.dr||null,x.cr||null,x.bal??null,x.remark||""]);r.alignment={wrapText:true,vertical:"top"};[3,4,5].forEach(c=>r.getCell(c).numFmt="#,##0.00");
+      if(x.cr>0)r.getCell(4).font={color:{argb:"FF1E7B34"}};if(x.st==="none"&&x.cr>0)r.getCell(6).fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFFCE4D6"}}}
+    const t=ws.addRow(["","Total",sum(by[m],x=>x.dr),sum(by[m],x=>x.cr)]);t.font={bold:true};[3,4].forEach(c=>t.getCell(c).numFmt="#,##0.00")}}
 function parseBank(wb){for(const sn of wb.SheetNames){const rows=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:"",raw:true});
     const hi=rows.slice(0,40).findIndex(r=>{const h=r.map(c=>String(c).trim().toLowerCase());return h.some(x=>/date/.test(x))&&h.some(x=>/debit|withdraw/.test(x))&&h.some(x=>/credit|deposit/.test(x))});if(hi<0)continue;
     const H=rows[hi].map(c=>String(c).trim().toLowerCase()),fi=rx=>H.findIndex(h=>rx.test(h));
@@ -3103,6 +3137,22 @@ function parseBank(wb){for(const sn of wb.SheetNames){const rows=XLSX.utils.shee
     if(!out.length)continue;const mc={};out.forEach(x=>{const m=x.date.slice(0,7);mc[m]=(mc[m]||0)+1});
     return{sheet:sn,hdrRow:hi+1,rmCol:C.rm,rows:out,m:Object.entries(mc).sort((a,b)=>b[1]-a[1])[0][0],acct:String(rows[0]?.[1]||rows[0]?.[0]||"").trim()}}
   return null}
+/* ---- DBS PDF 月结单：每一行 = 日期 日期 说明 … 金额 余额；入账 / 支出用余额增减来判断 ---- */
+async function bankPdfRows(file){await loadPdfJs();const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise,lines=[];
+  for(let n=1;n<=pdf.numPages;n++){const tc=await(await pdf.getPage(n)).getTextContent(),its=tc.items.filter(it=>String(it.str||"").trim()).map(it=>({x:it.transform[4],y:it.transform[5],t:String(it.str)}));
+    its.sort((a,b)=>b.y-a.y||a.x-b.x);const rows=[];for(const it of its){const r=rows.find(r=>Math.abs(r.y-it.y)<=2.5);if(r)r.it.push(it);else rows.push({y:it.y,it:[it]})}
+    rows.sort((a,b)=>b.y-a.y).forEach(r=>lines.push(r.it.sort((a,b)=>a.x-b.x).map(z=>z.t).join(" ").replace(/\s+/g," ").trim()))}
+  const MON={JAN:1,FEB:2,MAR:3,APR:4,MAY:5,JUN:6,JUL:7,AUG:8,SEP:9,OCT:10,NOV:11,DEC:12},num=v=>Number(String(v).replace(/,/g,""));
+  const junk=/^(DBS Bank Ltd|12 Marina|www\.dbs|Page \d|Details Of|Transaction|Date$|Date Date|Value|Currency|Withdrawal|Continue on|Co\. Reg|Account Statement|Messages For You|•)/i;
+  const out=[];let prev=null,cur=null,acct="",stop=false;
+  for(const l of lines){const am=l.match(/Account No:?\s*([\d\-]+)/i);if(am)acct=am[1];
+    const bf=l.match(/Balance Brought Forward\s+(-?[\d,]+\.\d\d)/i);if(bf){prev=num(bf[1]);cur=null;stop=false;continue}
+    if(/^(Total|Balance Carried Forward)\b/i.test(l)){cur=null;stop=true;continue}
+    const m=l.match(/^(\d{2})-([A-Za-z]{3})-(\d{2,4})\s+\d{2}-[A-Za-z]{3}-\d{2,4}\s+(.*?)\s+(-?[\d,]+\.\d\d)\s+(-?[\d,]+\.\d\d)$/);
+    if(m&&MON[m[2].toUpperCase()]){const y=m[3].length===2?"20"+m[3]:m[3],d=`${y}-${z2(MON[m[2].toUpperCase()])}-${m[1]}`,amt=num(m[5]),bal=num(m[6]);
+      const up=prev!=null?bal>prev+0.001:false;cur={date:d,c1:m[4].trim(),ext:[],dr:up?0:r2(amt),cr:up?r2(amt):0,bal};out.push(cur);prev=bal;stop=false;continue}
+    if(cur&&!stop&&!junk.test(l)&&!/^\d{2}-[A-Za-z]{3}-\d{4}\s+to\s+/i.test(l)&&l.length<90)cur.ext.push(l)}
+  return{acct,rows:out.map(x=>({date:x.date,c1:x.c1,desc:[x.c1,...x.ext].join(" ").replace(/\s+/g," ").trim(),dr:x.dr,cr:x.cr,bal:x.bal,old:""}))}}
 const BK_STOP=new Set(["PTE","LTD","PRIVATE","LIMITED","THE","AND","N","CO","S","SG","SINGAPORE","SPORE","INTL","INTERNATIONAL","GROUP","HOLDINGS","SERVICES","SERVICE"]);
 function bkParty(desc,list){const dt=normCo(desc).split(" ").filter(Boolean);let best=null,bs=0;
   const firsts={};for(const p of list){const t=normCo(p.name).split(" ").filter(x=>x.length>=2&&!BK_STOP.has(x));if(t[0])firsts[t[0]]=(firsts[t[0]]||0)+1}
@@ -3115,16 +3165,23 @@ function bkRefs(desc){const t=desc.toUpperCase(),out=[];const re=/(\d{4})[\s\-\/
   return[...new Set(out)]}
 const invTail=i=>{const p=String(i.invoice_no).toUpperCase().match(/(\d{4})\s*[\/\-]\s*(\d{1,3})\s*$/);return p?p[1]+p[2].padStart(2,"0"):""};
 /* 用金额凑单：找出所有凑得刚好的组合，挑张数少、月份集中的；有其他组合也对得上就标 alt */
-function bkSubset(items,val,target,dateOf){const T=Math.round(target*100);if(T<=0||!items.length)return null;const n=Math.min(items.length,30),it=items.slice(-n),v=it.map(x=>Math.round(val(x)*100));
+function bkSubset(items,val,target,dateOf,maxSteps){maxSteps=maxSteps||500000;const T=Math.round(target*100);if(T<=0||!items.length)return null;const n=Math.min(items.length,30),it=items.slice(-n),v=it.map(x=>Math.round(val(x)*100));
   const suf=[];let s=0;for(let k=n-1;k>=0;k--){s+=v[k];suf[k]=s}const pick=[],sols=[];let steps=0;
-  const dfs=(k,rem)=>{if(++steps>500000||sols.length>=80)return;if(Math.abs(rem)<=1){sols.push([...pick]);return}if(k>=n||rem<-1||suf[k]<rem-1)return;pick.push(k);dfs(k+1,rem-v[k]);pick.pop();dfs(k+1,rem)};dfs(0,T);
+  const dfs=(k,rem)=>{if(++steps>maxSteps||sols.length>=80)return;if(Math.abs(rem)<=1){sols.push([...pick]);return}if(k>=n||rem<-1||suf[k]<rem-1)return;pick.push(k);dfs(k+1,rem-v[k]);pick.pop();dfs(k+1,rem)};dfs(0,T);
   if(!sols.length)return null;const mon=d=>{const x=String(d||"");return(+x.slice(0,4))*12+(+x.slice(5,7))};
   const sc=ix=>{const ms=ix.map(k=>mon(dateOf?dateOf(it[k]):"")).filter(Boolean);return ms.length?Math.max(...ms)*100+(Math.max(...ms)-Math.min(...ms))+ix.length*0.2:ix.length};
   sols.sort((a,b)=>sc(a)-sc(b));const best=sols[0].map(k=>it[k]);best.alt=sols.length>1&&sc(sols[1])-sc(sols[0])<1;return best}
 function bkMatchAll(){const B=new Map(S.d.invoices.map(i=>[i.id,balOf(i)])),SB=new Map(S.d.supplier_invoices.map(x=>[x.id,x.payment_date?0:Number(x.total)||0])),usedPay=new Set(),usedPV=new Set();BK.B=B;BK.SB=SB;
   for(const x of [...BK.rows].sort((a,b)=>a.date.localeCompare(b.date)))bkMatch(x,{B,SB,usedPay,usedPV})}
 function bkMatch(x,ctx){const co=S.company;x.alloc=[];x.party=x.forceParty??null;x.note="";
-  if(x.cr>0){const cust=x.party?custOf(x.party):bkParty(x.desc,S.d.customers);x.party=cust?.id||null;if(!cust){x.st="none";x.remark=x.old||"";return}
+  if(x.cr>0){if(!x.party&&BK_OTHER.test(x.desc)){x.st="other";x.remark=x.manualRemark??bkOtherRemark(x);x.take=false;return}
+    let cust=x.party?custOf(x.party):bkParty(x.desc,S.d.customers);
+    if(!cust){const g=bkByAmount(x,ctx);if(g){x.party=g.cid;x.note=g.note||"";
+        if(g.pay){ctx.usedPay.add(g.pay.id);x.alloc=S.d.payment_allocations.filter(a=>a.payment_id===g.pay.id).map(a=>({inv:invById(a.invoice_id),amt:Number(a.amount)})).filter(a=>a.inv);x.st="done";x.payId=g.pay.id}
+        else{x.alloc=g.list.map(i=>({inv:i,amt:r2(ctx.B.get(i.id))}));g.list.forEach(i=>ctx.B.set(i.id,0));x.st=g.sure?"auto":"review"}
+        x.remark=x.manualRemark??bkRemark(x);x.take=x.take??(x.st==="auto");return}
+      x.party=null;x.st="none";x.remark=x.manualRemark??x.old??"";return}
+    x.party=cust.id;
     const all=S.d.invoices.filter(i=>i.customer_id===cust.id&&i.status!=="Cancelled"&&i.invoice_date<=x.date).sort((a,b)=>a.invoice_date.localeCompare(b.invoice_date)||String(a.invoice_no).localeCompare(String(b.invoice_no)));
     const open=all.filter(i=>ctx.B.get(i.id)>0.005),refs=bkRefs(x.desc),bal=i=>ctx.B.get(i.id);
     const take=(list,valf,st)=>{x.alloc=list.map(i=>({inv:i,amt:r2(valf(i))}));x.st=st;if(st!=="done")list.forEach(i=>ctx.B.set(i.id,r2(bal(i)-valf(i))))};
@@ -3146,7 +3203,8 @@ function bkMatch(x,ctx){const co=S.company;x.alloc=[];x.party=x.forceParty??null
               {let r=x.cr;x.alloc=al.map(i=>{const t=r2(Math.min(bal(i),r));r=r2(r-t);return{inv:i,amt:t}});x.note=r>0.005?L(`多收 $${money(r)}`,`$${money(r)} extra`):""}
               x.alloc.forEach(a=>ctx.B.set(a.inv.id,r2(bal(a.inv)-a.amt)));x.st="review"}}}}}
     x.remark=x.manualRemark??bkRemark(x);x.take=x.take??(x.st==="auto");return}
-  if(/SERVICE CHARGE|BANK CHARGE|\bCHARGE|\bFEE\b|COMMISSION|HANDLING/i.test(x.c1+" "+x.desc)&&x.dr<200){x.st="charge";x.remark=x.manualRemark??(/SERVICE CHARGE/i.test(x.c1+" "+x.desc)?"SERVICE CHARGE":"BANK CHARGE");x.take=false;return}
+  if(!x.party&&/RETURNED CHEQUE|IRAS|REVERSAL/i.test(x.desc)){x.st="other";x.remark=x.manualRemark??bkOtherRemark(x);x.take=false;return}
+  if(/SERVICE CHARGE|BANK CHARGE|\bCHARGE|\bFEE\b|CHQFEE|COMMISSION|HANDLING|POSTAGE|^INTEREST\b/i.test(x.c1+" "+x.desc)&&x.dr<200){x.st="charge";x.remark=x.manualRemark??(/SERVICE CHARGE/i.test(x.c1+" "+x.desc)?"SERVICE CHARGE":"BANK CHARGE");x.take=false;return}
   const pv=(S.d.pvs||[]).find(p=>p.company===co&&!ctx.usedPV.has(p.id)&&Math.abs(Number(p.total)-x.dr)<0.01&&(p.status!=="Paid"||Math.abs(daysBetween(p.paid_at||p.pv_date,x.date))<=10));
   if(pv&&!x.forceParty){ctx.usedPV.add(pv.id);x.party=pv.supplier_id;x.pv=pv;x.alloc=pvLines(pv.id).map(l=>({si:S.d.supplier_invoices.find(s=>s.id===l.supplier_invoice_id),amt:Number(l.amount)||0,d:l.description}));x.st=pv.status==="Paid"?"done":"pv";x.remark=x.manualRemark??bkRemarkAP(x);x.take=x.st==="pv";return}
   const sup=x.party?supById(x.party):bkParty(x.desc,S.d.suppliers);x.party=sup?.id||null;
@@ -3154,6 +3212,22 @@ function bkMatch(x,ctx){const co=S.company;x.alloc=[];x.party=x.forceParty??null
     const sub=bkSubset(open,s=>ctx.SB.get(s.id),x.dr);if(sub){x.alloc=sub.map(s=>({si:s,amt:ctx.SB.get(s.id)}));sub.forEach(s=>ctx.SB.set(s.id,0));x.st="auto"}else x.st="review"}
   else x.st="none";
   x.remark=x.manualRemark??(x.st==="none"?x.old||"":bkRemarkAP(x));x.take=x.take??(x.st==="auto")}
+const BK_OTHER=/\bIRAS\b|\bADVICE\b|REFUND|WAIVER|^INTEREST\b|RETURNED|REVERSAL|AUTOSAVE|CAREPACKAGE/i;
+function bkOtherRemark(x){const d=x.desc.toUpperCase();return /IRAS/.test(d)?(x.cr>0?"IRAS GST REFUND":"IRAS GST PAYMENT"):/RETURNED CHEQUE/.test(d)?"RETURNED CHEQUE":/REFUND|WAIVER/.test(d)?"BANK REFUND":/INTEREST/.test(d)?"INTEREST":/ADVICE/.test(d)?"BANK ADVICE":x.c1}
+/* 没有客户名字（支票 QCDM、PayNow 只有号码）：用金额在所有客户还没付的单里找 */
+function bkByAmount(x,ctx){const amt=x.cr;
+  const ep=S.d.payments.find(p=>!ctx.usedPay.has(p.id)&&Math.abs(Number(p.amount)-amt)<0.01&&Math.abs(daysBetween(p.payment_date,x.date))<=7);if(ep)return{cid:ep.customer_id,pay:ep};
+  const byC={};for(const i of S.d.invoices){if(i.company!==S.company||i.status==="Cancelled"||i.invoice_date>x.date||!(ctx.B.get(i.id)>0.005))continue;(byC[i.customer_id]=byC[i.customer_id]||[]).push(i)}
+  const cs=Object.keys(byC);cs.forEach(c=>byC[c].sort((a,b)=>a.invoice_date.localeCompare(b.invoice_date)));
+  const one=[];for(const c of cs)for(const i of byC[c])if(Math.abs(ctx.B.get(i.id)-amt)<0.01)one.push(i);
+  const nm=ids=>[...new Set(ids)].map(custName).slice(0,4).join("、");
+  if(one.length===1)return{cid:one[0].customer_id,list:one,sure:true};
+  if(one.length>1){const near=one.sort((a,b)=>Math.abs(daysBetween(a.invoice_date,x.date))-Math.abs(daysBetween(b.invoice_date,x.date)));
+    return{cid:near[0].customer_id,list:[near[0]],sure:false,note:L(`${one.length} 张单都是这个金额（${nm(one.map(i=>i.customer_id))}），请确认`,`${one.length} invoices have this amount — please check`)}}
+  const sols=[];for(const c of cs){const it=byC[c].slice(-20),sub=bkSubset(it,i=>ctx.B.get(i.id),amt,i=>i.invoice_date,40000);if(sub)sols.push({cid:c,list:[...sub],alt:sub.alt})}
+  if(sols.length===1)return{cid:sols[0].cid,list:sols[0].list,sure:!sols[0].alt,note:sols[0].alt?L("这个客户有几种组合都对得上，请确认","Several combinations match"):""};
+  if(sols.length>1){sols.sort((a,b)=>a.list.length-b.list.length);return{cid:sols[0].cid,list:sols[0].list,sure:false,note:L(`${sols.length} 个客户都凑得到这个金额（${nm(sols.map(z=>z.cid))}），请确认`,`${sols.length} customers match — please check`)}}
+  return null}
 function bkRemark(x){const c=custOf(x.party);if(!x.alloc.length)return` RECEIPT; ${c.name||""}`;
   return ` RECEIPT; ${c.name||""}  , Payment for Invoices:- \n`+x.alloc.map(a=>`${a.inv.invoice_no} = $${money(a.amt)}`).join("\n")+(x.note?`\n(${x.note})`:"")}
 function bkRemarkAP(x){const n=supName(x.party);if(!x.alloc.length)return` PAYMENT; ${n}`;return ` PAYMENT; ${n}  , Payment for Invoices:- \n`+x.alloc.map(a=>`${a.si?a.si.invoice_no:a.d||""} = $${money(a.amt)}`).join("\n")}
@@ -3167,7 +3241,7 @@ function bkPick(i){const x=BK.rows[i];if(!x.party)return toast(L("先选客户 /
 function bkPickToggle(i,id,on){const x=BK.rows[i];let al=(x.manualAlloc||x.alloc.map(a=>({...a}))).filter(a=>(a.inv||a.si)?.id!==id);
   if(on){if(x.cr>0){const inv=invById(id);al.push({inv,amt:r2(Math.max(0,balOf(inv)))})}else{const si=S.d.supplier_invoices.find(s=>s.id===id);al.push({si,amt:Number(si.total)||0})}}
   x.manualAlloc=al;bkReMatch();bkRender()}
-const BK_ST={auto:["ok",["自动配对","Matched"]],manual:["ok",["你选的","Manual"]],done:["mute",["系统已经记了","Already recorded"]],pv:["ok",["配对 PV","PV"]],charge:["mute",["银行收费","Bank charge"]],review:["warn",["要确认","Check"]],none:["bad",["没配对","No match"]]};
+const BK_ST={auto:["ok",["自动配对","Matched"]],manual:["ok",["你选的","Manual"]],done:["mute",["系统已经记了","Already recorded"]],pv:["ok",["配对 PV","PV"]],charge:["mute",["银行收费","Bank charge"]],other:["mute",["不是客户付款","Not a receipt"]],review:["warn",["要确认","Check"]],none:["bad",["没配对","No match"]]};
 function bkRender(){const R=BK.rows||[],cnt=k=>R.filter(x=>x.st===k).length,go=R.filter(x=>x.take&&["auto","manual","review","pv"].includes(x.st));
   const pickHTML=i=>{const x=R[i];if(BK.pick!==i)return"";const sel=new Set((x.manualAlloc||x.alloc).map(a=>(a.inv||a.si)?.id));
     const list=x.cr>0?S.d.invoices.filter(v=>v.customer_id===x.party&&v.status!=="Cancelled"&&(balOf(v)>0.005||sel.has(v.id))).sort((a,b)=>a.invoice_date.localeCompare(b.invoice_date))
@@ -3175,14 +3249,16 @@ function bkRender(){const R=BK.rows||[],cnt=k=>R.filter(x=>x.st===k).length,go=R
     const tot=sum(x.manualAlloc||x.alloc,a=>a.amt),amt=x.cr||x.dr;
     return `<tr><td colspan="7" style="background:var(--panel2)"><b>${L("选这笔付了哪几张","Pick the invoices paid")}</b> · ${L("已选","selected")} $${money(tot)} / $${money(amt)} ${Math.abs(tot-amt)>0.01?`<span class="tag warn">${L("差","diff")} $${money(r2(amt-tot))}</span>`:`<span class="tag ok">✓</span>`} <a href="#" onclick="BK.pick=null;bkRender();return false">${L("完成","Done")}</a>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:2px 12px;margin-top:6px;max-height:220px;overflow:auto">${list.map(v=>`<label class="chk"><input type="checkbox" ${sel.has(v.id)?"checked":""} onchange="bkPickToggle(${i},'${v.id}',this.checked)">${esc(v.invoice_no)} · ${dmy(v.invoice_date)} · $${money(x.cr>0?balOf(v):v.total)}</label>`).join("")||`<span class="mute">${L("没有未付的单","No open invoices")}</span>`}</div></td></tr>`};
-  pvOv(`<div class="pvhead"><h3 style="margin:0">🏦 ${L("银行月结单对单","Bank reconciliation")} · ${S.company}</h3>${BK.m?`<span class="mute">${esc(BK.file||"")} · ${monTag(BK.m+"-01")}</span>`:""}<span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
-  <p class="mute" style="font-size:13px;margin-top:0">${L("上传银行给的 Excel 月结单。系统帮每一笔认出客户 / 供应商和付了哪几张单（看说明里的名字、单号，再用金额凑），自动写好 Remark。你确认后：收款记进系统，再下载一份填好 Remark 的月结单。","Upload the bank's Excel statement. Each line is matched to a customer/supplier and invoices; remarks are written for you.")}</p>
-  <label class="btn file">⬆ ${L("选银行月结单 Excel","Choose bank statement")}<input type="file" accept=".xlsx,.xls,.csv" hidden onchange="bkFile(this)"></label>
+  pvOv(`<div class="pvhead"><h3 style="margin:0">🏦 ${L("银行月结单对单","Bank reconciliation")} · ${S.company}</h3>${BK.m?`<span class="mute">${esc(BK.file||"")} · ${BK.ms&&BK.ms.length>1?`${monTag(BK.ms[0]+"-01")} – ${monTag(BK.ms.at(-1)+"-01")}`:monTag(BK.m+"-01")}</span>`:""}<span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
+  <p class="mute" style="font-size:13px;margin-top:0">${L("上传银行给的 Excel 月结单或 DBS PDF 电子月结单（可以一次放好几个月）。没有名字的入账（支票 QCDM 等）会用金额去找。系统帮每一笔认出客户 / 供应商和付了哪几张单（看说明里的名字、单号，再用金额凑），自动写好 Remark。你确认后：收款记进系统，再下载一份填好 Remark 的月结单。","Upload the bank's Excel statement. Each line is matched to a customer/supplier and invoices; remarks are written for you.")}</p>
+  <label class="btn file">⬆ ${L("选银行月结单（Excel / DBS PDF，可以一次选很多个或 zip）","Choose bank statement (Excel / DBS PDF, many or zip)")}<input type="file" accept=".xlsx,.xls,.csv,.pdf,.zip" multiple hidden onchange="bkFile(this)"></label>
+  ${BK.bad?.length?`<p class="tag warn">${L("读不到：","Couldn't read: ")}${esc(BK.bad.join(", "))}</p>`:""}
   ${R.length?`<ul style="margin:8px 0;font-size:14px;columns:2"><li>${L("收到","In")}: ${R.filter(x=>x.cr>0).length} ${L("笔","")} $${money(sum(R,x=>x.cr))}</li><li>${L("付出","Out")}: ${R.filter(x=>x.dr>0).length} ${L("笔","")} $${money(sum(R,x=>x.dr))}</li>
-    <li>${L("自动配对","Matched")}: <b>${cnt("auto")+cnt("pv")}</b></li><li>${L("系统已经记了（只写 Remark）","Already recorded")}: ${cnt("done")}</li><li>${L("银行收费","Charges")}: ${cnt("charge")}</li>
+    <li>${L("自动配对","Matched")}: <b>${cnt("auto")+cnt("pv")}</b></li><li>${L("系统已经记了（只写 Remark）","Already recorded")}: ${cnt("done")}</li><li>${L("银行收费","Charges")}: ${cnt("charge")}</li><li>${L("不是客户付款（IRAS / 退款 / 退票…）","Other (IRAS / refunds…)")}: ${cnt("other")}</li>
     <li><b style="color:var(--warn,#e0a800)">${L("要确认","To check")}: ${cnt("review")}</b></li><li><b style="color:var(--bad)">${L("没配对","No match")}: ${cnt("none")}</b></li></ul>
+  <div class="filters" style="margin:0 0 6px">${[["all",L("全部","All")],["in",L("只看收款","Receipts only")],["todo",L("收款要处理的","Receipts to handle")]].map(([k,t])=>`<button class="btn sm ${(BK.view||"all")===k?"":"sec"}" onclick="BK.view='${k}';bkRender()">${t}</button>`).join(" ")}</div>
   <div class="tw" style="max-height:56vh"><table><thead><tr><th>${L("记进系统","Record")}</th><th>${L("日期","Date")}</th><th>${L("说明","Description")}</th><th class="num">${L("金额","Amount")}</th><th>${L("客户 / 供应商","Party")}</th><th>${L("状态","Status")}</th><th>Remark</th></tr></thead><tbody>
-  ${R.map((x,i)=>{const[t,l]=BK_ST[x.st]||BK_ST.none,can=["auto","manual","review","pv"].includes(x.st),parties=x.cr>0?S.d.customers:S.d.suppliers;
+  ${R.map((x,i)=>{const vw=BK.view||"all";if(vw==="in"&&!(x.cr>0))return"";if(vw==="todo"&&!(x.cr>0&&["review","none","auto"].includes(x.st)))return"";const[t,l]=BK_ST[x.st]||BK_ST.none,can=["auto","manual","review","pv"].includes(x.st),parties=x.cr>0?S.d.customers:S.d.suppliers;
     return `<tr class="${x.st==="review"?"amb":x.st==="none"?"red":""}"><td>${can?`<input type="checkbox" ${x.take?"checked":""} onchange="bkSetTake(${i},this.checked)">`:""}</td><td>${dmy(x.date)}</td>
       <td style="white-space:normal;min-width:220px;max-width:340px;font-size:12px"><b>${esc(x.c1)}</b><div class="mute">${esc(x.desc.replace(x.c1,"").trim().slice(0,160))}</div></td>
       <td class="num">${x.cr?`<span style="color:var(--ok,#2ecc71)">+${money(x.cr)}</span>`:`-${money(x.dr)}`}</td>
@@ -3191,9 +3267,20 @@ function bkRender(){const R=BK.rows||[],cnt=k=>R.filter(x=>x.st===k).length,go=R
       <td><span class="tag ${t}">${L(...l)}</span></td>
       <td><textarea class="inp" rows="${Math.min(6,String(x.remark||"").split("\n").length+1)}" style="min-width:260px;font-size:12px" onchange="bkSetRemark(${i},this.value)">${esc(x.remark||"")}</textarea></td></tr>${pickHTML(i)}`}).join("")}</tbody></table></div>
   <div class="actions" style="margin-top:10px"><button class="btn" id="bkGo" onclick="bkApply(true)">✓ ${L(`记进系统（${go.length} 笔）+ 下载填好 Remark 的 Excel`,`Record ${go.length} + download Excel`)}</button><button class="btn sec" onclick="bkApply(false)">⬇ ${L("只下载 Excel，不记进系统","Excel only")}</button></div><p id="bkProg" class="mute"></p>`:""}`)}
-async function bkFile(input){const f=input.files[0];input.value="";if(!f)return;
-  try{const buf=await f.arrayBuffer(),wb=XLSX.read(buf,{cellDates:true}),r=parseBank(wb);if(!r)return alert(L("看不懂这个银行文件（要有 Date / Debit / Credit 栏）","Unrecognised bank statement"));
-    BK={file:f.name,buf,...r,pick:null};bkMatchAll();bkRender()}catch(e){alert(e.message)}}
+async function bkFile(input){let fs=[...(input.files||[])];input.value="";if(!fs.length)return;
+  try{/* zip 拆开 */const all=[];for(const f of fs){if(/\.zip$/i.test(f.name)){await loadJSZip();const z=await JSZip.loadAsync(await f.arrayBuffer());
+        for(const e of Object.values(z.files))if(!e.dir&&/\.(pdf|xlsx|xls|csv)$/i.test(e.name))all.push(new File([await e.async("blob")],e.name.split("/").pop(),{type:/\.pdf$/i.test(e.name)?"application/pdf":""}))}else all.push(f)}
+    const pdfs=all.filter(f=>/\.pdf$/i.test(f.name)||/pdf/.test(f.type));
+    if(!pdfs.length){const f=all[0],buf=await f.arrayBuffer(),wb=XLSX.read(buf,{cellDates:true}),r=parseBank(wb);if(!r)return alert(L("看不懂这个银行文件（要有 Date / Debit / Credit 栏）","Unrecognised bank statement"));
+      BK={file:f.name,buf,...r,pick:null};bkMatchAll();bkRender();return}
+    pvOv(`<p>⏳ ${L(`读取 ${pdfs.length} 份 PDF 月结单…`,`Reading ${pdfs.length} PDF statement(s)…`)}</p>`);
+    let rows=[],acct="",bad=[];for(const f of pdfs){try{const r=await bankPdfRows(f);acct=acct||r.acct;rows.push(...r.rows.map(x=>({...x,src:f.name})))}catch(e){bad.push(f.name)}}
+    /* 同一笔出现两次（重复上传同一个月）只留一笔 */
+    const seen=new Set();rows=rows.filter(x=>{const k=[x.date,x.c1,x.dr,x.cr,x.bal].join("|");if(seen.has(k))return false;seen.add(k);return true}).sort((a,b)=>a.date.localeCompare(b.date));
+    if(!rows.length)return alert(L("PDF 里读不到交易（要是 DBS 的电子月结单，扫描的读不到）","No transactions found in the PDF(s)"));
+    const mc={};rows.forEach(x=>{const m=x.date.slice(0,7);mc[m]=(mc[m]||0)+1});const ms=Object.keys(mc).sort();
+    BK={file:pdfs.length===1?pdfs[0].name:`${pdfs.length} ${L("份 PDF","PDFs")}`,pdf:true,acct,rows:rows.map((x,i)=>({...x,row:i})),m:ms.at(-1),ms,pick:null,bad};
+    bkMatchAll();bkRender()}catch(e){alert(e.message)}}
 async function bkApply(record){const R=BK.rows,co=S.company,go=record?R.filter(x=>x.take&&["auto","manual","review","pv"].includes(x.st)):[];const b=$("#bkGo");if(b)b.disabled=true;const pg=t=>{const e=$("#bkProg");if(e)e.textContent=t};let nPay=0,nAP=0;
   try{if(go.length&&!confirm(L(`记 ${go.length} 笔进系统？`,`Record ${go.length}?`))){if(b)b.disabled=false;return}
     for(const x of go){pg(`${L("记进系统","Recording")} ${++nPay+nAP}/${go.length}`);
@@ -3204,11 +3291,14 @@ async function bkApply(record){const R=BK.rows,co=S.company,go=record?R.filter(x
       else{nAP++;if(x.pv){const{error}=await sb.from("payment_vouchers").update({status:"Paid",paid_at:x.date}).eq("id",x.pv.id);if(error)throw error}
         for(const a of x.alloc)if(a.si){const{error}=await sb.from("supplier_invoices").update({payment_date:x.date,status:"Paid"}).eq("id",a.si.id);if(error)throw error}x.st="done"}}
     if(go.length){await loadAll();await syncStatuses(go.filter(x=>x.cr>0).flatMap(x=>x.alloc.map(a=>a.inv.id)))}
-    pg(L("正在做 Excel…","Building Excel…"));await loadExcelJS();const wb=new ExcelJS.Workbook();await wb.xlsx.load(BK.buf);const ws=wb.getWorksheet(BK.sheet)||wb.worksheets[0];
+    pg(L("正在做 Excel…","Building Excel…"));await loadExcelJS();const wb=new ExcelJS.Workbook();let name;
+    if(BK.pdf){bkPdfBook(wb,R);name=`${co} Bank ${BK.acct||""} ${BK.ms.length>1?`${BK.ms[0]} to ${BK.ms.at(-1)}`:BK.m} (Remark).xlsx`.replace(/\s+/g," ")}
+    else{await wb.xlsx.load(BK.buf);const ws=wb.getWorksheet(BK.sheet)||wb.worksheets[0];
     let col=BK.rmCol>=0?BK.rmCol+1:0;if(!col){col=ws.getRow(BK.hdrRow).cellCount+1;ws.getRow(BK.hdrRow).getCell(col).value="Remark";ws.getRow(BK.hdrRow).getCell(col).font={bold:true}}
     ws.getColumn(col).width=Math.max(ws.getColumn(col).width||0,60);
     for(const x of R){const c=ws.getRow(x.row).getCell(col);c.value=x.remark||"";c.alignment={wrapText:true,vertical:"top"}}
-    const buf=await wb.xlsx.writeBuffer(),blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}),name=String(BK.file||"bank.xlsx").replace(/\.(xlsx|xls|csv)$/i,"")+" (Remark).xlsx";
+    name=String(BK.file||"bank.xlsx").replace(/\.(xlsx|xls|csv)$/i,"")+" (Remark).xlsx"}
+    const buf=await wb.xlsx.writeBuffer(),blob=new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
     saveBlob(blob,name);
     try{const path=`${S.user.id}/bank/${BK_ID(co,BK.m)}/${Date.now()}_${name.replace(/[^\w.\-]+/g,"_")}`;const up=await sb.storage.from("attachments").upload(path,blob);if(!up.error){const{data}=await sb.from("attachments").insert({entity_type:"bank",entity_id:BK_ID(co,BK.m),kind:"Bank Statement",file_path:path,file_name:name}).select().single();if(data)S.d.attachments.push(data)}}catch(e){}
     pg(L(`完成：记了 ${go.filter(x=>x.cr>0).length} 笔收款、${nAP} 笔付款。Excel 已下载。`,`Done.`));bkRender();render()}
@@ -4484,7 +4574,7 @@ function chunkPages(rows,per,make,fit){const ch=[];
   else for(let i=0;i<rows.length;i+=per)ch.push(rows.slice(i,i+per));
   const st=[];let acc0=0;for(const r of ch){st.push(acc0);acc0+=r.length}
   return ch.map((r,pi)=>`<div class="doc pg land">${make(r,pi,pi===ch.length-1,st[pi])}${ch.length>1?`<div class="pno">Page ${pi+1} of ${ch.length}</div>`:""}</div>`).join("")}
-function breakdownHTML(inv,dos){if(coOf(settingsOf(inv.company))==="L3H"){if(isMachInv(inv))return machineRecordsHTML(inv);const cs=dos.filter(d=>cSvc(d.service)),st=dos.filter(d=>!cSvc(d.service)),cg={};for(const d of cs)(cg[d.service]=cg[d.service]||[]).push(d);const c0=custOf(inv.customer_id);return (st.length?l3RecordsHTML(inv,st):"")+Object.entries(cg).map(([svc,l])=>svcRecordsHTML(inv,svc,l,c0)).join("")}const g={};for(const d of dos)(g[d.service]=g[d.service]||[]).push(d);const c=custOf(inv.customer_id);
+function breakdownHTML(inv,dos){if(coOf(settingsOf(inv.company))==="L3H"){if(isMachInv(inv))return machineRecordsHTML(inv);const cs=dos.filter(d=>cSvc(d.service)),st=dos.filter(d=>!cSvc(d.service)),cg={};for(const d of cs)(cg[d.service]=cg[d.service]||[]).push(d);const c0=custOf(inv.customer_id);return (st.length?l3RecordsHTML(inv,st):"")+Object.entries(cg).map(([svc,l])=>svcRecordsHTML(inv,svc,l,c0)).join("")+(mxBills(inv.id).length?machineRecordsHTML(inv,st.length>0):"")}const g={};for(const d of dos)(g[d.service]=g[d.service]||[]).push(d);const c=custOf(inv.customer_id);
   return Object.entries(g).map(([svc,list])=>{const month=sumMonth(inv,list);
     if(svcDef(svc)&&svcKind(svcDef(svc))!=="time")return svcRecordsHTML(inv,svc,list,c);
     if(svc==="TMA"&&!inv.project){
