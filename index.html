@@ -333,7 +333,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-23b";
+const APP_VER="2026-10-23c";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -4546,8 +4546,10 @@ function scanFilter(cv,mode){if(mode==="orig")return cv;const W=cv.width,H=cv.he
     for(let x=0;x<W;x++){const gx=Math.min(sw-1,x*sw/W),x0=gx|0,x1=Math.min(sw-1,x0+1),fx=gx-x0,j=(y*W+x)*4;
       const b=(bg[y0*sw+x0]*(1-fx)+bg[y0*sw+x1]*fx)*(1-fy)+(bg[y1*sw+x0]*(1-fx)+bg[y1*sw+x1]*fx)*fy,k=255/b;let mn=255,g=0;
       for(let c=0;c<3;c++){let v=d[j+c]*k*gn[c];v=hard?(v-40)*1.18:(v-28)*1.12;v=v>255?255:v<0?0:v;d[j+c]=v;g+=v;if(v<mn)mn=v}
-      /* 纸：很亮的地方直接变白（去掉淡淡的色斑） */
-      if(mn>(hard?222:206)){d[j]=d[j+1]=d[j+2]=255}
+      /* 纸：很亮的地方直接变白；淡黄 / 淡绿这种色斑（亮度高）也慢慢变白，深色的笔迹、红字、蓝笔保留 */
+      const lu=0.299*d[j]+0.587*d[j+1]+0.114*d[j+2];
+      if(mn>(hard?222:206)||lu>(hard?205:212)){d[j]=d[j+1]=d[j+2]=255}
+      else if(lu>(hard?170:180)){const t=(lu-(hard?170:180))/(hard?35:32);for(let c=0;c<3;c++)d[j+c]=d[j+c]+(255-d[j+c])*t}
       else if(hard){const gg=g/3,sat=Math.max(d[j],d[j+1],d[j+2])-mn;if(sat<40&&gg>200){d[j]=d[j+1]=d[j+2]=255}}
       if(mode==="bw"){const gg=g/3,t=gg>185?255:gg<110?0:(gg-110)*3.4;d[j]=d[j+1]=d[j+2]=t}}}
   cx.putImageData(id,0,0);return cv}
