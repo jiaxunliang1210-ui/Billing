@@ -101,6 +101,7 @@ main .tw thead th{z-index:2}
 label.file.dropping{outline:3px dashed var(--amber,#f5a623);outline-offset:3px;position:relative}
 label.file.dropping::after{content:"放开就上传";position:absolute;left:50%;top:-30px;transform:translateX(-50%);background:var(--amber,#f5a623);color:#111;font-size:12px;padding:2px 8px;border-radius:6px;white-space:nowrap}
 .pvbox.dropping{outline:3px dashed var(--amber,#f5a623);outline-offset:-6px}
+.pdot.click{cursor:pointer}.pdot.click:hover{border-color:var(--acc,#f0b400)}
 .pdot{display:inline-block;min-width:22px;padding:1px 5px;margin-right:3px;border-radius:6px;font-size:12px;text-align:center;border:1px solid var(--line);color:var(--mute)}
 .pdot.on{background:color-mix(in srgb,var(--ok,#2ecc71) 22%,transparent);color:var(--ok,#2ecc71);border-color:transparent}
 .btn.ib{padding:1px 6px;margin-left:2px;font-size:12px;line-height:1.4}
@@ -332,7 +333,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-22e";
+const APP_VER="2026-10-23a";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -1233,6 +1234,8 @@ function invSelBar(){const ids=[...S.invSel].filter(id=>invById(id));if(!ids.len
     <button class="btn sm sec" onclick="multiPdf([...S.invSel])">⬇ PDF</button>
     <button class="btn sm sec" onclick="multiXlsx([...S.invSel])">⬇ Excel</button>
     <button class="btn sm sec" onclick="multiCust([...S.invSel])">📤 ${L("寄客户版本（每张一个）","Customer copies")}</button>
+    ${new Set(inv.map(i=>i.customer_id)).size===1?`<button class="btn sm" onclick="batchSend([...S.invSel],'Email')">📧 ${L("一次发送 Email","Send all by Email")}</button><button class="btn sm sec" onclick="batchSend([...S.invSel],'WhatsApp')">${L("一次发送 WhatsApp","Send all by WhatsApp")}</button>`:`<span class="mute" style="font-size:12px">${L("（勾同一个客户才可以一次发送）","(one customer only to send together)")}</span>`}
+    <button class="btn sm sec" onclick="sentForm([...S.invSel])">✓ ${L("标已发送","Mark sent")}</button>
     <button class="btn sm sec" onclick="S.invSel.clear();render()">✕ ${L("清除","Clear")}</button></div>`}
 const sortInvIds=ids=>ids.map(invById).filter(Boolean).sort((a,b)=>a.invoice_date.localeCompare(b.invoice_date)||String(a.invoice_no).localeCompare(String(b.invoice_no),undefined,{numeric:true}));
 async function invPagesHTML(inv){const dos=await fetchAll(()=>sb.from("delivery_orders").select("*").eq("invoice_id",inv.id).order("do_date").order("start_time"));
@@ -2029,8 +2032,43 @@ function invView(){
   ${rows.length>(S.invShow||200)?`<div style="text-align:center;margin:10px 0"><span class="mute">${L(`显示 ${S.invShow||200} / ${rows.length} 张（合计照全部算）`,`Showing ${S.invShow||200} of ${rows.length} (totals cover all)`)}</span> <button class="btn sec sm" onclick="S.invShow=(S.invShow||200)+200;render()">${L("再显示 200 张","Show 200 more")}</button> <button class="btn sec sm" onclick="S.invShow=1e9;render()">${L("全部显示","Show all")}</button></div>`:""}`
   :`<div class="panel empty">${L("还没有 invoice。按「新增 Invoice」，选客户和期间，系统会带出未开单的 DO。","No invoices yet. Press New invoice, pick a customer and period, and unbilled DOs will load.")}</div>`}`;
 }
-function progDots(i){const sg=signedOf(i),d=(on,t,tip)=>`<span class="pdot ${on?"on":""}" title="${esc(tip)}">${t}</span>`;
-  return d(i.checked,L("检","C"),i.checked?L(`已检查 ${i.checked_at?dmy(i.checked_at.slice(0,10)):""}`,"Checked"):L("未检查","Not checked"))+d(!!sg,L("签","S"),sg?L(`签名页 ${dmy(String(sg.created_at||"").slice(0,10))}`,"Signed"):L("未签","Unsigned"))+d(!!i.sent_at,L("发","Snt"),i.sent_at?L(`已发送 ${dmy(i.sent_at)} ${i.sent_via||""}`,`Sent ${dmy(i.sent_at)}`):L("未发送","Not sent"))}
+function progDots(i){const sg=signedOf(i),d=(on,t,tip,act)=>`<span class="pdot click ${on?"on":""}" title="${esc(tip)}" onclick="event.stopPropagation();${act}">${t}</span>`;
+  return d(i.checked,L("检","C"),(i.checked?L(`已检查 ${i.checked_at?dmy(i.checked_at.slice(0,10)):""}`,"Checked"):L("未检查","Not checked"))+L(" · 点一下切换"," · click to toggle"),`toggleChecked('${i.id}')`)
+    +`<label class="pdot click ${sg?"on":""}" title="${esc((sg?L(`签名页 ${dmy(String(sg.created_at||"").slice(0,10))}`,"Signed"):L("未签","Unsigned"))+L(" · 点一下上传签名页"," · click to upload signed page"))}" onclick="event.stopPropagation()">${L("签","S")}<input type="file" hidden accept="application/pdf,image/*" onchange="upSigned('${i.id}',this)"></label>`
+    +d(!!i.sent_at,L("发","Snt"),(i.sent_at?L(`已发送 ${dmy(i.sent_at)} ${i.sent_via||""}`,`Sent ${dmy(i.sent_at)}`):L("未发送","Not sent"))+L(" · 点一下填发送方式和日期"," · click to record"),`sentForm(['${i.id}'])`)}
+/* ---- 发送：自己填方式和日期 ---- */
+const SENT_VIA=["Email","WhatsApp","By hand","Post","Portal"];
+const viaLabel=v=>({"By hand":L("亲手交","By hand"),Post:L("邮寄","Post"),Portal:L("客户系统（Portal）","Portal")})[v]||v;
+let SF=null;
+function sentForm(ids){const list=ids.map(invById).filter(Boolean);if(!list.length)return;const f=list[0];
+  SF={ids:list.map(i=>i.id),via:f.sent_via&&f.sent_via!=="Imported"?f.sent_via:"Email",date:f.sent_at||today()};const known=SENT_VIA.includes(SF.via);
+  pvOv(`<div class="pvhead"><h3 style="margin:0">📨 ${L("发送记录","Sent record")} · ${list.length===1?esc(f.invoice_no):L(`${list.length} 张`,`${list.length} invoices`)}</h3><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
+  ${list.length>1?`<p class="mute" style="font-size:13px">${esc(list.map(i=>i.invoice_no).join(", "))}</p>`:""}
+  <div class="filters"><label class="f">${L("用什么发","Sent by")}<select id="sfVia" onchange="SF.via=this.value;document.querySelector('#sfOther').style.display=this.value==='_o'?'':'none'">${SENT_VIA.map(v=>`<option value="${v}" ${v===SF.via?"selected":""}>${esc(viaLabel(v))}</option>`).join("")}<option value="_o" ${known?"":"selected"}>${L("其他（自己填）","Other")}</option></select></label>
+    <label class="f" id="sfOther" style="${known?"display:none":""}">${L("其他","Other")}<input id="sfOtherTxt" value="${known?"":esc(SF.via)}"></label>
+    <label class="f">${L("日期","Date")}<input type="date" id="sfDate" value="${SF.date}"></label></div>
+  <div class="actions" style="margin-top:8px"><button class="btn" onclick="sentSave()">✓ ${L("保存","Save")}</button>${list.some(i=>i.sent_at)?`<button class="btn sec" onclick="sentSave(true)">${L("清掉（变回未发送）","Clear (not sent)")}</button>`:""}</div>`)}
+async function sentSave(clear){let via=$("#sfVia").value;if(via==="_o")via=$("#sfOtherTxt").value.trim()||"Other";const d=$("#sfDate").value||today();
+  const{error}=await sb.from("invoices").update(clear?{sent_at:null,sent_via:null}:{sent_at:d,sent_via:via}).in("id",SF.ids);if(error)return toast(error.message);
+  $("#photoOv")?.remove();await loadAll();render();toast(clear?L("已清掉发送记录","Cleared"):L(`已记录：${viaLabel(via)} · ${dmy(d)}`,`Recorded: ${via} ${dmy(d)}`))}
+/* ---- 同一个客户几张一次发送：合并一个 PDF + 一封 Email / WhatsApp ---- */
+async function batchSend(ids,via){const list=sortInvIds(ids);if(!list.length)return;const cs=[...new Set(list.map(i=>i.customer_id))];
+  if(cs.length>1)return alert(L("一次发送只能勾同一个客户的单。","Pick invoices of one customer only."));
+  for(const i of list)if(!await preflight(i.id,L("寄出","sending")))return;
+  const c=custOf(cs[0]),s=settingsOf(S.company);
+  try{toast(L(`正在合成 ${list.length} 张的 PDF…`,`Building PDF for ${list.length}…`));let pdf=null;const warn=[];
+    for(const inv of list){const r=await buildCustomerPdf(inv,false,{into:pdf,noBlob:true});pdf=r.pdf;r.warn.forEach(w=>warn.push(`${inv.invoice_no}: ${w}`))}
+    const blob=pdf.output("blob"),tail=list.map(i=>(String(i.invoice_no).match(/(\d{4}[\/\-]\d{1,3})\s*$/)||[,i.invoice_no])[1].replace(/\//g,"-")).join("_");
+    const name=`${S.company}_INV_${(c.short_name||c.name||"").replace(/[^A-Za-z0-9]+/g,"_").replace(/^_|_$/g,"").slice(0,24)}_${tail}.pdf`;
+    const file=new File([blob],name,{type:"application/pdf"});
+    if(via==="WhatsApp"&&navigator.canShare?.({files:[file]})){try{await navigator.share({files:[file],title:name})}catch(e){if(e.name!=="AbortError")throw e;return}}
+    else saveBlob(blob,name);
+    if(warn.length)toast("⚠️ "+warn.join("；"));
+    const nos=list.map(i=>i.invoice_no),text=`Dear Team,\n\nPlease find the attached invoices for your reference:\n${list.map(i=>`- ${i.invoice_no} (${dmy(i.invoice_date)}): $${money(i.total)}`).join("\n")}\nTotal: $${money(sum(list,i=>Number(i.total)||0))}\n\n\nThank you.\n\nBest regards,\n${signName(s)}`;
+    if(!(via==="WhatsApp"&&navigator.canShare?.({files:[file]})))openOut(via,c,`Tax Invoice For ${nos.join(", ")}`,text);
+    setTimeout(async()=>{if(confirm(L(`已经用 ${via} 发送了吗？按确定把这 ${list.length} 张记成今天发送。\n（PDF ${name} 已下载，请自己附上）`,`Sent by ${via}? OK records today for all ${list.length}.`))){
+      const{error}=await sb.from("invoices").update({sent_at:today(),sent_via:via}).in("id",list.map(i=>i.id));if(error)return toast(error.message);S.invSel.clear();await loadAll();render()}},1200)
+  }catch(e){toast(e.message||String(e))}}
 function prevMonthRange(){const d=new Date();return[ymd(new Date(d.getFullYear(),d.getMonth()-1,1)),ymd(new Date(d.getFullYear(),d.getMonth(),0))]}
 function recalcDue(f){if(f._dueTouched||!f.invoice_date)return;const c=custOf(f.customer_id);f.due_date=addDays(f.invoice_date,Number(c.payment_terms_days??30))}
 function openInvForm(p){
@@ -2083,8 +2121,9 @@ function invFormView(f){
       <td style="min-width:280px"><textarea class="inp" data-li="${i}" data-lk="description">${esc(String(l.description||"").replace(NOUL,""))}</textarea>
         <label class="chk" style="font-size:12px"><input type="checkbox" ${noUl(l.description)?"":"checked"} onchange="invUl(${i},this.checked)">${L("第一行加底线","Underline first line")}</label></td>
       <td style="width:90px"><input class="inp" type="number" step="0.01" data-li="${i}" data-lk="qty" value="${l.qty??""}"></td>
-      <td style="width:80px"><input class="inp" data-li="${i}" data-lk="unit" value="${esc(l.unit||"")}"></td>
-      <td style="width:110px"><input class="inp" type="number" step="0.01" data-li="${i}" data-lk="unit_price" value="${l.unit_price??""}"></td>
+      <td style="width:80px"><input class="inp" list="uomList" data-li="${i}" data-lk="unit" value="${esc(l.unit||"")}">${i===0?`<datalist id="uomList">${["LS","hrs","hr","day","days","mth","trip","load","nos","lot"].map(u=>`<option value="${u}">`).join("")}</datalist>`:""}</td>
+      <td style="width:120px"><input class="inp" type="number" step="0.01" data-li="${i}" data-lk="unit_price" value="${l.unit_price??""}" ${lineLS(l)?'style="opacity:.45"':""}>
+        <label class="chk" style="font-size:11px;white-space:nowrap" title="${L("打勾：单价那栏印「LS」，不印数字","Tick: print LS in the unit price column")}"><input type="checkbox" ${lineLS(l)?"checked":""} onchange="S.modal.f.lines[${i}]._ls=this.checked;render()">${L("单价写 LS","Price = LS")}</label></td>
       <td style="width:130px"><input class="inp" type="number" step="0.01" data-li="${i}" data-lk="amount" value="${l.amount??""}"></td>
       <td><button class="btn del sm" onclick="invDelLine(${i})">✕</button></td></tr>`).join("")||`<tr><td colspan="7" class="empty">${L("按「用已选 DO 生成明细」，或手动加一行。","Build from selected DOs, or add a line manually.")}</td></tr>`}</tbody></table></div>
   <button class="btn sec sm" onclick="invAddLine()">+ ${L("加一行","Add line")}</button>
@@ -2178,7 +2217,7 @@ Save anyway?`)))return}
     let{error}=await sb.from("invoices").update(row).eq("id",id);if(noST(error)){const t=row.summary_title;delete row.summary_title;({error}=await sb.from("invoices").update(row).eq("id",id));if(!error&&t)alert(L("已保存，但 Summary 标题没存到：先在 Supabase 跑「补充-Summary标题-Supabase.sql」。","Saved, but run the summary-title SQL first."))}if(error)return w.textContent=error.message;
   }else{let{data,error}=await sb.from("invoices").insert(row).select().single();if(noST(error)){const t=row.summary_title;delete row.summary_title;({data,error}=await sb.from("invoices").insert(row).select().single());if(!error&&t)alert(L("已保存，但 Summary 标题没存到：先在 Supabase 跑「补充-Summary标题-Supabase.sql」。","Saved, but run the summary-title SQL first."))}if(error)return w.textContent=error.message;id=data.id}
   {const{data:oldL}=await sb.from("invoice_lines").select("id").eq("invoice_id",id);
-    const e2=await sb.from("invoice_lines").insert(f.lines.map((l,i)=>({invoice_id:id,line_no:i+1,description:l.description||"",qty:l.qty,unit:l.unit||null,unit_price:l.unit==="hrs"||(isL3()&&l.unit_price==null)?null:(l.unit_price??l.amount),amount:Number(l.amount)||0}))).select("id");
+    const e2=await sb.from("invoice_lines").insert(f.lines.map((l,i)=>({invoice_id:id,line_no:i+1,description:l.description||"",qty:l.qty,unit:l.unit||null,unit_price:(l._ls===true)||l.unit==="hrs"||(l._ls===undefined&&isL3()&&l.unit_price==null)?null:(l.unit_price??l.amount),amount:Number(l.amount)||0}))).select("id");
     if(e2.error){alert(L("明细保存失败（旧明细保留不动）：","Lines not saved (old lines kept): ")+e2.error.message);return w.textContent=e2.error.message}
     const oids=(oldL||[]).map(x=>x.id);if(oids.length)await sb.from("invoice_lines").delete().in("id",oids)}
   if(isL3()&&f.kind!=="machine"&&f._mxchosen){await sb.from("machine_bills").delete().eq("invoice_id",id);
@@ -2195,6 +2234,8 @@ Save anyway?`)))return}
   toast(L("Invoice 已保存","Invoice saved"));S.modal=null;done();await loadAll();openInv(id);
 }
 const lineUnit=l=>l.unit||(l.unit_price==null?"hrs":"LS");
+/* 单价那栏印「LS」：存成 unit_price = null（hrs 那种照旧） */
+const lineLS=l=>l._ls!==undefined?!!l._ls:(l.unit_price==null&&lineUnit(l)!=="hrs");
 
 function openInv(id){S.modal={kind:"inv",id,edits:null,dos:null};render();
   sb.from("delivery_orders").select("id,do_no,do_date").eq("invoice_id",id).then(({data})=>{if(S.modal?.id===id){S.modal.dos=data||[];render()}});
@@ -2221,7 +2262,7 @@ async function invRecalcSave(r,reason){const inv=r.inv,id=inv.id;if(!r.f.lines.l
       .filter(([,o,n])=>typeof n==="number"?Math.abs((Number(o)||0)-n)>0.005:String(o??"")!==String(n??"")).map(([field,o,n])=>({invoice_id:id,field,old_value:String(o??""),new_value:String(n??""),reason}));
     if(!edits.length)edits.push({invoice_id:id,field:"lines",old_value:"",new_value:"",reason});const e0=await sb.from("invoice_edits").insert(edits);if(e0.error)throw e0.error}
   const{data:oldL}=await sb.from("invoice_lines").select("id").eq("invoice_id",id);
-  let e=await sb.from("invoice_lines").insert(r.f.lines.map((l,i)=>({invoice_id:id,line_no:i+1,description:l.description||"",qty:l.qty,unit:l.unit||null,unit_price:l.unit==="hrs"||(isL3()&&l.unit_price==null)?null:(l.unit_price??l.amount),amount:Number(l.amount)||0}))).select("id");if(e.error)throw e.error;
+  let e=await sb.from("invoice_lines").insert(r.f.lines.map((l,i)=>({invoice_id:id,line_no:i+1,description:l.description||"",qty:l.qty,unit:l.unit||null,unit_price:(l._ls===true)||l.unit==="hrs"||(l._ls===undefined&&isL3()&&l.unit_price==null)?null:(l.unit_price??l.amount),amount:Number(l.amount)||0}))).select("id");if(e.error)throw e.error;
   if(!(e.data||[]).length)throw new Error(L("新明细没存进去，旧明细保留不动","New lines not saved — old lines kept"));
   const oids=(oldL||[]).map(x=>x.id);if(oids.length){const d=await sb.from("invoice_lines").delete().in("id",oids);if(d.error)throw d.error}
   e=await sb.from("invoices").update(row).eq("id",id);if(e.error)throw e.error}
@@ -2298,7 +2339,7 @@ function invDetailView(id){
     ${quoteBtn(i.customer_id,id)}<button class="btn sec" onclick="invRefresh('${id}')" title="${L("价钱、Service 设定或客户 Terms 改过，用最新的重算这张","Recalculate with the latest prices / services / terms")}">🔄 ${L("按最新资料重算","Recalculate")}</button><button class="btn sec" onclick="openInvForm(invById('${id}'))">${L("修改","Edit")}</button><button class="btn del" onclick="delInv('${id}')">${L("删除","Delete")}</button></div>
   ${signBox(i)}
   <div class="kv" style="margin-top:14px"><div><span>${L("检查","Checked")}</span>${i.checked?`✓ ${i.checked_at?dmy(i.checked_at.slice(0,10)):""}`:L("未检查","Not yet")}</div>
-    <div><span>${L("发送","Sent")}</span>${i.sent_at?`${dmy(i.sent_at)} · ${esc(i.sent_via||"")}`:L("未发送","Not sent")}</div>
+    <div><span>${L("发送","Sent")}</span>${i.sent_at?`${dmy(i.sent_at)} · ${esc(viaLabel(i.sent_via||""))}`:L("未发送","Not sent")} <a href="#" onclick="sentForm(['${id}']);return false">✎ ${L("自己填","Edit")}</a></div>
     <div><label class="chk"><input type="checkbox" ${i.interest_enabled?"checked":""} onchange="setInterest('${id}',this.checked)">${L("逾期收 interest","Charge overdue interest")}</label></div></div>
   ${i.remark?`<h3>Remark</h3><p style="white-space:pre-line">${esc(i.remark)}</p>`:""}
   <h3>${L("收款记录","Payments")}</h3>${allocs.length?`<ul>${allocs.map(a=>`<li>${dmy(a.p.payment_date)} · $${money(a.amount)} · ${esc(a.p.method||"")} ${esc(a.p.reference||"")}</li>`).join("")}</ul>`:`<p class="mute">${L("还没有收款","No payments yet")}</p>`}
@@ -2508,7 +2549,8 @@ function soaView(){
   {const[,z]=dfRange("soa");if(z&&S._soaZ!==z){S.soaAsOf=z>today()?today():z;S._soaZ=z}}
   const cid=S.soaCust,asOf=S.soaAsOf;
   const head=`<div class="filters"><label class="f">${L("客户","Customer")}<select onchange="S.soaCust=this.value;render()">${custOpts(cid)}</select></label>
-    <label class="f">${L("截至日期","As at")}<input type="date" value="${asOf}" onchange="S.soaAsOf=this.value;render()"></label></div>${dfBar("soa",yearsOf(S.d.invoices,"invoice_date"))}<p class="mute" style="font-size:12px;margin:-4px 0 8px">${L("选月份 / 年份 = SOA 截至那个月 / 年的最后一天。没付清的全部会列；那段时间已付清的 invoice 和付款也会列出来。","Pick a period: the statement date becomes its last day. All unpaid invoices are listed, plus invoices and payments settled in that period.")}</p>`;
+    <label class="f">${L("截至日期","As at")}<input type="date" value="${asOf}" onchange="S.soaAsOf=this.value;render()"></label>
+    <div class="f" style="align-self:flex-end"><button class="btn sec" onclick="soaBatch()">📑 ${L("全部客户 SOA / 逾期提醒","All statements / reminders")}</button></div></div>${dfBar("soa",yearsOf(S.d.invoices,"invoice_date"))}<p class="mute" style="font-size:12px;margin:-4px 0 8px">${L("选月份 / 年份 = SOA 截至那个月 / 年的最后一天。没付清的全部会列；那段时间已付清的 invoice 和付款也会列出来。","Pick a period: the statement date becomes its last day. All unpaid invoices are listed, plus invoices and payments settled in that period.")}</p>`;
   if(!cid)return head+`<div class="panel empty">${L("选一个客户来看 SOA。","Choose a customer to see the statement.")}</div>`;
   const D=soaData(cid,asOf),DA=soaData(cid,asOf,1),off=soaOff(cid),sends=S.d.soa_sends.filter(s=>s.customer_id===cid),saved=S.d.attachments.filter(a=>a.entity_type==="soa"&&a.entity_id===cid).sort((a,b)=>String(b.created_at||"").localeCompare(String(a.created_at||"")));
   return head+`<div class="cards"><div class="card"><h3>${L("未付总额","Outstanding")}</h3><b style="font-size:22px">$${money(D.total)}</b>
@@ -2718,7 +2760,7 @@ function genView(keys,sk){
   const chips=si?`<div class="chips">${Object.entries(SIQ).map(([k,q])=>`<button class="${qk===k?"on":""}" onclick="S.siQuick='${k}';render()">${L(...q.l)} <b>${k?hit0.filter(q.f).length:hit0.length}</b></button>`).join("")}</div>`:"";
   const colBtn=`<details class="colpick"><summary class="btn sec sm">☰ ${L("栏位","Columns")}${hid.size?` (${vc.length}/${colsOf(cfg).length})`:""}</summary><div class="colbox">${colsOf(cfg).map(c=>`<label class="chk"><input type="checkbox" ${hid.has(c)?"":"checked"} onchange="colToggle('${ent}','${c}',this.checked)">${head(c)}</label>`).join("")}</div></details>`;
   return tabs+(cfg.note?`<p class="mute" style="font-size:13px">${L(...cfg.note)}</p>`:"")+
-    (e?genForm(ent,cfg,e,sk):`<div class="actions" style="margin:0 0 12px"><button class="btn" onclick="S.gEdit={};S.dirty=true;render()">${L("新增","Add")}</button><button class="btn sec" onclick="exportEnt('${ent}')">⬇ Excel</button></div>`)+
+    (e?genForm(ent,cfg,e,sk):`<div class="actions" style="margin:0 0 12px"><button class="btn" onclick="S.gEdit={};S.dirty=true;render()">${L("新增","Add")}</button><button class="btn sec" onclick="exportEnt('${ent}')">⬇ Excel</button>${ent==="customers"||ent==="suppliers"?`<button class="btn sec" onclick="dupOpen('${ent}')">🔍 ${L("找重复","Find duplicates")}${(()=>{const n=dupGroups(ent).length;return n?` <span class="badge">${n}</span>`:""})()}</button>`:""}</div>`)+
     `<div class="filters" style="margin:0 0 6px">${sqBox(sk2)}${colBtn}${ent==="supplier_invoices"||ent==="diesel_surcharges"?`<label class="chk" style="align-self:end"><input type="checkbox" ${S.siAll?"checked":""} onchange="S.siAll=this.checked;S.siSel.clear();render()">${L("显示两间公司","Show both companies")}</label>`:""}</div>`+(dk?`<div class="filters" style="margin:0 0 4px;align-items:center"><span class="mute" style="font-size:13px">${L("日期按：","Date by:")}</span><div class="seg">${[["recv",L("收到日期（入账月份）","Received (month)")],["inv",L("Invoice 日期","Invoice date")]].map(([k,t])=>`<button class="${(S.siDateBy||"recv")===k?"on":""}" onclick="S.siDateBy='${k}';render()">${t}</button>`).join("")}</div></div>`+dfBar(dk,yearsOf(S.d[ent].map(r=>({d:dcol==="received_date"?siRecv(r):r[dcol]})),"d")):"")+chips+sqNote(sk2,rows.length,base.length)+
     (si?siSelBar(rows):"")+
     (rows.length?`<div class="tw"><table><thead><tr>${si?`<th onclick="event.stopPropagation()"><input type="checkbox" ${rows.every(r=>S.siSel.has(r.id))?"checked":""} onchange="siSelAll(${esc(JSON.stringify(rows.map(r=>r.id)))},this.checked)"></th>`:""}${vc.map(c=>SPECIAL[c]?`<th>${head(c)}</th>`:thS("g_"+ent,c,head(c),isNum(c)?"num":"")).join("")}</tr></thead><tbody>
@@ -2791,6 +2833,7 @@ async function saveGen(ent){const cfg=ENT[ent],fd=new FormData($("#gForm")),row=
   if(miss.length)return $("#gWarn").textContent=L("请填写：","Please fill in: ")+miss.join(", ");
   if(ent==="rates"){const cd=cSvc(row.service);if(cd&&"unit" in row)row.unit=cd.unit}
   const err=cfg.before?.(row,S.gEdit);if(typeof err==="string")return $("#gWarn").textContent=err;
+  if((ent==="customers"||ent==="suppliers")&&row.name){const sim=dupSimilar(ent,row.name,S.gEdit?.id);if(sim&&!confirm(L(`已经有很像的${ent==="customers"?"客户":"供应商"}：「${sim.name}」。\n\n确定还要${S.gEdit?.id?"改成这个名字":"新增"}吗？（按取消，回去用原本那个）`,`A similar name already exists: "${sim.name}". Continue?`)))return}
   const wasNew=!S.gEdit.id,oldTerms=S.gEdit.payment_terms_days;
   const{data,error}=S.gEdit.id?await sb.from(ent).update(row).eq("id",S.gEdit.id).select().single():await sb.from(ent).insert(row).select().single();
   if(error)return $("#gWarn").textContent=error.message;
@@ -2812,7 +2855,20 @@ function attBox(type,id,kinds){const list=S.d.attachments.filter(a=>a.entity_typ
 function siTerms(fm){if(fm.dataset.pdfTerms!==undefined&&fm.dataset.pdfTerms!=="")return Number(fm.dataset.pdfTerms);const s=S.d.suppliers.find(x=>x.id===fm.supplier_id?.value);return Number(s?.payment_terms_days??30)}
 function termsIn(lines){for(const l of lines){if(!/term/i.test(l))continue;const t=l.slice(l.search(/term/i));if(/c\s*\.?\s*[o0]\s*\.?\s*d\b|cash\s*on\s*delivery|\bcash\b/i.test(t))return 0;const m=t.match(/(\d{1,3})\s*days?/i);if(m)return Number(m[1])}return null}
 function siDueCalc(fm){const d=fm.invoice_date?.value;return d?addDays(d,siTerms(fm)):""}
-function siDueInit(){const fm=$("#gForm");if(!fm||!fm.due_date)return;const exp=siDueCalc(fm),cur=fm.due_date.value;fm.dataset.dueTouched=cur&&exp&&cur!==exp?"1":"";
+/* ---- 没有 GST：打勾 = GST 0，Total = Amt before GST；供应商以前的单都是 0 GST 就自动打勾 ---- */
+function supNoGst(sid){if(!sid)return false;const xs=S.d.supplier_invoices.filter(x=>x.supplier_id===sid&&x.gst_amount!=null&&x.amount_before_gst!=null).sort((a,b)=>String(b.invoice_date).localeCompare(String(a.invoice_date))).slice(0,5);
+  return xs.length>0&&xs.every(x=>Math.abs(Number(x.gst_amount))<0.005)}
+function siGstInit(){const fm=$("#gForm");if(!fm||!fm.gst_amount||fm.querySelector("#siNoGst"))return;const w=fm.gst_amount.closest("label");if(!w)return;
+  const b=document.createElement("label");b.className="chk";b.style.cssText="font-size:12px;margin-top:3px;display:flex;gap:4px";b.innerHTML=`<input type="checkbox" id="siNoGst">${L("没有 GST（这张单不收 GST）","No GST on this invoice")}`;w.after(b);
+  const cb=b.querySelector("input"),isNew=!S.gEdit?.id;
+  const apply=()=>{if(cb.checked){fm.gst_amount.value="0";fm.gst_amount.readOnly=true;fm.gst_amount.style.opacity=".5";const a=fm.amount_before_gst.value;if(a!=="")fm.total.value=r2(Number(a))}else{fm.gst_amount.readOnly=false;fm.gst_amount.style.opacity=""}};
+  cb.checked=(!isNew&&fm.gst_amount.value!==""&&Number(fm.gst_amount.value)===0)||(isNew&&supNoGst(fm.supplier_id?.value));apply();
+  cb.onchange=()=>{if(!cb.checked){fm.gst_amount.value="";fm.total.value=""}apply();S.dirty=true};
+  fm.amount_before_gst.addEventListener("input",()=>{if(cb.checked)apply()});
+  fm.gst_amount.addEventListener("input",()=>{if(fm.gst_amount.value!==""&&Number(fm.gst_amount.value)===0&&!cb.checked){cb.checked=true;apply()}});
+  fm.supplier_id?.addEventListener("change",()=>{if(!S.gEdit?.id){const v=supNoGst(fm.supplier_id.value);if(v!==cb.checked){cb.checked=v;if(!v){fm.gst_amount.value=""}apply()}}});
+  fm.addEventListener("siPdfFilled",()=>{const v=fm.gst_amount.value;if(v!==""&&Number(v)===0){cb.checked=true;apply()}else if(v!==""&&cb.checked){cb.checked=false;apply()}})}
+function siDueInit(){const fm=$("#gForm");if(!fm||!fm.due_date)return;siGstInit();const exp=siDueCalc(fm),cur=fm.due_date.value;fm.dataset.dueTouched=cur&&exp&&cur!==exp?"1":"";
   if(!cur&&exp)fm.due_date.value=exp;siDueHint()}
 function siDueHint(){const fm=$("#gForm");if(!fm)return;const w=fm.querySelector('[data-gk="due_date"] label');if(!w)return;let h=w.querySelector(".dueh");if(!h){h=document.createElement("small");h.className="dueh";h.style.cssText="display:block;font-size:11px;margin-top:2px";w.appendChild(h)}
   const exp=siDueCalc(fm),t=siTerms(fm);if(!exp){h.textContent="";return}
@@ -2846,15 +2902,18 @@ async function siPdfRead(file,keep){const fm=$("#gForm"),msg=$("#siPdfMsg");if(!
   siApplyLines(lines,{ocr,keep})}
 function siApplyLines(lines,o){o=o||{};const fm=$("#gForm"),msg=$("#siPdfMsg");if(!fm)return;
   const r=parseInvText(lines),m=parseInvMore(lines),tm=termsIn(lines);fm.dataset.pdfTerms=tm==null?"":String(tm);let total=r.total,sub=m.sub,gst=m.gst;
+  if(total!=null&&sub!=null&&Math.abs(total-sub)<0.01)gst=0;
   if(total!=null&&sub!=null&&total>sub)gst=r2(total-sub);if(total!=null&&gst!=null&&sub==null)sub=r2(total-gst);
-  if(total!=null&&sub==null&&gst==null){sub=r2(total/1.09);gst=r2(total-sub)}
+  let gstGuess=false;if(total!=null&&sub==null&&gst==null){sub=r2(total/1.09);gst=r2(total-sub);gstGuess=true}
   if(sub!=null&&gst!=null&&total==null)total=r2(sub+gst);
   let supId="";if(r.sup){const n=normCo(r.sup);const x=S.d.suppliers.find(z=>normCo(z.name)===n)||S.d.suppliers.find(z=>{const k=normCo(z.name);return k.length>3&&(n.includes(k)||k.includes(n))});if(x)supId=x.id}
+  if(gstGuess&&supNoGst(supId||fm.supplier_id?.value)){sub=total;gst=0}
   const got={supplier_id:supId,invoice_no:r.no||"",invoice_date:r.date||"",description:m.desc||"",amount_before_gst:sub??"",gst_amount:gst??"",total:total??""};
   const filled=[],diff=[];
   for(const[k,v]of Object.entries(got)){if(v===""||v==null)continue;const el=fm.elements[k];if(!el)continue;const cur=String(el.value??"").trim(),nv=String(v);
     const same=cur===nv||(["amount_before_gst","gst_amount","total"].includes(k)&&cur!==""&&Math.abs(Number(cur)-Number(nv))<0.005)||(k==="invoice_no"&&sqComp(cur)===sqComp(nv));
     if(same)continue;if(!cur){el.value=nv;el.classList.add("pdfFill");filled.push(k);if(el.tagName==="TEXTAREA")el.rows=Math.min(8,Math.max(2,nv.split("\n").length+1))}else diff.push([k,cur,nv])}
+  fm.dispatchEvent(new Event("siPdfFilled"));
   SIPDF=Object.fromEntries(diff.map(([k,,nv])=>[k,nv]));
   const lab=k=>({supplier_id:L("供应商","Supplier"),invoice_no:"Invoice No",invoice_date:L("Invoice 日期","Date"),description:"Description",amount_before_gst:"Amt before GST",gst_amount:"GST",total:"Total"}[k]);
   const show=(k,v)=>k==="supplier_id"?esc(S.d.suppliers.find(z=>z.id===v)?.name||v):k==="invoice_date"?dmy(v):esc(String(v));
@@ -2886,7 +2945,7 @@ async function siNewSup(){const n=SIPDF?._newSup;if(!n)return;const name=prompt(
   const{data,error}=await sb.from("suppliers").insert({name,payment_terms_days:SIPDF._terms??30}).select().single();if(error)return toast(error.message);
   S.d.suppliers.push(data);const fm=$("#gForm");if(!fm)return;const sel=fm.supplier_id;const o=document.createElement("option");o.value=data.id;o.textContent=data.name;sel.appendChild(o);sel.value=data.id;sel.classList.add("pdfFill");
   if(S.gEdit)S.gEdit.supplier_id=data.id;SIPDF._newSup="";const dv=$("#siPdfDiff");if(dv)dv.querySelector(".note")?.remove();siDue({target:{name:"supplier_id"}});siDupCheck();toast(L("已新增供应商","Supplier added"))}
-function siPdfUse(k){const fm=$("#gForm");if(!fm||!SIPDF||SIPDF[k]==null)return;fm.elements[k].value=SIPDF[k];fm.elements[k].classList.add("pdfFill");S.dirty=true;if(k==="invoice_date"||k==="supplier_id")siDue({target:{name:k}});siDupCheck()}
+function siPdfUse(k){const fm=$("#gForm");if(!fm||!SIPDF||SIPDF[k]==null)return;fm.elements[k].value=SIPDF[k];fm.dispatchEvent(new Event("siPdfFilled"));fm.elements[k].classList.add("pdfFill");S.dirty=true;if(k==="invoice_date"||k==="supplier_id")siDue({target:{name:k}});siDupCheck()}
 async function attUploadFile(type,id,file,kind){const safe=file.name.replace(/[^\w.\-]+/g,"_"),path=`${S.user.id}/${type}/${id}/${Date.now()}_${safe}`;
   const up=await sb.storage.from("attachments").upload(path,file);if(up.error)throw up.error;
   const{data,error}=await sb.from("attachments").insert({entity_type:type,entity_id:id,kind,file_path:path,file_name:file.name}).select().single();if(error)throw error;S.d.attachments.push(data);return data}
@@ -2964,8 +3023,9 @@ async function siPreview(ids){const list=siSorted(ids),items=[];for(const si of 
 
 /* ---- 导入的旧单：用上传的原本 PDF ---- */
 const invOrig=i=>i&&i.sent_via==="Imported"?signedOf(i):null;
-function invPv(id){const i=invById(id),o=invOrig(i);if(o)return attPreview(id,o.id);previewInv([id])}
-async function invDl(id){const i=invById(id),o=invOrig(i);if(!o)return printInv(id);
+/* 👁 / ⬇：有签名页就用寄客户版本（最新），没有才用系统版本 */
+function invPv(id,sys){const i=invById(id),o=invOrig(i);if(o)return attPreview(id,o.id);if(!sys&&signedOf(i))return custPreview(id);previewInv([id])}
+async function invDl(id,sys){const i=invById(id),o=invOrig(i);if(!o){if(!sys&&signedOf(i))return custCopy(id);return printInv(id)}
   try{const{data,error}=await sb.storage.from("attachments").download(o.file_path);if(error)throw error;const ext=(String(o.file_name||o.file_path).match(/\.[a-z0-9]{2,5}$/i)||[".pdf"])[0].toLowerCase();
     saveBlob(data,fileBase(i)+ext);toast(fileBase(i)+ext)}catch(e){toast(e.message||String(e))}}
 /* ---- ⬆ 上传 Sales Invoice（PDF / zip）→ 配对 invoice，存成签名页 ---- */
@@ -4320,7 +4380,7 @@ async function custPreview(id){const inv=invById(id);
   try{const{blob,warn}=await buildCustomerPdf(inv);if(CPV)URL.revokeObjectURL(CPV);CPV=URL.createObjectURL(blob);if(!$("#photoOv"))return;
     pvOv(`<div class="pvhead"><h3 style="margin:0">👁 ${L("寄客户版本","Customer copy")} · ${esc(inv.invoice_no)}</h3><span class="mute" style="font-size:13px">${kb(blob.size)}</span>
       ${warn.map(w=>`<span class="tag warn">${esc(w)}</span>`).join(" ")}<span style="flex:1"></span>
-      <a class="btn sec sm" href="${CPV}" target="_blank" rel="noopener">↗ ${L("新视窗打开","Open in new tab")}</a>
+      <a class="btn sec sm" href="${CPV}" target="_blank" rel="noopener">↗ ${L("新视窗打开","Open in new tab")}</a><button class="btn sec sm" onclick="document.querySelector('#photoOv')?.remove();invPv('${id}',1)">${L("看系统版本（没签名）","System version")}</button>
       <button class="btn sm" onclick="document.querySelector('#photoOv')?.remove();custCopy('${id}')">⬇ ${L("没问题，下载","Looks good — download")}</button><button class="btn sec sm" data-a="x">✕</button></div>
       <iframe src="${CPV}" style="width:100%;height:78vh;border:0;background:#fff;border-radius:6px"></iframe>`)}
   catch(e){toast(e.message||String(e));$("#photoOv")?.remove()}}
@@ -4334,9 +4394,9 @@ async function attDataURL(a){const{data,error}=await sb.storage.from("attachment
 async function addImagePage(pdf,first,src,margin){const[w,h]=await imgSize(src),land=w>h*1.15,W=land?297:210,H=land?210:297;
   if(!first)pdf.addPage("a4",land?"landscape":"portrait");const k=Math.min((W-2*margin)/w,(H-2*margin)/h),dw=w*k,dh=h*k;
   pdf.addImage(src,"JPEG",(W-dw)/2,(H-dh)/2,dw,dh,undefined,"FAST")}
-async function buildCustomerPdf(inv,doOnly){
+async function buildCustomerPdf(inv,doOnly,opt){opt=opt||{};
   const dos=await fetchAll(()=>sb.from("delivery_orders").select("*").eq("invoice_id",inv.id).order("do_date").order("start_time"));
-  await loadPdfLibs();const{jsPDF}=window.jspdf,pdf=new jsPDF({orientation:"portrait",unit:"mm",format:"a4",compress:true}),box=$("#print"),warn=[];
+  await loadPdfLibs();const{jsPDF}=window.jspdf,pdf=opt.into?(opt.into.addPage("a4","portrait"),opt.into):new jsPDF({orientation:"portrait",unit:"mm",format:"a4",compress:true}),box=$("#print"),warn=[];
   const sg=doOnly?null:signedOf(inv);
   if(doOnly){}else if(sg)await addImagePage(pdf,true,await attDataURL(sg),0);
   else{warn.push(L("还没上传签名页，第一页用没签名的 invoice","No signed page — unsigned invoice used"));box.innerHTML=invoiceHTML(inv,!!breakdownHTML(inv,dos).trim())}
@@ -4354,7 +4414,7 @@ async function buildCustomerPdf(inv,doOnly){
     const k=Math.min(cw/w,ch/h),dw=w*k,dh=h*k;pdf.addImage(src,"JPEG",cx+(cw-dw)/2,cy+(ch-dh)/2,dw,dh,undefined,"FAST");pdf.setDrawColor(190);pdf.setLineWidth(0.2);pdf.rect(cx+(cw-dw)/2,cy+(ch-dh)/2,dw,dh)}
   if(doOnly){if(!pics.length)throw new Error(L("这张 invoice 的 DO 还没有照片","No DO photos for this invoice"));pdf.deletePage(1)}
   if(missing)warn.push(L(`${missing} 张 DO 没有照片`,`${missing} DO(s) without photo`));
-  return{blob:pdf.output("blob"),warn}}
+  return{blob:opt.noBlob?null:pdf.output("blob"),warn,pdf}}
 async function signedOnlyPdf(id){const inv=invById(id),sg=signedOf(inv);if(!sg)return toast(L("这张还没上传签名页，先按「上传签名页」","No signed page uploaded yet"));
   const name=fileBase(inv)+"-1.pdf";
   try{toast(L("正在准备签名页 PDF…","Preparing signed page…"));await loadPdfLibs();const{jsPDF}=window.jspdf,pdf=new jsPDF({orientation:"portrait",unit:"mm",format:"a4",compress:true});
@@ -4472,15 +4532,23 @@ function warpQuad(srcCv,quad,W,H){const sx=srcCv.getContext("2d").getImageData(0
     for(let c=0;c<3;c++)o[j+c]=(sd[i00+c]*(1-fx)+sd[i10+c]*fx)*(1-fy)+(sd[i01+c]*(1-fx)+sd[i11+c]*fx)*fy;o[j+3]=255}
   ox.putImageData(od,0,0);return out}
 function scanFilter(cv,mode){if(mode==="orig")return cv;const W=cv.width,H=cv.height,cx=cv.getContext("2d"),id=cx.getImageData(0,0,W,H),d=id.data;
-  /* 背景：缩小再放大（模糊）当作纸的颜色和阴影，用它来除，纸变白、阴影不见 */
-  const sw=Math.max(8,Math.round(W/40)),sh=Math.max(8,Math.round(H/40)),sm=document.createElement("canvas");sm.width=sw;sm.height=sh;const smx=sm.getContext("2d");smx.drawImage(cv,0,0,sw,sh);
-  const sdat=smx.getImageData(0,0,sw,sh).data,bgc=new Float32Array(sw*sh*3);
-  for(let y=0;y<sh;y++)for(let x=0;x<sw;x++){let m=[0,0,0];for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const xx=Math.min(sw-1,Math.max(0,x+dx)),yy=Math.min(sh-1,Math.max(0,y+dy)),k=(yy*sw+xx)*4;for(let c=0;c<3;c++)m[c]=Math.max(m[c],sdat[k+c])}
-    for(let c=0;c<3;c++)bgc[(y*sw+x)*3+c]=Math.max(60,m[c])}
+  /* 背景（纸的亮度 + 影子）：缩小 → 取附近最亮（去掉字）→ 再平滑；只用亮度来除，三个颜色一起调，所以不会出现一块块的色斑，蓝笔 / 红章的颜色会保留 */
+  const sw=Math.max(24,Math.round(W/10)),sh=Math.max(24,Math.round(H/10)),sm=document.createElement("canvas");sm.width=sw;sm.height=sh;const smx=sm.getContext("2d");smx.drawImage(cv,0,0,sw,sh);
+  const sdat=smx.getImageData(0,0,sw,sh).data,lum=new Float32Array(sw*sh),mx=new Float32Array(sw*sh),bg=new Float32Array(sw*sh);
+  for(let i=0;i<sw*sh;i++)lum[i]=0.299*sdat[i*4]+0.587*sdat[i*4+1]+0.114*sdat[i*4+2];
+  const R2=3;for(let y=0;y<sh;y++)for(let x=0;x<sw;x++){let m=0;for(let dy=-R2;dy<=R2;dy++)for(let dx=-R2;dx<=R2;dx++){const xx=Math.min(sw-1,Math.max(0,x+dx)),yy=Math.min(sh-1,Math.max(0,y+dy));if(lum[yy*sw+xx]>m)m=lum[yy*sw+xx]}mx[y*sw+x]=m}
+  for(let y=0;y<sh;y++)for(let x=0;x<sw;x++){let t=0,n=0;for(let dy=-3;dy<=3;dy++)for(let dx=-3;dx<=3;dx++){const xx=Math.min(sw-1,Math.max(0,x+dx)),yy=Math.min(sh-1,Math.max(0,y+dy));t+=mx[yy*sw+xx];n++}bg[y*sw+x]=Math.max(70,t/n)}
+  /* 纸的颜色（偏黄 / 偏蓝的灯光）：整张一起校正，变回白纸 */
+  const gn=[1,1,1];{let t=[0,0,0],n=0;for(let i=0;i<sw*sh;i++){if(lum[i]<mx[i]*0.92||lum[i]<60)continue;for(let c=0;c<3;c++)t[c]+=sdat[i*4+c]/Math.max(1,lum[i]);n++}
+    if(n>10)for(let c=0;c<3;c++){const r=t[c]/n;gn[c]=r>0.3?1/r:1}}
+  const hard=mode==="scan"||mode==="bw";
   for(let y=0;y<H;y++){const gy=Math.min(sh-1,y*sh/H),y0=gy|0,y1=Math.min(sh-1,y0+1),fy=gy-y0;
-    for(let x=0;x<W;x++){const gx=Math.min(sw-1,x*sw/W),x0=gx|0,x1=Math.min(sw-1,x0+1),fx=gx-x0,j=(y*W+x)*4;let g=0;
-      for(let c=0;c<3;c++){const b=(bgc[(y0*sw+x0)*3+c]*(1-fx)+bgc[(y0*sw+x1)*3+c]*fx)*(1-fy)+(bgc[(y1*sw+x0)*3+c]*(1-fx)+bgc[(y1*sw+x1)*3+c]*fx)*fy;
-        let v=d[j+c]/b*255;v=(v-40)*1.18;v=v>255?255:v<0?0:v;if(v>232)v=255;d[j+c]=v;g+=v}
+    for(let x=0;x<W;x++){const gx=Math.min(sw-1,x*sw/W),x0=gx|0,x1=Math.min(sw-1,x0+1),fx=gx-x0,j=(y*W+x)*4;
+      const b=(bg[y0*sw+x0]*(1-fx)+bg[y0*sw+x1]*fx)*(1-fy)+(bg[y1*sw+x0]*(1-fx)+bg[y1*sw+x1]*fx)*fy,k=255/b;let mn=255,g=0;
+      for(let c=0;c<3;c++){let v=d[j+c]*k*gn[c];v=hard?(v-40)*1.18:(v-28)*1.12;v=v>255?255:v<0?0:v;d[j+c]=v;g+=v;if(v<mn)mn=v}
+      /* 纸：很亮的地方直接变白（去掉淡淡的色斑） */
+      if(mn>(hard?222:206)){d[j]=d[j+1]=d[j+2]=255}
+      else if(hard){const gg=g/3,sat=Math.max(d[j],d[j+1],d[j+2])-mn;if(sat<40&&gg>200){d[j]=d[j+1]=d[j+2]=255}}
       if(mode==="bw"){const gg=g/3,t=gg>185?255:gg<110?0:(gg-110)*3.4;d[j]=d[j+1]=d[j+2]=t}}}
   cx.putImageData(id,0,0);return cv}
 function autoQuad(cv){/* 简单找纸：纸通常比背景亮，找亮区的四个角 */const s=Math.min(1,240/Math.max(cv.width,cv.height)),w=Math.max(2,Math.round(cv.width*s)),h=Math.max(2,Math.round(cv.height*s)),t=document.createElement("canvas");t.width=w;t.height=h;
@@ -4494,11 +4562,11 @@ function autoQuad(cv){/* 简单找纸：纸通常比背景亮，找亮区的四�
 function cropImage(blob,title,big){return new Promise(resolve=>{
   const url=URL.createObjectURL(blob),img=new Image();
   img.onerror=()=>{URL.revokeObjectURL(url);resolve(blob)};
-  img.onload=()=>{let rot=0,mode=getPref("scanMode")||"scan",Q=null,full=null,k=1;const ov=document.createElement("div");ov.id="cropOv";
+  img.onload=()=>{let rot=0,mode=getPref("scanMode2")||"color",Q=null,full=null,k=1;const ov=document.createElement("div");ov.id="cropOv";
     ov.innerHTML=`<div class="cropbox">${big?`<div class="dobig" style="margin-bottom:4px">DO ${esc(big)}</div>`:""}<div class="crophead"><b>${esc(title||L("预览 / 裁切","Preview / crop"))}</b><span class="mute">${L("把四个黄点拖到纸的四个角，系统会拉直成 A4","Drag the 4 yellow dots to the paper corners; it will be straightened to A4")}${big?L("；确认照片上的 DO 号码一样","; check the DO number matches"):""}</span></div>
       <div class="cropstage"><canvas></canvas><svg class="quad"><polygon></polygon></svg>${["0","1","2","3"].map(i=>`<i class="qh" data-i="${i}"></i>`).join("")}</div>
       <div class="actions" style="flex-wrap:wrap"><button class="btn sec" data-a="rl">⟲</button><button class="btn sec" data-a="rr">⟳</button><button class="btn sec" data-a="auto">🔍 ${L("自动找纸边","Auto edges")}</button><button class="btn sec" data-a="full">${L("全图","Full image")}</button>
-        <span class="seg" style="display:inline-flex">${[["orig",L("原色","Original")],["scan",L("扫描白底","Scan")],["bw",L("黑白","B/W")]].map(([v,t])=>`<button class="btn sm ${v===mode?"":"sec"}" data-m="${v}">${t}</button>`).join("")}</span>
+        <span class="seg" style="display:inline-flex">${[["color",L("彩色去影子","Colour, no shadow")],["orig",L("原色","Original")],["scan",L("扫描白底","Scan")],["bw",L("黑白","B/W")]].map(([v,t])=>`<button class="btn sm ${v===mode?"":"sec"}" data-m="${v}">${t}</button>`).join("")}</span>
         <span style="flex:1"></span><button class="btn sec" data-a="skip">${L("不要这张","Discard")}</button><button class="btn" data-a="ok">✓ ${L("确定","Use this")}</button></div>
       <p class="mute" style="font-size:12px;margin:4px 0 0">${L("拍照小技巧：光线够、纸放平、纸占满画面、手机跟纸平行。","Tips: good light, paper flat, fill the frame, hold the phone parallel.")}</p></div>`;
     document.body.appendChild(ov);
@@ -4522,7 +4590,7 @@ function cropImage(blob,title,big){return new Promise(resolve=>{
       let out=warpQuad(full,Q,W,H);out=scanFilter(out,mode);
       const b=await canvasJpeg(out,0.85);ov.remove();URL.revokeObjectURL(url);resolve(b)};
     ov.querySelector(".actions").addEventListener("click",e=>{const bt=e.target.closest("button");if(!bt)return;const m=bt.dataset.m;
-      if(m){mode=m;setPref("scanMode",m);ov.querySelectorAll("[data-m]").forEach(x=>x.classList.toggle("sec",x.dataset.m!==m));return}
+      if(m){mode=m;setPref("scanMode2",m);ov.querySelectorAll("[data-m]").forEach(x=>x.classList.toggle("sec",x.dataset.m!==m));return}
       const a=bt.dataset.a;if(!a)return;
       if(a==="rl"||a==="rr"){rot=(rot+(a==="rl"?270:90))%360;Q=null;draw()}
       else if(a==="full"){Q=[[0,0],[full.width,0],[full.width,full.height],[0,full.height]];place()}
@@ -4555,9 +4623,9 @@ function invoiceHTML(inv,hasBd){const s=settingsOf(inv.company),c=custOf(inv.cus
   <div class="body"><table class="lines"><colgroup><col style="width:10mm"><col><col style="width:13mm"><col style="width:13mm"><col style="width:28mm"><col style="width:31mm"></colgroup>
   <thead><tr><th>No.</th><th class="c">Description</th><th class="c">Qty</th><th class="c">UOM</th><th class="r">Unit Price $</th><th class="r">Total Amount $</th></tr></thead><tbody>
   ${inv.description?`<tr><td></td><td ${l3?'colspan="5" style="white-space:nowrap"':""}>${String(inv.description).split("\n").filter(Boolean).map(x=>`<div class="d1"><span class="ul">${esc(x)}</span></div>`).join("")}</td>${l3?"":`<td colspan="4"></td>`}</tr>`:""}
-  ${lines.map((l,i)=>{const u=lineUnit(l),nu=(l3||u!=="LS")&&u!=="hrs"&&u!=="LS"&&l.unit_price!=null;if(l3&&l.unit_price==null&&u!=="hrs"&&u!=="LS")return `<tr><td>${i+1})</td><td>${desc(l.description)}</td><td class="c">${Number(l.qty)%1?Number(l.qty).toFixed(2):l.qty}</td><td class="c">${esc(u)}</td><td><div class="r">LS</div></td><td>${acc(l.amount)}</td></tr>`;return nu?`<tr><td>${i+1})</td><td>${desc(l.description)}</td><td class="c">${Number(l.qty)%1?Number(l.qty).toFixed(2):l.qty}</td><td class="c">${esc(u)}</td>
+  ${lines.map((l,i)=>{const u=lineUnit(l),nu=(l3||u!=="LS")&&u!=="hrs"&&u!=="LS"&&l.unit_price!=null;if(l.unit_price==null&&u!=="hrs")return `<tr><td>${i+1})</td><td>${desc(l.description)}</td><td class="c">${l.qty==null||l.qty===""?1:Number(l.qty)%1?Number(l.qty).toFixed(2):l.qty}</td><td class="c">${esc(u)}</td><td><div class="r">LS</div></td><td>${acc(l.amount)}</td></tr>`;return nu?`<tr><td>${i+1})</td><td>${desc(l.description)}</td><td class="c">${Number(l.qty)%1?Number(l.qty).toFixed(2):l.qty}</td><td class="c">${esc(u)}</td>
     <td>${acc(l.unit_price)}</td><td>${acc(l.amount)}</td></tr>`:`<tr><td>${i+1})</td><td>${desc(l.description)}</td><td class="c">${u==="hrs"?Number(l.qty||0).toFixed(2):(l.qty??1)}</td><td class="c">${u==="hrs"?"hrs":"LS"}</td>
-    <td>${u==="hrs"?`<div class="r">LS</div>`:acc(l.unit_price??l.amount)}</td><td>${acc(l.amount)}</td></tr>`}).join("")}</tbody></table>
+    <td>${u==="hrs"||l.unit_price==null?`<div class="r">LS</div>`:acc(l.unit_price)}</td><td>${acc(l.amount)}</td></tr>`}).join("")}</tbody></table>
   ${l3&&inv.summary_no?`<div class="attx">Refer to summary list No: ${esc(inv.summary_no)}</div>`:""}
   ${hasBd?`<div class="attx">${l3?"(Please refer to attach for all detailed breakdown)":"(Please see the attachment)"}</div>`:""}</div>
   <table class="tot"><tr><td class="lab">Sub Total</td><td class="col">:</td><td class="dol">$</td><td class="amt">${money(inv.amount_before_gst)}</td></tr>
@@ -4671,7 +4739,8 @@ async function printSOA(mode){const cid=S.soaCust,c=custOf(cid),s=settingsOf(S.c
   <table class="ag"><tr><td>Current</td><td>30 days</td><td>60 days</td><td>90 days</td><td>90+</td>${D.credit>0.005?"<td>Less : Overpayment</td>":""}</tr>
   <tr>${[D.ag.cur,D.ag.d30,D.ag.d60,D.ag.d90,D.ag.over].map(v=>`<td>${v>0.005?"$"+money(v):""}</td>`).join("")}${D.credit>0.005?`<td>($${money(D.credit)})</td>`:""}</tr></table>
   <div class="nb2">- Invoices considered correct unless disputes notified to us within SEVEN (7) days from date of invoice<br>- Interest at the rate of 1.5% per month will be charged on all overdue amounts</div></div>`;
-  const fn=`${S.company} SOA - ${(c.name||"").replace(/[\\/:*?"<>|]+/g," ")} ${S.soaAsOf.split("-").reverse().join("-")}`;
+  const fn=soaFileName(c,S.soaAsOf,G.total);
+  if(mode==="blob"){const blob=await makePdf(fn,{blob:1});return blob?{blob,fn,total:G.total}:null}
   if(mode==="print"){document.title=fn;setTimeout(()=>{window.print();document.title="ETK · L3H 开单系统"},100);return}
   if(mode==="save"){const blob=await makePdf(fn,{blob:1});if(blob)await soaSaveCopy(blob,fn);return}
   if(mode==="preview"){const blob=await makePdf(fn,{blob:1});if(!blob)return;const u=URL.createObjectURL(blob);
@@ -4680,6 +4749,82 @@ async function printSOA(mode){const cid=S.soaCust,c=custOf(cid),s=settingsOf(S.c
       <iframe src="${u}" style="width:100%;height:78vh;border:0;background:#fff;border-radius:6px"></iframe>`);return}
   const blob=await makePdf(fn,{blob:1});if(!blob)return;saveBlob(blob,fn.replace(/[\\/:*?"<>|]+/g,"-")+".pdf");toast(L("PDF 已下载","PDF downloaded"));soaSaveCopy(blob,fn)}
 
+/* SOA 文件名：ETK_SOA_-DENZAI_2517.90__30-09-26（客户资料的「简称」，没填用公司名第一个字） */
+function soaFileName(c,asOf,total){const sn=(String(c.short_name||"").trim()||String(c.name||"").split(/\s+/)[0]||"").toUpperCase().replace(/[^A-Z0-9]+/g,"_").replace(/^_|_$/g,"");
+  const [y,m,d]=String(asOf).split("-");return `${S.company}_SOA_-${sn}_${r2(total).toFixed(2)}__${d}-${m}-${y.slice(2)}`}
+/* ---- A：一次产生全部客户的 SOA（zip） + B：按客户合并提醒 ---- */
+let SB=null;
+function soaBatchRows(asOf){return S.d.customers.filter(c=>c.company===S.company||!c.company).map(c=>{const D=soaData(c.id,asOf);
+    const od=D.rows.filter(i=>overdueDays(i,asOf)>0),last=S.d.reminders.filter(r=>invById(r.invoice_id)?.customer_id===c.id).map(r=>r.sent_at).sort().at(-1)||"";
+    return{c,total:D.total,od,odAmt:r2(sum(od,balOf)),last}}).filter(x=>x.total>0.005).sort((a,b)=>b.odAmt-a.odAmt||b.total-a.total)}
+function soaBatch(){const asOf=today();SB={asOf,rows:soaBatchRows(asOf)};SB.sel=new Set(SB.rows.map(x=>x.c.id));sbRender()}
+function sbRender(){const R=SB.rows,dl=(d)=>d?Math.round((new Date(today())-new Date(d))/864e5):null;
+  pvOv(`<div class="pvhead"><h3 style="margin:0">📑 ${L("全部客户 SOA / 逾期提醒","All statements / overdue reminders")} · ${S.company}</h3><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
+  <div class="filters"><label class="f">${L("截至日期","As at")}<input type="date" value="${SB.asOf}" onchange="SB.asOf=this.value;SB.rows=soaBatchRows(this.value);SB.sel=new Set(SB.rows.map(x=>x.c.id));sbRender()"></label></div>
+  <p class="mute" style="font-size:13px;margin-top:0">${L("列出还有欠款的客户。勾好按「下载 zip」，每个客户一份 SOA PDF（文件名用客户的「简称」）。逾期的客户可以直接按 Email / WhatsApp 提醒：系统先下载他的 SOA，再打开信息，内容列出逾期的单。","Customers with a balance. Tick and download a zip of statements, or send an overdue reminder with the statement.")}</p>
+  ${R.length?`<div class="tw" style="max-height:55vh"><table><thead><tr><th><input type="checkbox" ${SB.sel.size===R.length?"checked":""} onchange="SB.sel=new Set(this.checked?SB.rows.map(x=>x.c.id):[]);sbRender()"></th><th>${L("客户","Customer")}</th><th class="num">${L("欠款","Balance")}</th><th class="num">${L("逾期","Overdue")}</th><th>${L("上次提醒","Last reminder")}</th><th>${L("提醒","Remind")}</th></tr></thead><tbody>
+  ${R.map(x=>{const d=dl(x.last);return `<tr class="${x.od.length?"red":""}"><td><input type="checkbox" ${SB.sel.has(x.c.id)?"checked":""} onchange="this.checked?SB.sel.add('${x.c.id}'):SB.sel.delete('${x.c.id}')"></td>
+    <td>${esc(x.c.name)}${x.c.short_name?` <span class="mute">(${esc(x.c.short_name)})</span>`:""}</td><td class="num">${money(x.total)}</td><td class="num">${x.od.length?`${money(x.odAmt)} <span class="mute">· ${x.od.length} ${L("张","inv")}</span>`:"—"}</td>
+    <td>${x.last?`${dmy(x.last)} <span class="${d>14?"tag warn":"mute"}">${L(`${d} 天前`,`${d}d ago`)}</span>`:`<span class="mute">${L("没提醒过","never")}</span>`}</td>
+    <td style="white-space:nowrap">${x.od.length?`<button class="btn sec sm" onclick="soaRemind('${x.c.id}','Email')">Email</button> <button class="btn sec sm" onclick="soaRemind('${x.c.id}','WhatsApp')">WhatsApp</button>`:""}</td></tr>`}).join("")}</tbody></table></div>
+  <div class="actions" style="margin-top:10px"><button class="btn" id="sbGo" onclick="soaBatchZip()">⬇ ${L(`下载 zip（${SB.sel.size} 个客户）`,`Download zip (${SB.sel.size})`)}</button></div><p id="sbProg" class="mute"></p>`
+  :`<p class="tag ok">${L("没有客户欠款 👍","Nobody owes anything")}</p>`}`)}
+async function soaWith(cid,asOf,fn){const k=[S.soaCust,S.soaAsOf];S.soaCust=cid;S.soaAsOf=asOf;try{return await fn()}finally{S.soaCust=k[0];S.soaAsOf=k[1]}}
+async function soaBatchZip(){const ids=SB.rows.filter(x=>SB.sel.has(x.c.id)).map(x=>x.c.id);if(!ids.length)return toast(L("还没勾客户","Nothing ticked"));const b=$("#sbGo");if(b)b.disabled=true;
+  try{await loadJSZip();const z=new JSZip();let n=0;
+    for(const cid of ids){const e=$("#sbProg");if(e)e.textContent=`${L("产生中","Building")} ${++n}/${ids.length} · ${custName(cid)}`;
+      const r=await soaWith(cid,SB.asOf,()=>printSOA("blob"));if(!r)continue;z.file(r.fn.replace(/[\\/:*?"<>|]+/g,"-")+".pdf",r.blob);await soaWith(cid,SB.asOf,()=>soaSaveCopy(r.blob,r.fn))}
+    const blob=await z.generateAsync({type:"blob"}),[y,m,d]=SB.asOf.split("-");saveBlob(blob,`${S.company}_SOA_${d}-${m}-${y.slice(2)}.zip`);
+    const e=$("#sbProg");if(e)e.textContent=L(`完成：${ids.length} 份 SOA 已下载（zip），每份也存进客户的「以前的 SOA」。`,`Done: ${ids.length} statements.`)}
+  catch(e){alert(e.message)}finally{if(b)b.disabled=false}}
+async function soaRemind(cid,via){const asOf=SB?.asOf||today(),c=custOf(cid),s=settingsOf(S.company),D=soaData(cid,asOf),od=D.rows.filter(i=>overdueDays(i,asOf)>0);
+  if(!od.length)return toast(L("这个客户没有逾期的单","Nothing overdue"));
+  try{toast(L("正在产生 SOA…","Building statement…"));const r=await soaWith(cid,asOf,()=>printSOA("blob"));if(!r)return;const name=r.fn.replace(/[\\/:*?"<>|]+/g,"-")+".pdf",file=new File([r.blob],name,{type:"application/pdf"});
+    const shared=via==="WhatsApp"&&navigator.canShare?.({files:[file]});
+    if(shared){try{await navigator.share({files:[file],title:name})}catch(e){if(e.name!=="AbortError")throw e;return}}else saveBlob(r.blob,name);
+    await soaWith(cid,asOf,()=>soaSaveCopy(r.blob,r.fn));
+    const text=`Dear ${c.attention||"Team"},\n\nThis is a friendly reminder that the following invoices are overdue:\n${od.map(i=>`- ${i.invoice_no} (${dmy(i.invoice_date)}, due ${dmy(i.due_date)}): $${money(balOf(i))}, overdue ${overdueDays(i,asOf)} days`).join("\n")}\nTotal overdue: $${money(sum(od,balOf))}\nTotal outstanding as at ${dmy(asOf)}: $${money(D.total)}\n\nPlease find our statement of account attached. Kindly arrange payment at your earliest convenience. Please ignore this message if payment has been made.\n\nThank you.\n\nBest regards,\n${signName(s)}`;
+    if(!shared)openOut(via,c,`Payment Reminder - Statement of Account as at ${dmy(asOf)}`,text);
+    setTimeout(async()=>{if(confirm(L(`已经用 ${via} 提醒了吗？按确定把这 ${od.length} 张记成今天提醒。${shared?"":`\n（SOA ${name} 已下载，请自己附上）`}`,`Reminder sent? OK records it for ${od.length} invoices.`))){
+      const{error}=await sb.from("reminders").insert(od.map(i=>({invoice_id:i.id,sent_at:today(),sent_via:via})));if(error)return toast(error.message);
+      await sb.from("soa_sends").insert({company:S.company,customer_id:cid,as_of:asOf,sent_at:today(),sent_via:via});await loadAll();if(SB&&$("#photoOv")){SB.rows=soaBatchRows(SB.asOf);sbRender()}else render()}},1200)}
+  catch(e){toast(e.message||String(e))}}
+/* ---- A2：找重复的客户 / 供应商，合并成一个 ---- */
+const dupKey=n=>normCo(n).replace(/\b(PTE|PRIVATE|LTD|LIMITED|PL|P\/L|THE|CO|SDN|BHD)\b/g," ").replace(/\s+/g,"");
+function dupList(ent){return(S.d[ent]||[]).filter(r=>ent==="suppliers"||r.company===S.company||!r.company)}
+function dupSimilar(ent,name,exceptId){const k=dupKey(name);if(k.length<3)return null;return dupList(ent).find(r=>r.id!==exceptId&&(dupKey(r.name)===k||(k.length>=6&&simCo(normCo(name),normCo(r.name))>=0.92)))||null}
+function dupGroups(ent){const L0=dupList(ent),n=L0.length,par=[...Array(n).keys()],f=i=>par[i]===i?i:(par[i]=f(par[i]));const ks=L0.map(r=>dupKey(r.name)),ns=L0.map(r=>normCo(r.name));
+  for(let i=0;i<n;i++)for(let j=i+1;j<n;j++){if(ks[i].length<3)continue;if(ks[i]===ks[j]||(ks[i].length>=6&&ks[j].length>=6&&simCo(ns[i],ns[j])>=0.92))par[f(i)]=f(j)}
+  const g={};L0.forEach((r,i)=>(g[f(i)]=g[f(i)]||[]).push(r));return Object.values(g).filter(x=>x.length>1)}
+const DUP_REF={customers:["invoices","payments","delivery_orders","rates","customer_surcharges","projects","monthly_fix","soa_sends"],suppliers:["supplier_invoices","diesel_surcharges","payment_vouchers"]};
+const DUP_FILL={customers:["short_name","address","attention","email","email_cc","whatsapp","tel","uen"],suppliers:["short_name","address","email","tel","bank","account_no","whatsapp"]};
+let DP=null;
+async function dupOpen(ent){DP={ent,groups:dupGroups(ent),cnt:{},keep:{}};DP.groups.forEach((g,i)=>DP.keep[i]=null);dupRender();
+  const col=ent==="customers"?"customer_id":"supplier_id";
+  const loc={payment_vouchers:"pvs"};
+  for(const g of DP.groups)for(const r of g){const c={};for(const t of DUP_REF[ent]){const arr=S.d[loc[t]||t];
+      if(t!=="delivery_orders"&&Array.isArray(arr)){c[t]=arr.filter(x=>x[col]===r.id).length;continue}
+      try{const{count,error}=await sb.from(t).select("id",{count:"exact",head:true}).eq(col,r.id);if(!error)c[t]=count||0}catch(e){}}DP.cnt[r.id]=c}
+  DP.groups.forEach((g,i)=>{if(!DP.keep[i])DP.keep[i]=[...g].sort((a,b)=>dupScore(b)-dupScore(a))[0].id});if($("#photoOv"))dupRender()}
+const dupScore=r=>Object.values(DP.cnt[r.id]||{}).reduce((a,b)=>a+b,0);
+function dupRender(){const{ent,groups}=DP,cu=ent==="customers",lab={invoices:L("Invoice","Invoices"),payments:L("收款","Payments"),delivery_orders:"DO",rates:L("价钱","Rates"),customer_surcharges:"Surcharge",projects:"Project",monthly_fix:"Monthly Fix",soa_sends:"SOA",supplier_invoices:"Supplier Inv",diesel_surcharges:"Surcharge",payment_vouchers:"PV"};
+  pvOv(`<div class="pvhead"><h3 style="margin:0">🔍 ${L(cu?"重复的客户":"重复的供应商",cu?"Duplicate customers":"Duplicate suppliers")}</h3><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
+  <p class="mute" style="font-size:13px;margin-top:0">${L("名字很像的放在一组（不管 Pte / Ltd、点、大小写、& / AND）。选要留哪一个，按「合并」：另一个名字下面的 invoice、收款、DO、价钱等全部移过来，缺的 Email / 地址会补上，另一个放进回收站。不是同一间公司的组，不用理它。","Similar names are grouped. Pick the one to keep and merge; everything moves over and the other goes to the recycle bin.")}</p>
+  ${groups.length?groups.map((g,i)=>`<div class="panel" style="padding:10px;margin:0 0 10px"><table><tbody>${g.map(r=>{const c=DP.cnt[r.id];return `<tr><td style="width:30px"><input type="radio" name="dk${i}" ${DP.keep[i]===r.id?"checked":""} onchange="DP.keep[${i}]='${r.id}'"></td>
+      <td><b>${esc(r.name)}</b><div class="mute" style="font-size:12px">${esc([r.short_name,r.email,r.address&&String(r.address).split("\n")[0],r.payment_terms_days!=null?`${r.payment_terms_days} ${L("天","days")}`:""].filter(Boolean).join(" · "))}</div></td>
+      <td style="font-size:12px">${c?Object.entries(c).filter(([,v])=>v).map(([t,v])=>`${lab[t]||t} ${v}`).join(" · ")||`<span class="mute">${L("没有资料","no records")}</span>`:"⏳"}</td></tr>`}).join("")}</tbody></table>
+    <div class="actions" style="margin-top:6px"><button class="btn sm" onclick="dupMerge(${i})">⇢ ${L("合并成选的那一个","Merge into selected")}</button></div></div>`).join("")
+  :`<p class="tag ok">${L("没有找到重复的 👍","No duplicates found")}</p>`}`)}
+async function dupMerge(i){const{ent}=DP,g=DP.groups[i],keepId=DP.keep[i],keep=g.find(r=>r.id===keepId),drops=g.filter(r=>r.id!==keepId),col=ent==="customers"?"customer_id":"supplier_id";if(!keep)return;
+  if(!confirm(L(`把 ${drops.map(r=>`「${r.name}」`).join("、")} 合并到「${keep.name}」？\n下面的单全部会移过去，另一个名字放进回收站。`,`Merge ${drops.length} into "${keep.name}"?`)))return;
+  try{const fill={};for(const k of DUP_FILL[ent]){if(keep[k]==null||keep[k]==="")for(const d of drops)if(d[k]!=null&&d[k]!==""){fill[k]=d[k];break}}
+    if(keep.payment_terms_days==null)for(const d of drops)if(d.payment_terms_days!=null){fill.payment_terms_days=d.payment_terms_days;break}
+    for(const d of drops){for(const t of DUP_REF[ent]){const{error}=await sb.from(t).update({[col]:keepId}).eq(col,d.id);if(error&&!/does not exist|schema cache|relation/i.test(error.message))throw new Error(`${t}: ${error.message}`)}
+      await sb.from("attachments").update({entity_id:keepId}).eq("entity_id",d.id).in("entity_type",ent==="customers"?["customers","soa"]:["suppliers"]);
+      await binSave(ent,JSON.parse(JSON.stringify(d)));const{error}=await sb.from(ent).delete().eq("id",d.id);if(error)throw error}
+    if(Object.keys(fill).length){const{error}=await sb.from(ent).update(fill).eq("id",keepId);if(error&&!/column/i.test(error.message))throw error}
+    await loadAll();toast(L(`已合并到「${keep.name}」`,`Merged into ${keep.name}`));DP.groups=dupGroups(ent);DP.groups.forEach((g2,k)=>{DP.keep[k]=[...g2].sort((a,b)=>dupScore(b)-dupScore(a))[0].id});dupRender();render()}
+  catch(e){alert(L("合并中断：","Merge stopped: ")+e.message);await loadAll();render()}}
 /* ================= 弹出视窗 ================= */
 function modalView(){const m=S.modal;const body=m.kind==="invForm"?invFormView(m.f):m.kind==="inv"?invDetailView(m.id):m.kind==="payForm"?payFormView(m.f):"";
   return `<div class="modal" onclick="if(event.target===this&&!S.dirty)closeModal()"><div class="box">${body}</div></div>`}
