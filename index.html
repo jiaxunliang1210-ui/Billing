@@ -333,7 +333,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-23a";
+const APP_VER="2026-10-23b";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -2356,7 +2356,7 @@ const emailList=v=>String(v||"").split(/[\s,;]+/).map(x=>x.trim()).filter(x=>x.i
 function mailLink(to,subj,body,cc){const c=emailList(cc);return `mailto:${emailList(to).join(",")}?${c.length?`cc=${c.join(",")}&`:""}subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`}
 const signName=s=>s.sign_name||"Jia Xun";
 /* PDF 文件名：ETK-INV-2609-17-EPM */
-const fileBase=inv=>{const c=custOf(inv.customer_id),sn=String(c.short_name||"").trim().replace(/[\\/:*?"<>|\s]+/g,"");return inv.invoice_no.replace(/[\\/:*?"<>|]+/g,"-")+(sn?"-"+sn:"")};
+const fileBase=inv=>{const c=custOf(inv.customer_id),sn=String(c.short_name||"").trim().replace(/[\\/:*?"<>|\s]+/g,"")||String(c.name||"").trim().split(/\s+/)[0].replace(/[^A-Za-z0-9&]+/g,"").toUpperCase();return inv.invoice_no.replace(/[\\/:*?"<>|]+/g,"-")+(sn?"-"+sn:"")};
 function openOut(via,c,subj,text){if(via==="WhatsApp"){if(!c.whatsapp)toast(L("客户没有 WhatsApp 号码，请在 Master List 加","No WhatsApp number for this customer"));window.open(waLink(c.whatsapp,text),"_blank")}
   else{if(!c.email)toast(L("客户没有 email，请在 Master List 加","No email for this customer"));location.href=mailLink(c.email,subj,text,c.email_cc)}}
 /* ---- 寄出前检查 ---- */
