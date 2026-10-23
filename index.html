@@ -333,7 +333,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-23c";
+const APP_VER="2026-10-23d";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -4211,13 +4211,36 @@ async function viewDoPhoto(id,list){const ids=list||doFiltered().map(d=>d.id);le
       <button class="btn sec sm" data-a="prev" ${idx?"":"disabled"}>‹ ${L("上一张","Prev")}</button><button class="btn sec sm" data-a="next" ${idx<ids.length-1?"":"disabled"}>${L("下一张","Next")} ›</button><button class="close" data-a="x">✕</button></div>
       <div class="pvbody"><div class="pvimg">${ph.length?ph.map(a=>`<img data-att="${a.id}" alt="DO ${esc(d.do_no)}">`).join(""):`<div class="pvnone">${L("这张 DO 还没有照片","No photo for this DO yet")}</div>`}</div>
       <div class="pvinfo">${doInfoHTML(d)}<p class="mute" style="font-size:13px">${L("对照照片上的 DO 号码、日期、车牌和时间。","Compare the DO number, date, vehicle and time on the photo.")}</p>
-      <div class="actions"><button class="btn sec" data-a="edit">${L("修改这张 DO / 换照片","Edit DO / replace photo")}</button></div></div></div></div>`;
+      <div class="actions"><button class="btn sec" data-a="edit">${L("修改这张 DO / 换照片","Edit DO / replace photo")}</button>${ph.length?`<button class="btn sec" data-a="clean">🧽 ${L("清理这张照片","Clean this photo")}</button>`:""}</div></div></div></div>`;
     if(ph.length){try{const u=await photoUrls(ph);ov.querySelectorAll("img[data-att]").forEach(im=>im.src=u[im.dataset.att])}catch(e){toast(e.message)}}};
   ov.onclick=e=>{const a=e.target.closest("[data-a]")?.dataset.a||(e.target===ov?"x":"");if(a==="prev"&&idx>0){idx--;show()}else if(a==="next"&&idx<ids.length-1){idx++;show()}
-    else if(a==="x")ov.remove();else if(a==="edit"){const id2=ids[idx];ov.remove();S.tab="do";editDO(id2)}};
+    else if(a==="x")ov.remove();else if(a==="edit"){const id2=ids[idx];ov.remove();S.tab="do";editDO(id2)}
+    else if(a==="clean"){const id2=ids[idx];cleanPhotos(doPhotos(id2),`DO ${S.d.delivery_orders.find(x=>x.id===id2)?.do_no||""}`,()=>viewDoPhoto(id2,ids))}};
   document.onkeydown=e=>{if(!$("#photoOv"))return;if(e.key==="ArrowLeft"&&idx>0){idx--;show()}else if(e.key==="ArrowRight"&&idx<ids.length-1){idx++;show()}else if(e.key==="Escape")$("#photoOv")?.remove()};
   await show()}
 
+/* ---- 🧽 清理已经存的照片：用新的「彩色去影子」再处理一次，确认后换掉（旧文件留着，可以还原） ---- */
+async function cleanPhotoBlob(a){const src=await attDataURL(a),im=new Image();await new Promise((r,j)=>{im.onload=r;im.onerror=j;im.src=src});
+  const k=Math.min(1,2400/Math.max(im.naturalWidth,im.naturalHeight)),c=document.createElement("canvas");c.width=Math.round(im.naturalWidth*k);c.height=Math.round(im.naturalHeight*k);
+  c.getContext("2d").drawImage(im,0,0,c.width,c.height);scanFilter(c,"color");const blob=await new Promise(r=>c.toBlob(r,"image/jpeg",0.85));return{before:src,blob,after:URL.createObjectURL(blob)}}
+async function cleanInvPhotos(invId){let dos=[];try{dos=await fetchAll(()=>sb.from("delivery_orders").select("id,do_no").eq("invoice_id",invId))}catch(e){return toast(e.message)}
+  const atts=dos.flatMap(d=>doPhotos(d.id));if(!atts.length)return toast(L("这张 invoice 的 DO 还没有照片","No DO photos on this invoice"));cleanPhotos(atts,invById(invId)?.invoice_no||"",null)}
+async function cleanPhotos(atts,title,after){if(!atts.length)return;
+  $("#photoOv")?.remove();pvOv(`<div class="pvhead"><h3 style="margin:0">🧽 ${esc(title)}</h3><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div><p id="clProg">⏳ ${L("处理中…","Processing…")} 0 / ${atts.length}</p>`);
+  const res=[];for(const a of atts){try{res.push({a,...await cleanPhotoBlob(a)})}catch(e){res.push({a,err:e.message||String(e)})}const p=$("#clProg");if(!p)return;p.textContent=`⏳ ${L("处理中…","Processing…")} ${res.length} / ${atts.length}`}
+  const ok=res.filter(r=>r.blob);window.__CL={res,after};
+  pvOv(`<div class="pvhead"><h3 style="margin:0">🧽 ${esc(title)} · ${L(`${ok.length} 张`,`${ok.length} photo(s)`)}</h3><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
+    <p class="mute" style="font-size:13px;margin-top:0">${L("左边是现在的，右边是清理后的。没问题按「换掉」。旧的文件会留着，按错了可以马上还原。","Left: current. Right: cleaned. Press Replace if it looks right.")}</p>
+    <div style="max-height:66vh;overflow:auto;display:grid;gap:10px">${res.map(r=>r.err?`<div class="tag bad">${esc(r.a.file_name||"")}: ${esc(r.err)}</div>`:`<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px"><img src="${r.before}" style="width:100%;background:#fff;border-radius:4px"><img src="${r.after}" style="width:100%;background:#fff;border-radius:4px"></div>`).join("")}</div>
+    ${ok.length?`<div class="actions" style="margin-top:10px"><button class="btn" id="clGo" onclick="cleanApply()">✓ ${L(`换掉（${ok.length} 张）`,`Replace (${ok.length})`)}</button><button class="btn sec" data-a="x">${L("取消","Cancel")}</button></div>`:""}`)}
+async function cleanApply(){const{res,after}=window.__CL||{};if(!res)return;const b=$("#clGo");if(b)b.disabled=true;const done=[];
+  try{for(const r of res.filter(r=>r.blob)){const a=r.a,path=`${S.user.id}/${a.entity_type}/${a.entity_id}/${Date.now()}_${Math.random().toString(36).slice(2,7)}_clean.jpg`;
+      const up=await sb.storage.from("attachments").upload(path,r.blob,{contentType:"image/jpeg"});if(up.error)throw up.error;
+      const{error}=await sb.from("attachments").update({file_path:path}).eq("id",a.id);if(error)throw error;done.push({id:a.id,old:a.file_path,nw:path});a.file_path=path}}
+  catch(e){alert(L("中断：","Stopped: ")+(e.message||e))}
+  res.forEach(r=>r.after&&URL.revokeObjectURL(r.after));$("#photoOv")?.remove();
+  await loadAll();render();if(after)after();
+  if(done.length)undoToast(L(`已清理 ${done.length} 张照片`,`${done.length} photo(s) cleaned`),async()=>{for(const x of done){await sb.from("attachments").update({file_path:x.old}).eq("id",x.id)}await loadAll();render();toast(L("已还原","Restored"))})}
 /* ---- 照片核对：整个列表一次看 ---- */
 async function photoGallery(){const rows=doFiltered();let ov=$("#photoOv");if(!ov){ov=document.createElement("div");ov.id="photoOv";document.body.appendChild(ov)}
   const atts=rows.map(d=>doPhotos(d.id)[0]).filter(Boolean),miss=rows.filter(d=>!doPhotos(d.id).length).length;
@@ -4341,7 +4364,7 @@ function signBox(i){const sg=signedOf(i),dos=S.modal?.dos||S.d.delivery_orders.f
   <div class="actions" style="margin-top:10px"><label class="btn ${sg?"sec":""} file">✍️ ${sg?L("换签名页","Replace signed page"):L("上传签名页（PDF / 照片）","Upload signed page (PDF / photo)")}<input type="file" hidden accept="application/pdf,image/*" onchange="upSigned('${i.id}',this)"></label>
     <label class="btn sec file">📎 ${poDocsOf(i).src==="own"?L("加 / 换 PO","Add PO"):L("上传 PO","Upload PO")}<input type="file" hidden accept="application/pdf,image/*" onchange="upPO('${i.id}',this)"></label>
     ${dos.length?`<label class="btn sec file">⬆ ${L("上传 DO（PDF / 照片）","Upload DOs (PDF / photos)")}<input type="file" hidden multiple accept="application/pdf,image/*" onchange="invDoUp('${i.id}',this)"></label>`:""}
-    ${dos.length?`<button class="btn sec" onclick="doPreview('${i.id}')">👁 ${L("预览 DO","Preview DOs")}</button>`:""}
+    ${dos.length?`<button class="btn sec" onclick="doPreview('${i.id}')">👁 ${L("预览 DO","Preview DOs")}</button><button class="btn sec" onclick="cleanInvPhotos('${i.id}')">🧽 ${L("清理全部 DO 照片","Clean all DO photos")}</button>`:""}
     <button class="btn sec" onclick="custPreview('${i.id}')">👁 ${L("预览寄客户版本","Preview customer copy")}</button>
     <button class="btn ${sg?"":"sec"}" onclick="custCopy('${i.id}')">⬇ ${L("下载寄客户版本","Download customer copy")}</button>
     ${sg?`<button class="btn sec" onclick="signedOnlyPdf('${i.id}')">✍️ ${L("只下载签名页","Signed page only")}</button>`:""}
