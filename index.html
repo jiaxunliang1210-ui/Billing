@@ -333,7 +333,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-26a";
+const APP_VER="2026-10-26c";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -1369,7 +1369,7 @@ function pvView(){const rows=sortRows("pv",(S.d.pvs||[]).filter(p=>p.company===S
   :`<div class="panel empty">${L("这段时间没有 PV。按「新 PV」开始。","No PVs in this period.")}</div>`}`}
 function supView(){const keys=["supplier_invoices","diesel_surcharges","suppliers"],cur=S.sub.sup;
   const tabs=`<div class="sub">${keys.map(k=>`<button class="${k===cur?"on":""}" onclick="S.sub.sup='${k}';S.gEdit=null;S.dirty=false;render()">${L(...ENT[k].label)}</button>`).join("")}<button class="${cur==="pv"?"on":""}" onclick="S.sub.sup='pv';S.gEdit=null;S.dirty=false;render()">💳 ${L("付款 / PV","Payments / PV")}</button></div>`;
-  return `<div class="actions" style="margin:0 0 6px"><button class="btn sec" data-drop="bulkUp" onclick="bulkUp()">⬆ ${L("批量上传 Excel（供应商 / 客户报告）","Bulk upload Excel")}</button><button class="btn sec" data-drop="tiUp" onclick="tiUp()">⬆ ${L("上传 Tax Invoice（PDF / zip）","Upload tax invoices")}</button>${(()=>{const n=ctPending();return `<button class="btn sec" onclick="ctScan()">🔁 ${L("对 Contra","Match contras")}${n?` <span class="badge">${n}</span>`:""}</button>`})()}</div>`+tabs+(cur==="pv"?pvView():genView([cur],"sup"))}
+  return `<div class="actions" style="margin:0 0 6px"><button class="btn sec" data-drop="bulkUp" onclick="bulkUp()">⬆ ${L("批量上传 Excel（供应商 / 客户报告）","Bulk upload Excel")}</button><button class="btn sec" data-drop="tiUp" onclick="tiUp()">⬆ ${L("上传 Tax Invoice（PDF / zip）","Upload tax invoices")}</button>${(()=>{const n=ctPending();return `<label class="btn sec file" title="${L("上传你的 AP-AR Summary（TAX INVOICES 那页，同一个颜色 = 同一个月），系统帮已上传的 Supplier Invoice 分入账月份","Upload your AP-AR summary; colour blocks set the received month")}">📅 ${L("按 AP-AR Summary 分入账月份","Set months from AP-AR summary")}<input type="file" hidden accept=".xlsx" onchange="rmFile(this)"></label><button class="btn sec" onclick="ctScan()">🔁 ${L("对 Contra","Match contras")}${n?` <span class="badge">${n}</span>`:""}</button>`})()}</div>`+tabs+(cur==="pv"?pvView():genView([cur],"sup"))}
 /* ---- 新 PV / 修改 ---- */
 let PVF=null;
 function pvOv(html){let ov=$("#photoOv");if(!ov){ov=document.createElement("div");ov.id="photoOv";document.body.appendChild(ov);ov.onclick=e=>{if(e.target===ov||e.target.closest("[data-a=x]"))ov.remove()}}
@@ -3133,6 +3133,63 @@ async function ctApply(){const P=ctPlan(),co=S.company,b=$("#ctGo");if(b)b.disab
     undoToast(L(`Contra 完成：${P.plan.length} 张，$${money(P.total)}`,`Contra done: ${P.plan.length}, $${money(P.total)}`),async()=>{for(const id of madePays)await sb.from("payments").delete().eq("id",id);
       for(const r of back)await sb.from("supplier_invoices").update({payment_date:r.payment_date,status:r.status,remark:r.remark}).eq("id",r.id);await loadAll();await syncStatuses(ids);render();toast(L("已撤销 Contra","Contra undone"))})}
   catch(e){alert(L("Contra 中断：","Contra stopped: ")+e.message);await loadAll();render()}}
+/* ---- 📅 按 AP-AR Summary（颜色 = 月份）分 Supplier Invoice 的入账月份 ---- */
+let RM=null;
+async function rmFile(input){const f=input.files?.[0];input.value="";if(!f)return;
+  try{pvOv(`<p>⏳ ${L("读取中…","Reading…")}</p>`);await loadExcelJS();const wb=new ExcelJS.Workbook();await wb.xlsx.load(await f.arrayBuffer());
+    /* 简单的表：Invoice No + 入账月份（例：按每个月 Tax Invoice PDF 整理出来的） */
+    for(const w of wb.worksheets){if(!w.getRow)continue;for(let r=1;r<=5;r++){const h={};w.getRow(r).eachCell((c,k)=>{h[k]=String(c.text||c.value||"").trim().toLowerCase()});
+        const fi=rx=>+(Object.entries(h).find(([,v])=>rx.test(v))||[])[0]||0,cn=fi(/invoice\s*(no|number)|单号/),cm=fi(/入账月份|received\s*month|^month$/);
+        if(cn&&cm){const map=new Map();let n=0,last="";const cs=fi(/supplier|供应商|name/),ct=fi(/^total/);
+          for(let i=r+1;i<=w.rowCount;i++){const row=w.getRow(i),no=String(row.getCell(cn).text||"").trim();if(!no)continue;const mv=row.getCell(cm).value;
+            const m=mv instanceof Date?ymd(new Date(mv.getTime()+60000)).slice(0,7):(String(row.getCell(cm).text||"").trim().match(/(\d{4})[-\/](\d{1,2})/)||[]).slice(1).map((x,j)=>j?z2(x):x).join("-");if(!/^\d{4}-\d{2}$/.test(m))continue;
+            const x={r:i,no,an:suAn(no),m,name:cs?String(row.getCell(cs).text||"").trim():"",tot:ct?numOr(row.getCell(ct).value?.result??row.getCell(ct).value,null):null};if(!map.has(x.an))map.set(x.an,[]);map.get(x.an).push(x);n++;if(m>last)last=m}
+          RM={file:f.name,sheet:w.name,blocks:0,simple:true,last,map,rows:n,fill:true};rmPlan();rmRender();return}}}
+    const ws=wb.worksheets.find(w=>/tax/i.test(w.name))||wb.worksheets.find(w=>/supplier|purchase|ap\b/i.test(w.name));if(!ws)throw new Error(L("找不到「TAX INVOICES」那页","No TAX INVOICES sheet found"));
+    let hr=0,C={};for(let r=1;r<=12&&!hr;r++){const row=ws.getRow(r),h={};row.eachCell((c,k)=>{h[k]=String(c.text||c.value||"").trim().toLowerCase()});
+      const fi=rx=>+(Object.entries(h).find(([,v])=>rx.test(v))||[])[0]||0;const d=fi(/invoice\s*date|^date/),n=fi(/invoice\s*(no|number)/);
+      if(d&&n){hr=r;C={d,n,name:fi(/name|supplier|customer/),tot:+(Object.entries(h).filter(([,v])=>/^total/.test(v)).pop()||[])[0]||0}}}
+    if(!hr)throw new Error(L("看不懂表头（要有 Invoice Date / Invoice Number）","Header not recognised"));
+    const key=c=>{const fl=c.fill;if(!fl||fl.type!=="pattern"||!fl.fgColor)return"-";const g=fl.fgColor;return g.argb?g.argb.slice(-6):`t${g.theme}:${(+g.tint||0).toFixed(2)}`};
+    const rows=[],lim=addDays(today(),31);
+    for(let r=hr+1;r<=ws.rowCount;r++){const row=ws.getRow(r),nc=row.getCell(C.n),no=String(nc.text||"").trim();if(!no)continue;
+      const dv=row.getCell(C.d).value;let d=dv instanceof Date?ymd(new Date(dv.getTime()+60000)):easyDate(String(row.getCell(C.d).text||""));if(d&&(d<"2015-01-01"||d>lim))d=null;
+      rows.push({r,no,an:suAn(no),d,name:C.name?String(row.getCell(C.name).text||"").trim():"",tot:C.tot?numOr(row.getCell(C.tot).value?.result??row.getCell(C.tot).value,null):null,k:key(nc)})}
+    /* 一段一段：同颜色连着 = 一个月；中间夹的小段（黄色标记）并回去 */
+    let B=[];for(const x of rows){const b=B.at(-1);if(b&&b.k===x.k)b.rows.push(x);else B.push({k:x.k,rows:[x]})}
+    for(let j=1;j<B.length-1;j++)if(B[j-1].k===B[j+1].k&&B[j].rows.length<=3){B[j-1].rows.push(...B[j].rows,...B[j+1].rows);B.splice(j,2);j--}
+    const mi=d=>(+d.slice(0,4))*12+(+d.slice(5,7))-1,ms=m=>`${Math.floor(m/12)}-${z2(m%12+1)}`;
+    for(const b of B){const m=b.rows.filter(x=>x.d).map(x=>mi(x.d));if(!m.length){b.m=null;continue}const cnt={};m.forEach(v=>cnt[v]=(cnt[v]||0)+1);const mode=+Object.entries(cnt).sort((a,c)=>c[1]-a[1])[0][0];b.m=Math.max(...m.filter(v=>v<=mode+1))}
+    for(let j=0;j<B.length;j++){if(B[j].m==null)B[j].m=j?B[j-1].m:null;if(j&&j<B.length-1&&B[j].m===B[j-1].m&&B[j+1].m===B[j].m+2)B[j].m++}
+    const map=new Map();for(const b of B)for(const x of b.rows){x.m=b.m!=null?ms(b.m):null;if(!map.has(x.an))map.set(x.an,[]);map.get(x.an).push(x)}
+    const last=B.filter(b=>b.m!=null).at(-1)?.m;RM={file:f.name,sheet:ws.name,blocks:B.length,last:last!=null?ms(last):null,map,rows:rows.length,fill:true};rmPlan();rmRender()}
+  catch(e){$("#photoOv")?.remove();alert(e.message||String(e))}}
+function rmPlan(){const sis=S.d.supplier_invoices.filter(siMine),out=[],miss=[];const lastEnd=RM.last?`${RM.last}-31`:"";
+  for(const si of sis){const c=RM.map.get(suAn(si.invoice_no))||[];let x=null;
+    if(c.length===1)x=c[0];else if(c.length>1)x=c.find(y=>y.tot!=null&&Math.abs(y.tot-Number(si.total))<0.05)||c.find(y=>simCo(normCo(y.name),normCo(supName(si.supplier_id)))>=0.8)||c[0];
+    const cur=String(siRecv(si)).slice(0,7),inv=String(si.invoice_date||"").slice(0,7);
+    if(x&&x.m){const nd=inv===x.m?si.invoice_date:`${x.m}-01`;if(cur!==x.m)out.push({si,x,from:cur,to:x.m,nd})}
+    else if(!x){miss.push(si);if(RM.fill&&inv&&lastEnd&&si.invoice_date<=lastEnd&&cur!==inv)out.push({si,x:null,from:cur,to:inv,nd:si.invoice_date})}}
+  RM.plan=out;RM.miss=miss;RM.matched=sis.length-miss.length}
+function rmRender(){const P=RM.plan,bym={};P.forEach(p=>{const b=bym[p.to]=bym[p.to]||{n:0,amt:0};b.n++;b.amt+=Number(p.si.total)||0});
+  pvOv(`<div class="pvhead"><h3 style="margin:0">📅 ${L("按 AP-AR Summary 分入账月份","Received month from AP-AR summary")}</h3><span class="mute" style="font-size:13px">${esc(RM.file)} · ${esc(RM.sheet)}</span><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
+  <ul style="font-size:14px;margin:6px 0"><li>${RM.simple?L(`表里有 ${RM.rows} 张单（单号 → 入账月份），最晚是 ${RM.last||"—"}`,`${RM.rows} invoices with months, latest ${RM.last}`):L(`Summary 有 ${RM.rows} 行，分成 ${RM.blocks} 段颜色（每段 = 一个月），最后一段是 ${RM.last||"—"}`,`${RM.rows} rows in ${RM.blocks} colour blocks, last = ${RM.last}`)}</li>
+    <li>${L(`系统里的 Supplier Invoice：配对到 ${RM.matched} 张，Summary 里找不到 ${RM.miss.length} 张`,`Matched ${RM.matched}, not in summary ${RM.miss.length}`)}</li>
+    <li><b>${L(`要改入账月份：${P.length} 张`,`To change: ${P.length}`)}</b></li></ul>
+  <label class="chk" style="font-size:13px"><input type="checkbox" ${RM.fill?"checked":""} onchange="RM.fill=this.checked;rmPlan();rmRender()">${L(`Summary 里找不到、日期在 ${RM.last||"—"} 或以前的：照 invoice 日期的月份（之后的不动）`,`Not in summary and dated up to ${RM.last}: use invoice month`)}</label>
+  ${P.length?`<div class="filters" style="margin:8px 0;gap:6px;flex-wrap:wrap">${Object.keys(bym).sort().map(m=>`<span class="tag">${monTag(m+"-01")}：${bym[m].n} ${L("张","")} · $${money(bym[m].amt)}</span>`).join("")}</div>
+  <div class="tw" style="max-height:48vh"><table><thead><tr><th>${L("供应商","Supplier")}</th><th>Invoice No</th><th>${L("Invoice 日期","Inv date")}</th><th class="num">Total</th><th>${L("现在算","Now")}</th><th>${L("改成","New")}</th></tr></thead><tbody>
+  ${P.slice(0,500).map(p=>`<tr class="${p.to!==String(p.si.invoice_date||"").slice(0,7)?"amb":""}"><td>${esc(supName(p.si.supplier_id))}</td><td>${esc(p.si.invoice_no)}</td><td>${dmy(p.si.invoice_date)}</td><td class="num">${money(p.si.total)}</td><td>${p.from?monTag(p.from+"-01"):"—"}</td><td><b>${monTag(p.to+"-01")}</b>${p.x?"":` <span class="mute" style="font-size:12px">${L("（照 invoice 日期）","(inv date)")}</span>`}</td></tr>`).join("")}</tbody></table></div>
+  ${P.length>500?`<p class="mute">${L(`只列前 500 张，按确定会全部 ${P.length} 张一起改`,`Showing 500 of ${P.length}`)}</p>`:""}
+  <p class="mute" style="font-size:12px">${L("黄色的 = 入账月份跟 invoice 日期的月份不一样（迟来的单）。收到日期：同一个月用 invoice 日期，不同月用那个月的 1 号。","Yellow = month differs from invoice date.")}</p>
+  <div class="actions"><button class="btn" id="rmGo" onclick="rmApply()">✓ ${L(`更新 ${P.length} 张的入账月份`,`Update ${P.length}`)}</button></div><p id="rmProg" class="mute"></p>`
+  :`<p class="tag ok">${L("全部都已经在对的月份 👍","All already in the right month")}</p>`}
+  ${RM.miss.length?`<details style="font-size:12px;margin-top:6px"><summary>${L(`Summary 里找不到的 ${RM.miss.length} 张`,`${RM.miss.length} not in summary`)}</summary>${RM.miss.slice(0,300).map(si=>`<div>${esc(supName(si.supplier_id))} · ${esc(si.invoice_no)} · ${dmy(si.invoice_date)} · $${money(si.total)}</div>`).join("")}</details>`:""}`)}
+async function rmApply(){const b=$("#rmGo");if(b)b.disabled=true;const by={};RM.plan.forEach(p=>(by[p.nd]=by[p.nd]||[]).push(p.si.id));let n=0;const back=RM.plan.map(p=>({id:p.si.id,v:p.si.received_date??null}));
+  try{for(const[d,ids]of Object.entries(by))for(let i=0;i<ids.length;i+=150){const part=ids.slice(i,i+150);const{error}=await sb.from("supplier_invoices").update({received_date:d}).in("id",part);if(error)throw error;n+=part.length;const e=$("#rmProg");if(e)e.textContent=`${n} / ${RM.plan.length}`}}
+  catch(e){alert(L("中断：","Stopped: ")+e.message)}
+  $("#photoOv")?.remove();await loadAll();render();
+  undoToast(L(`已更新 ${n} 张的入账月份`,`${n} updated`),async()=>{for(const x of back)await sb.from("supplier_invoices").update({received_date:x.v}).eq("id",x.id);await loadAll();render();toast(L("已还原","Restored"))})}
 /* ---- Contra 两边连起来：收款那边记的 Contra ↔ Supplier Invoice ---- */
 const isCtPay=p=>/contra/i.test([p.method,p.reference,p.remark].join(" "));
 const siSettled=x=>!!x.payment_date;
