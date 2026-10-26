@@ -333,7 +333,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-23d";
+const APP_VER="2026-10-26a";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -3630,8 +3630,21 @@ function parseInvText(lines){const own=/L3H\s*RESOURCES|ETK\s*(RESOURCES|TRAFFIC
   return{date,no,total:total==null?null:r2(total),sup}}
 async function tiReadPdfs(){if(TI._busy)return;TI._busy=true;try{await pool(TI.files.filter(f=>f.reading),OCR_N,async x=>{try{const{lines,ocr}=await readDocLines(x.file);const r=parseInvText(lines);x.ocr=ocr;x.textless=lines.join("").replace(/\s/g,"").length<30;
       for(const k of ["date","no","total","sup"])if(r[k]!=null&&r[k]!=="")x[k]=r[k]}catch(e){x.textless=true}
+    if(x.date&&!okYMD(+String(x.date).slice(0,4),+String(x.date).slice(5,7),+String(x.date).slice(8,10)))x.date=null;
     x.reading=false;tiAnalyse();if($("#tiGo")||$("#photoOv"))tiRender()})}finally{TI._busy=false}if(TI.files.some(f=>f.reading))setTimeout(tiReadPdfs,0)}
-function tiSet(name,k,v){const x=TI.files.find(f=>f.name===name);if(!x)return;v=String(v??"").trim();x[k]=k==="total"?(v===""?null:r2(numOr(v,0))):k==="date"?(toYMD(v)||null):(v||null);tiAnalyse();tiRender()}
+/* 打日期很随便也可以：23/1/25、23.1.2025、230125、23012025、23 Jan 25、23/1（没写年 = 今年） */
+function easyDate(v){const s=String(v??"").trim();if(!s)return null;let m;
+  if((m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)))return okYMD(+m[1],+m[2],+m[3]);
+  if((m=s.match(/^(\d{1,2})[\/\-.\s](\d{1,2})(?:[\/\-.\s](\d{2}|\d{4}))?$/)))return okYMD(m[3]?+(m[3].length===2?"20"+m[3]:m[3]):yearFor(+m[2],+m[1]),+m[2],+m[1]);
+  if((m=s.match(/^(\d{2})(\d{2})(\d{2}|\d{4})$/)))return okYMD(+(m[3].length===2?"20"+m[3]:m[3]),+m[2],+m[1]);
+  if((m=s.match(/^(\d{1,2})\s*([A-Za-z]{3,})\.?\s*(\d{2}|\d{4})?$/))&&MONN[m[2].toLowerCase().slice(0,3)])return okYMD(m[3]?+(m[3].length===2?"20"+m[3]:m[3]):yearFor(MONN[m[2].toLowerCase().slice(0,3)],+m[1]),MONN[m[2].toLowerCase().slice(0,3)],+m[1]);
+  return dateIn2(s)}
+const okYMD=(y,m,d)=>y>=2000&&y<=2100&&m>=1&&m<=12&&d>=1&&d<=lastDay(y,m)?`${y}-${z2(m)}-${z2(d)}`:null;
+/* 没写年：用今年；如果变成一个星期以后的日期，就当去年 */
+function yearFor(m,d){const t=today(),y=+t.slice(0,4),c=`${y}-${z2(m)}-${z2(d)}`;return c>addDays(t,7)?y-1:y}
+function tiSet(name,k,v){const x=TI.files.find(f=>f.name===name);if(!x)return;v=String(v??"").trim();
+  if(k==="date"&&v&&!easyDate(v)){toast(L(`看不懂「${v}」，可以打 23/1/25 或 230125`,`Can't read "${v}" — try 23/1/25`));setTimeout(tiRender,0);return}
+  x[k]=k==="total"?(v===""?null:r2(numOr(v,0))):k==="date"?(easyDate(v)||null):(v||null);tiAnalyse();setTimeout(tiRender,0)}
 const TI_ST={ok:["ok",["配对到","Matched"]],has:["warn",["已经有 Tax Invoice 附件","Already has a tax invoice"]],same:["mute",["已经上传过（同文件名）","Already uploaded"]],new:["warn",["系统没有 → 新增","Not in system → create"]],bad:["bad",["不是 PDF","Not a PDF"]],reading:["mute",["读取中…","Reading…"]],fill:["bad",["要补资料","Fill in"]]};
 function tiRender(){const F=TI.files,cnt=k=>F.filter(x=>x.st===k).length,go=F.filter(x=>TI.take.has(x.name)&&["ok","has","new"].includes(x.st));
   const order={reading:0,fill:1,bad:2,new:3,has:4,ok:5,same:6},rows=[...F].sort((a,b)=>order[a.st]-order[b.st]||String(a.date).localeCompare(String(b.date)));
@@ -3648,7 +3661,7 @@ function tiRender(){const F=TI.files,cnt=k=>F.filter(x=>x.st===k).length,go=F.fi
   ${rows.map(x=>{const[t,l]=TI_ST[x.st],can=["ok","has","new"].includes(x.st);return `<tr><td>${can?`<input type="checkbox" ${TI.take.has(x.name)?"checked":""} onchange="TI.take[this.checked?'add':'delete'](${esc(JSON.stringify(x.name))});tiRender()">`:""}</td>
     <td><span class="tag ${t}">${L(...l)}</span>${x.ocr&&!x.reading?' <span class="tag bad">OCR</span>':""}${x.src==="hint"?`<div class="mute" style="font-size:12px">${L("用文件名里的单号配对到","Matched by number in file name")}</div>`:""}${x.src==="pdf"||x.src==="hint"?`<div><a href="#" onclick="window.open(URL.createObjectURL(TI.files.find(f=>f.name===${esc(JSON.stringify(x.name))}).file));return false" style="font-size:12px">👁 ${esc(x.name.slice(0,28))}</a></div>`:""}</td>
     ${(x.src==="pdf"||x.src==="hint")&&!x.reading?(()=>{const N=esc(JSON.stringify(x.name)),inp=(k,v,attr)=>`<input class="tiin${v==null||v===""?" miss":""}" ${attr} value="${esc(v??"")}" onchange="tiSet(${N},'${k}',this.value)">`;
-      return `<td>${inp("date",x.date,'type="date" style="width:140px"')}</td><td>${inp("sup",x.sup,'list="tiSups" style="width:200px"')}</td><td>${inp("no",x.no,'style="width:170px"')}</td><td class="num">${inp("total",x.total,'type="number" step="0.01" style="width:110px;text-align:right"')}</td>`})()
+      return `<td>${inp("date",x.date&&okYMD(+x.date.slice(0,4),+x.date.slice(5,7),+x.date.slice(8,10))?dmy(x.date):"",`style="width:110px" placeholder="23/1/25" title="${L("可以打 23/1/25、230125、23 Jan 25","Type 23/1/25, 230125 or 23 Jan 25")}" onfocus="this.select()"`)}</td><td>${inp("sup",x.sup,'list="tiSups" style="width:200px"')}</td><td>${inp("no",x.no,'style="width:170px"')}</td><td class="num">${inp("total",x.total,'type="number" step="0.01" style="width:110px;text-align:right"')}</td>`})()
     :`<td>${x.date?dmy(x.date):""}</td><td>${esc(x.sup||"")}</td><td>${esc(x.no||x.name)}</td><td class="num">${x.total!=null?money(x.total):""}</td>`}
     <td>${x.si?`${esc(x.si.invoice_no)} · ${esc(supName(x.si.supplier_id))}`:""}${x.warn?` <span class="tag warn">${esc(x.warn)}</span>`:""}</td></tr>`}).join("")}</tbody></table></div>
   <datalist id="tiSups">${S.d.suppliers.map(x=>`<option value="${esc(x.name)}">`).join("")}</datalist>
