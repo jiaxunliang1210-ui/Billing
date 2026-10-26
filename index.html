@@ -333,7 +333,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-26c";
+const APP_VER="2026-10-26d";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -2865,7 +2865,8 @@ function siGstInit(){const fm=$("#gForm");if(!fm||!fm.gst_amount||fm.querySelect
   cb.checked=(!isNew&&fm.gst_amount.value!==""&&Number(fm.gst_amount.value)===0)||(isNew&&supNoGst(fm.supplier_id?.value));apply();
   cb.onchange=()=>{if(!cb.checked){fm.gst_amount.value="";fm.total.value=""}apply();S.dirty=true};
   fm.amount_before_gst.addEventListener("input",()=>{if(cb.checked)apply()});
-  fm.gst_amount.addEventListener("input",()=>{if(fm.gst_amount.value!==""&&Number(fm.gst_amount.value)===0&&!cb.checked){cb.checked=true;apply()}});
+  /* 打完（离开格子）才判断；打 0.05 的时候不会被当成「没有 GST」 */
+  fm.gst_amount.addEventListener("change",()=>{const v=fm.gst_amount.value.trim();if(v!==""&&Number(v)===0&&!cb.checked){cb.checked=true;apply()}});
   fm.supplier_id?.addEventListener("change",()=>{if(!S.gEdit?.id){const v=supNoGst(fm.supplier_id.value);if(v!==cb.checked){cb.checked=v;if(!v){fm.gst_amount.value=""}apply()}}});
   fm.addEventListener("siPdfFilled",()=>{const v=fm.gst_amount.value;if(v!==""&&Number(v)===0){cb.checked=true;apply()}else if(v!==""&&cb.checked){cb.checked=false;apply()}})}
 function siDueInit(){const fm=$("#gForm");if(!fm||!fm.due_date)return;siGstInit();const exp=siDueCalc(fm),cur=fm.due_date.value;fm.dataset.dueTouched=cur&&exp&&cur!==exp?"1":"";
