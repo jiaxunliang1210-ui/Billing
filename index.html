@@ -333,7 +333,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-26b";
+const APP_VER="2026-10-26c";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -3137,6 +3137,14 @@ async function ctApply(){const P=ctPlan(),co=S.company,b=$("#ctGo");if(b)b.disab
 let RM=null;
 async function rmFile(input){const f=input.files?.[0];input.value="";if(!f)return;
   try{pvOv(`<p>⏳ ${L("读取中…","Reading…")}</p>`);await loadExcelJS();const wb=new ExcelJS.Workbook();await wb.xlsx.load(await f.arrayBuffer());
+    /* 简单的表：Invoice No + 入账月份（例：按每个月 Tax Invoice PDF 整理出来的） */
+    for(const w of wb.worksheets){if(!w.getRow)continue;for(let r=1;r<=5;r++){const h={};w.getRow(r).eachCell((c,k)=>{h[k]=String(c.text||c.value||"").trim().toLowerCase()});
+        const fi=rx=>+(Object.entries(h).find(([,v])=>rx.test(v))||[])[0]||0,cn=fi(/invoice\s*(no|number)|单号/),cm=fi(/入账月份|received\s*month|^month$/);
+        if(cn&&cm){const map=new Map();let n=0,last="";const cs=fi(/supplier|供应商|name/),ct=fi(/^total/);
+          for(let i=r+1;i<=w.rowCount;i++){const row=w.getRow(i),no=String(row.getCell(cn).text||"").trim();if(!no)continue;const mv=row.getCell(cm).value;
+            const m=mv instanceof Date?ymd(new Date(mv.getTime()+60000)).slice(0,7):(String(row.getCell(cm).text||"").trim().match(/(\d{4})[-\/](\d{1,2})/)||[]).slice(1).map((x,j)=>j?z2(x):x).join("-");if(!/^\d{4}-\d{2}$/.test(m))continue;
+            const x={r:i,no,an:suAn(no),m,name:cs?String(row.getCell(cs).text||"").trim():"",tot:ct?numOr(row.getCell(ct).value?.result??row.getCell(ct).value,null):null};if(!map.has(x.an))map.set(x.an,[]);map.get(x.an).push(x);n++;if(m>last)last=m}
+          RM={file:f.name,sheet:w.name,blocks:0,simple:true,last,map,rows:n,fill:true};rmPlan();rmRender();return}}}
     const ws=wb.worksheets.find(w=>/tax/i.test(w.name))||wb.worksheets.find(w=>/supplier|purchase|ap\b/i.test(w.name));if(!ws)throw new Error(L("找不到「TAX INVOICES」那页","No TAX INVOICES sheet found"));
     let hr=0,C={};for(let r=1;r<=12&&!hr;r++){const row=ws.getRow(r),h={};row.eachCell((c,k)=>{h[k]=String(c.text||c.value||"").trim().toLowerCase()});
       const fi=rx=>+(Object.entries(h).find(([,v])=>rx.test(v))||[])[0]||0;const d=fi(/invoice\s*date|^date/),n=fi(/invoice\s*(no|number)/);
@@ -3165,7 +3173,7 @@ function rmPlan(){const sis=S.d.supplier_invoices.filter(siMine),out=[],miss=[];
   RM.plan=out;RM.miss=miss;RM.matched=sis.length-miss.length}
 function rmRender(){const P=RM.plan,bym={};P.forEach(p=>{const b=bym[p.to]=bym[p.to]||{n:0,amt:0};b.n++;b.amt+=Number(p.si.total)||0});
   pvOv(`<div class="pvhead"><h3 style="margin:0">📅 ${L("按 AP-AR Summary 分入账月份","Received month from AP-AR summary")}</h3><span class="mute" style="font-size:13px">${esc(RM.file)} · ${esc(RM.sheet)}</span><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
-  <ul style="font-size:14px;margin:6px 0"><li>${L(`Summary 有 ${RM.rows} 行，分成 ${RM.blocks} 段颜色（每段 = 一个月），最后一段是 ${RM.last||"—"}`,`${RM.rows} rows in ${RM.blocks} colour blocks, last = ${RM.last}`)}</li>
+  <ul style="font-size:14px;margin:6px 0"><li>${RM.simple?L(`表里有 ${RM.rows} 张单（单号 → 入账月份），最晚是 ${RM.last||"—"}`,`${RM.rows} invoices with months, latest ${RM.last}`):L(`Summary 有 ${RM.rows} 行，分成 ${RM.blocks} 段颜色（每段 = 一个月），最后一段是 ${RM.last||"—"}`,`${RM.rows} rows in ${RM.blocks} colour blocks, last = ${RM.last}`)}</li>
     <li>${L(`系统里的 Supplier Invoice：配对到 ${RM.matched} 张，Summary 里找不到 ${RM.miss.length} 张`,`Matched ${RM.matched}, not in summary ${RM.miss.length}`)}</li>
     <li><b>${L(`要改入账月份：${P.length} 张`,`To change: ${P.length}`)}</b></li></ul>
   <label class="chk" style="font-size:13px"><input type="checkbox" ${RM.fill?"checked":""} onchange="RM.fill=this.checked;rmPlan();rmRender()">${L(`Summary 里找不到、日期在 ${RM.last||"—"} 或以前的：照 invoice 日期的月份（之后的不动）`,`Not in summary and dated up to ${RM.last}: use invoice month`)}</label>
