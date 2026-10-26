@@ -333,7 +333,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-26d";
+const APP_VER="2026-10-26e";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -1005,29 +1005,55 @@ function vehicleTimeline(plate){gpsLoad();const list=S.d.delivery_orders.filter(
   ov.onclick=e=>{if(e.target.closest("[data-a=x]")||e.target===ov){ov.remove();return}const g=e.target.closest("[data-gd]");if(g){gpsDetail(g.dataset.gp,g.dataset.gd);return}const s=e.target.closest(".seg[data-id]");if(s){ov.remove();editDO(s.dataset.id)}};
   ov.querySelector("#tlSel").onchange=e=>vehicleTimeline(e.target.value)}
 
-/* ---- DO 断号 ---- */
-async function doGaps(){toast(L("检查中…","Checking…"));
-  let all;try{all=await fetchAll(()=>sb.from("delivery_orders").select("do_no,do_date,record_only").eq("company",S.company).gte("do_date",addDays(today(),-400)))}catch(e){return toast(e.message)}
-  const voids=new Set(S.d.do_voids.map(v=>String(v.do_no).trim())),seen=new Map();
-  for(const d of all){if(d.record_only)continue;const s=String(d.do_no||"").trim();if(/^\d{3,7}$/.test(s))seen.set(+s,{s,date:d.do_date})}
-  const nums=[...seen.keys()].sort((a,b)=>a-b),gaps=[];
-  for(let i=1;i<nums.length;i++){const a=nums[i-1],b=nums[i];if(b-a>1&&b-a<=30){const w=seen.get(a).s.length;
-    for(let n=a+1;n<b;n++){const s=String(n).padStart(w,"0");if(!voids.has(s)&&!voids.has(String(n)))gaps.push({s,prev:seen.get(a),next:seen.get(b)})}}}
-  gaps.reverse();
+/* ---- DO 断号：照 DO 本子顺序列出，缺的号码夹在前后几张中间 ---- */
+let GP=null;
+async function doGaps(keep){toast(L("检查中…","Checking…"));
+  let all;try{all=await fetchAll(()=>sb.from("delivery_orders").select("id,do_no,do_date,record_only,customer_id,project,service,plate,driver,start_time,end_time,from_loc,to_loc,invoice_id").eq("company",S.company).gte("do_date",addDays(today(),-400)))}catch(e){return toast(e.message)}
+  const voids=new Map(S.d.do_voids.map(v=>[String(v.do_no).trim().replace(/^0+/,""),v])),seen=new Map();
+  for(const d of all){if(d.record_only)continue;const s=String(d.do_no||"").trim();if(/^\d{3,7}$/.test(s)&&!seen.has(+s))seen.set(+s,{...d,s,n:+s})}
+  const list=[...seen.values()].sort((a,b)=>a.n-b.n),segs=[];
+  for(let i=1;i<list.length;i++){const a=list[i-1],b=list[i];if(b.n-a.n>1&&b.n-a.n<=30){const w=a.s.length,miss=[],vd=[];
+      for(let n=a.n+1;n<b.n;n++){const s=String(n).padStart(w,"0");(voids.has(String(n))?vd:miss).push(s)}
+      if(miss.length)segs.push({i,a,b,miss,vd,before:list.slice(Math.max(0,i-3),i),after:list.slice(i,i+3)})}}
+  /* 号码顺序跟日期对不上（后一张比前一张早 3 天以上） */
+  const odd=new Set();for(let i=1;i<list.length;i++){if(list[i].n-list[i-1].n<=30&&daysBetween(list[i-1].do_date,list[i].do_date)<-3){odd.add(list[i].n);odd.add(list[i-1].n)}}
+  GP={list,segs:segs.reverse(),odd,plate:keep?.plate||"",open:keep?.open||new Set()};gpRender()}
+function gpRow(d){const od=GP.odd.has(d.n);return `<tr class="${od?"amb":""}"><td><b>${esc(d.s)}</b></td><td>${dmy(d.do_date)}${od?` <span class="tag warn" title="${L("号码顺序跟日期对不上","Number order and date don't match")}">⚠</span>`:""}</td><td class="wrap">${esc(custName(d.customer_id))}</td><td>${esc(d.project||"")}</td><td>${esc(d.service||"")}</td><td>${esc(d.plate||"")}</td><td>${esc(d.driver||"")}</td><td style="white-space:nowrap">${d.start_time?d.start_time.slice(0,5)+"–"+String(d.end_time||"").slice(0,5):""}</td><td class="wrap" style="font-size:12px">${esc([d.from_loc,d.to_loc].filter(Boolean).join(" → "))}</td></tr>`}
+function gpRender(){const G=GP,plates=[...new Set(G.list.map(d=>d.plate).filter(Boolean))].sort();
+  const segs=G.segs.filter(g=>!G.plate||[...g.before,...g.after].some(d=>d.plate===G.plate)),nMiss=sum(segs,g=>g.miss.length);
   let ov=$("#photoOv");if(ov)ov.remove();ov=document.createElement("div");ov.id="photoOv";
-  ov.innerHTML=`<div class="pvbox" style="max-width:760px"><div class="pvhead"><h3 style="margin:0">🔢 ${L("DO 断号","Missing DO numbers")} <span class="tag ${gaps.length?"warn":"ok"}">${gaps.length}</span></h3><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕ ${L("关闭","Close")}</button></div>
-    <p class="mute" style="font-size:13px;margin-top:0">${L("DO 本子是连号的。下面这些号码前后都有，但系统里没有 —— 可能还没录、漏 bill，或者作废了。作废的按「作废」，以后不会再出现。（「只记录 NIL」的供应商 DO 不算在内）","DO books are numbered in sequence. These numbers are missing between existing ones.")}</p>
-    ${gaps.length?`<div class="tw"><table><thead><tr><th>DO No</th><th>${L("前一张","Before")}</th><th>${L("后一张","After")}</th><th></th></tr></thead><tbody>
-      ${gaps.slice(0,300).map(g=>`<tr><td><b>${esc(g.s)}</b></td><td>${esc(g.prev.s)} · ${dmy(g.prev.date)}</td><td>${esc(g.next.s)} · ${dmy(g.next.date)}</td>
-        <td style="white-space:nowrap"><button class="btn sm" data-new="${esc(g.s)}" data-date="${g.prev.date}">${L("去录","Key in")}</button> <button class="btn sec sm" data-void="${esc(g.s)}">${L("作废","Void")}</button></td></tr>`).join("")}</tbody></table></div>`
+  ov.innerHTML=`<div class="pvbox" style="max-width:1150px"><div class="pvhead"><h3 style="margin:0">🔢 ${L("DO 断号","Missing DO numbers")} <span class="tag ${nMiss?"warn":"ok"}">${nMiss}</span></h3><span style="flex:1"></span>
+      <button class="btn sec sm" data-a="xl">⬇ Excel</button><button class="btn sec sm" data-a="x">✕ ${L("关闭","Close")}</button></div>
+    <p class="mute" style="font-size:13px;margin-top:0">${L("照 DO 本子的顺序：每段缺的号码，上下各列出 3 张已经录的 DO（日期、客户、Project、Service、车牌、司机、时间），对着 DO 本子看缺的是哪一张。黄色 ⚠ = 号码顺序跟日期对不上（可能号码打错或用了别本）。「只记录 NIL」的供应商 DO 不算。","Gaps shown in book order with 3 recorded DOs either side. ⚠ = number order and date don't match.")}</p>
+    <div class="filters" style="margin:0 0 8px"><label class="f">${L("车牌","Vehicle")}<select data-a="plate">${optList(plates.map(p=>[p,p]),G.plate,L("全部","All"))}</select></label></div>
+    ${segs.length?`<div style="max-height:62vh;overflow:auto">${segs.map((g,k)=>{const key=g.a.s+"-"+g.b.s,open=G.open.has(key),rng=g.miss.length>1?`${g.miss[0]}–${g.miss.at(-1)}`:g.miss[0];
+      return `<div class="panel" style="padding:8px 10px;margin:0 0 10px"><table style="font-size:13px"><thead><tr><th>DO No</th><th>${L("日期","Date")}</th><th>${L("客户","Customer")}</th><th>Project</th><th>Service</th><th>${L("车牌","Vehicle")}</th><th>${L("司机","Driver")}</th><th>${L("时间","Time")}</th><th>${L("地点","Location")}</th></tr></thead><tbody>
+        ${g.before.map(gpRow).join("")}
+        <tr class="red"><td colspan="9"><b>⚠ ${esc(rng)}</b> · ${L(`缺 ${g.miss.length} 张`,`${g.miss.length} missing`)}${g.vd.length?` <span class="mute">（${L("另有","plus")} ${g.vd.length} ${L("张已作废","voided")}）</span>`:""}
+          <span style="float:right;white-space:nowrap">${g.miss.length===1?`<button class="btn sm" data-new="${esc(g.miss[0])}" data-date="${g.a.do_date}" data-cust="${g.a.customer_id||""}" data-plate="${esc(g.a.plate||"")}">${L("去录","Key in")}</button> <button class="btn sec sm" data-void="${esc(g.miss[0])}">${L("作废","Void")}</button>`
+            :`<button class="btn sec sm" data-open="${esc(key)}">${open?L("收起","Hide"):L("一张一张看","One by one")}</button> <button class="btn sec sm" data-voidall="${esc(g.miss.join(","))}">${L("整段作废","Void all")}</button>`}</span>
+          ${open?`<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px">${g.miss.map(s=>`<span class="tag" style="padding:4px 6px">${esc(s)} <button class="btn sm" data-new="${esc(s)}" data-date="${g.a.do_date}" data-cust="${g.a.customer_id||""}" data-plate="${esc(g.a.plate||"")}">${L("去录","Key in")}</button> <button class="btn sec sm" data-void="${esc(s)}">${L("作废","Void")}</button></span>`).join("")}</div>`:""}</td></tr>
+        ${g.after.map(gpRow).join("")}</tbody></table></div>`}).join("")}</div>`
       :`<div class="pvnone">✓ ${L("没有断号","No gaps")}</div>`}
     ${S.d.do_voids.length?`<details style="margin-top:10px"><summary class="mute">${L("已作废","Voided")} (${S.d.do_voids.length})</summary><p style="font-size:13px">${S.d.do_voids.map(v=>`${esc(v.do_no)}${v.reason?" – "+esc(v.reason):""}`).join("、")}</p></details>`:""}</div>`;
   document.body.appendChild(ov);
+  ov.querySelector("[data-a=plate]").onchange=e=>{GP.plate=e.target.value;gpRender()};
   ov.onclick=async e=>{if(e.target.closest("[data-a=x]")||e.target===ov){ov.remove();return}
-    const nw=e.target.closest("[data-new]");if(nw){ov.remove();S.doForm=recompute({...blankDO(),do_no:nw.dataset.new,do_date:nw.dataset.date});S.dirty=true;S.tab="do";render();window.scrollTo({top:0,behavior:"smooth"});return}
-    const vd=e.target.closest("[data-void]");if(vd){const reason=prompt(L(`DO ${vd.dataset.void} 作废的原因（例：写错、取消）`,`Reason DO ${vd.dataset.void} is void`),"");if(reason==null)return;
-      const{data,error}=await sb.from("do_voids").insert({company:S.company,do_no:vd.dataset.void,reason:reason||null}).select().single();if(error)return toast(error.message);
-      S.d.do_voids.push(data);toast(L("已作废","Voided"));doGaps()}}}
+    if(e.target.closest("[data-a=xl]"))return gpXlsx();
+    const op=e.target.closest("[data-open]");if(op){const k=op.dataset.open;GP.open.has(k)?GP.open.delete(k):GP.open.add(k);gpRender();return}
+    const nw=e.target.closest("[data-new]");if(nw){ov.remove();S.doForm=recompute({...blankDO(),do_no:nw.dataset.new,do_date:nw.dataset.date,customer_id:nw.dataset.cust||"",plate:nw.dataset.plate||""});S.dirty=true;S.tab="do";render();window.scrollTo({top:0,behavior:"smooth"});toast(L("号码、日期、客户、车牌先照前一张填好，请照 DO 本子改","Prefilled from the previous DO — check against the book"));return}
+    const vd=e.target.closest("[data-void],[data-voidall]");if(vd){const nos=(vd.dataset.void||vd.dataset.voidall).split(",");const reason=prompt(L(`DO ${nos.length>1?nos[0]+"–"+nos.at(-1)+`（${nos.length} 张）`:nos[0]} 作废的原因（例：写错、撕掉、取消）`,`Reason for voiding ${nos.join(", ")}`),"");if(reason==null)return;
+      const{data,error}=await sb.from("do_voids").insert(nos.map(n=>({company:S.company,do_no:n,reason:reason||null}))).select();if(error)return toast(error.message);
+      S.d.do_voids.push(...(data||[]));toast(L(`已作废 ${nos.length} 张`,`${nos.length} voided`));doGaps({plate:GP.plate,open:GP.open})}}}
+/* Excel：从最小到最大号码整本列出（已录 / 缺 / 作废），方便跟 DO 本子一页一页对 */
+async function gpXlsx(){const G=GP;if(!G.list.length)return;const segN=new Set(G.segs.flatMap(g=>[g.a.n,g.b.n]));
+  const voids=new Map(S.d.do_voids.map(v=>[String(v.do_no).trim().replace(/^0+/,""),v])),by=new Map(G.list.map(d=>[d.n,d])),rows=[];
+  const lo=G.list[0].n,hi=G.list.at(-1).n;if(hi-lo>20000)return toast(L("号码范围太大","Range too large"));
+  for(let n=lo;n<=hi;n++){const d=by.get(n);if(d){rows.push([d.s,d.do_date,custName(d.customer_id),d.project||"",d.service||"",d.plate||"",d.driver||"",d.start_time?d.start_time.slice(0,5):"",d.end_time?String(d.end_time).slice(0,5):"",[d.from_loc,d.to_loc].filter(Boolean).join(" → "),G.odd.has(n)?L("已录（日期顺序不对）","Recorded (date out of order)"):L("已录","Recorded")]);continue}
+    const prev=G.list.filter(x=>x.n<n).at(-1),next=G.list.find(x=>x.n>n);if(!prev||!next||next.n-prev.n>30)continue;const v=voids.get(String(n));
+    rows.push([String(n).padStart(prev.s.length,"0"),null,"","","","","","","","",v?L("作废","Void")+(v.reason?"："+v.reason:""):L("缺","Missing")])}
+  exportXlsx(`${S.company}_DO_book_${today()}.xlsx`,[{name:"DO Book",cols:[{h:"DO No"},{h:L("日期","Date"),t:"date"},{h:L("客户","Customer"),max:34},{h:"Project"},{h:"Service"},{h:L("车牌","Vehicle")},{h:L("司机","Driver")},{h:"In"},{h:"Out"},{h:L("地点","Location"),max:40},{h:L("状态","Status")}],
+    rows,fill:k=>/缺|Missing/.test(rows[k][10])?"red":/作废|Void/.test(rows[k][10])?null:/顺序|order/.test(rows[k][10])?"amber":null}])}
 
 /* ---- 已开单 DO：改的话要写原因 ---- */
 const DO_LOG_FIELDS=["do_date","customer_id","project","service","plate","driver","do_no","start_time","end_time","from_loc","to_loc","billable_hours","rate","surcharge","amount","loads","record_only","lifting_sup"];
