@@ -333,7 +333,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-27a";
+const APP_VER="2026-10-27b";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -3248,15 +3248,81 @@ async function ctLink(sis,p){const ids=[];for(const x of sis){const{error}=await
   return ids}
 /* 第 3 项：找出客户那边记了 Contra、Supplier 那边还没标的 */
 function ctScanRows(){const out=[],used=new Set();
-  for(const p of S.d.payments.filter(p=>p.company===S.company&&isCtPay(p)).sort((a,b)=>String(a.payment_date).localeCompare(String(b.payment_date)))){
+  for(const p of S.d.payments.filter(p=>p.company===S.company&&isCtPay(p)&&!/Contra Summary/i.test(p.remark||"")).sort((a,b)=>String(a.payment_date).localeCompare(String(b.payment_date)))){
     const left=ctLeft(p);if(left<=0.005)continue;const sid=supForCust(p.customer_id);
     const pool=sid?S.d.supplier_invoices.filter(x=>x.supplier_id===sid&&!siSettled(x)&&!used.has(x.id)).sort((a,b)=>String(a.invoice_date).localeCompare(String(b.invoice_date))):[];
     const g=ctGuess(p,pool);g.forEach(x=>used.add(x.id));out.push({p,left,sid,g,on:g.length>0})}
   return out}
 let CTS=null;
+/* ---- ⬆ CHC 的 Contra 单（Deposit Summary = 我们的 Supplier Invoice 被抵销；Batch Payment Summary = 我们开的 invoice 被抵销） ---- */
+let CC=null;
+async function pdfRows(file){await loadPdfJs();const pdf=await pdfjsLib.getDocument({data:await file.arrayBuffer()}).promise,out=[];
+  for(let n=1;n<=pdf.numPages;n++){const tc=await(await pdf.getPage(n)).getTextContent(),its=tc.items.filter(i=>String(i.str||"").trim()).map(i=>({x:i.transform[4],y:i.transform[5],t:String(i.str)}));
+    its.sort((a,b)=>b.y-a.y||a.x-b.x);const rows=[];for(const it of its){const r=rows.find(r=>Math.abs(r.y-it.y)<=2.5);if(r)r.it.push(it);else rows.push({y:it.y,it:[it]})}
+    rows.sort((a,b)=>b.y-a.y).forEach(r=>out.push(r.it.sort((a,b)=>a.x-b.x).map(z=>z.t).join(" ").replace(/\s+/g," ").trim()))}
+  return out}
+function ccParse(lines,name){const T=lines.join("\n"),type=/Batch\s*Payment\s*Summary/i.test(T)?"batch":/Deposit\s*Summary/i.test(T)?"deposit":/Contra\s*Statement/i.test(T)?"stmt":"";
+  const MON={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};let date=null,ref="";
+  const pi=lines.findIndex(l=>/Payment\s*Date/i.test(l));for(const l of lines.slice(Math.max(0,pi),pi+4)){const m=l.match(/\b(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+(\d{4})\b/i);if(m){date=`${m[3]}-${z2(MON[m[2].toLowerCase()])}-${z2(m[1])}`;break}}
+  if(!date){const m=String(name).match(/(\d{1,2})(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*(\d{4})/i);if(m)date=`${m[3]}-${z2(MON[m[2].toLowerCase()])}-${z2(m[1])}`}
+  const ri=lines.findIndex((l,k)=>k<25&&/^Reference$/i.test(l.trim()));if(ri>=0&&lines[ri+1]&&!/Payment to|Payment from/i.test(lines[ri+1]))ref=lines[ri+1].trim();
+  const rows=[];for(const l of lines){const m=l.match(/^(L3H|ETK)\s+Resources\s+Pte\.?\s*Ltd\.?\s+(\S+)\s+(.*?)(-?[\d,]+\.\d{2})$/i);if(!m)continue;
+    rows.push({co:m[1].toUpperCase(),no:m[2].replace(/[.,;]+$/,""),amt:r2(Number(m[4].replace(/,/g,""))),rest:m[3]})}
+  const tm=T.replace(/\n/g," ").match(/Total\s+(\d+)\s+item\(s\)\s*SGD\s*([\d,]+\.\d{2})/i);
+  return{type,date,ref,rows,total:tm?r2(Number(tm[2].replace(/,/g,""))):null,count:tm?+tm[1]:null,co:rows[0]?.co||""}}
+async function ccFiles(input){let fs=[...(input.files||[])];input.value="";if(!fs.length)return;
+  pvOv(`<p>⏳ ${L(`读取 ${fs.length} 个 PDF…`,`Reading ${fs.length} PDF(s)…`)}</p>`);
+  const files=[];for(const f of fs){if(/\.zip$/i.test(f.name)){await loadJSZip();const z=await JSZip.loadAsync(await f.arrayBuffer());for(const e of Object.values(z.files))if(!e.dir&&/\.pdf$/i.test(e.name))files.push(new File([await e.async("blob")],e.name.split("/").pop(),{type:"application/pdf"}))}else files.push(f)}
+  const docs=[];for(const f of files){try{const p=ccParse(await pdfRows(f),f.name);docs.push({name:f.name,...p})}catch(e){docs.push({name:f.name,err:e.message||String(e),rows:[]})}}
+  docs.sort((a,b)=>String(a.date).localeCompare(String(b.date)));CC={docs};ccPlan();ccRender()}
+function ccPlan(){const co=S.company,usedSI=new Set(),bal=new Map();
+  for(const d of CC.docs){d.items=[];d.skip="";if(d.err)continue;
+    if(d.type==="stmt"){d.skip=L("这是对账单（Contra Statement），只参考，不导入（不然会跟 Batch Payment 重复）","Statement only — not imported");continue}
+    if(!d.type){d.skip=L("看不出是 Deposit / Batch Payment Summary","Unknown format");continue}
+    if(d.co&&d.co!==co){d.skip=L(`这是 ${d.co} 的单，请切换到 ${d.co} 再上传`,`Belongs to ${d.co}`);continue}
+    for(const r of d.rows){const it={...r,on:true};d.items.push(it);const k=suAn(r.no);
+      if(d.type==="deposit"){const c=S.d.supplier_invoices.filter(x=>siMine(x)&&suAn(x.invoice_no)===k&&!usedSI.has(x.id));const si=c.find(x=>/CHC/i.test(supName(x.supplier_id)))||c[0];
+        if(!si){it.st="none";it.on=false;continue}it.si=si;usedSI.add(si.id);
+        if(si.payment_date){it.st="done";it.on=false;it.note=/contra/i.test(si.status||"")?L(`已经 Contra ${dmy(si.payment_date)}`,`Contra ${dmy(si.payment_date)}`):L(`已付 ${dmy(si.payment_date)}`,`Paid ${dmy(si.payment_date)}`);continue}
+        it.st=Math.abs((Number(si.total)||0)-r.amt)<0.01?"ok":"diff";if(it.st==="diff")it.note=L(`系统 $${money(si.total)}`,`System $${money(si.total)}`)}
+      else{const inv=S.d.invoices.find(i=>i.company===co&&i.status!=="Cancelled"&&suAn(i.invoice_no)===k);
+        if(!inv){it.st="none";it.on=false;continue}it.inv=inv;const b=bal.has(inv.id)?bal.get(inv.id):balOf(inv);
+        if(b<=0.005){it.st="done";it.on=false;it.note=L("已经收齐","Fully paid");continue}
+        it.amt2=r2(Math.min(b,r.amt));bal.set(inv.id,r2(b-it.amt2));it.st=Math.abs(it.amt2-r.amt)<0.01&&Math.abs(Number(inv.total)-r.amt)<0.01?"ok":"diff";
+        if(it.st==="diff")it.note=Math.abs(it.amt2-r.amt)>0.005?L(`只欠 $${money(b)}，记 $${money(it.amt2)}`,`Owes $${money(b)}`):L(`部分抵销（invoice $${money(inv.total)}）`,`Partial (invoice $${money(inv.total)})`)}}
+    if(d.type==="batch"){const amt=r2(sum(d.items.filter(i=>i.on&&i.inv),i=>i.amt2));const dup=S.d.payments.find(p=>p.company===co&&/contra/i.test(p.method||"")&&p.payment_date===d.date&&Math.abs(Number(p.amount)-amt)<0.01);
+      if(dup&&amt>0){d.dup=dup;d.items.forEach(i=>{if(i.on){i.on=false;i.st="done";i.note=L("这笔已经记过","Already recorded")}})}}}}
+const CC_ST={ok:["ok","✓"],diff:["warn","⚠"],done:["mute","已处理"],none:["bad","✗ 找不到"]};
+function ccRender(){const D=CC.docs,go=D.flatMap(d=>d.items.filter(i=>i.on));
+  pvOv(`<div class="pvhead"><h3 style="margin:0">⬆ ${L("CHC Contra 单","CHC contra summaries")} · ${S.company}</h3><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
+  <p class="mute" style="font-size:13px;margin-top:0">${L("Deposit Summary：CHC 开给我们的单被抵销 → Supplier Invoice 标 Contra。Batch Payment Summary：我们开给 CHC 的单被抵销 → 记一笔 Contra 收款（每个 PDF 一笔）。日期 = PDF 上的 Payment Date。打勾的才会处理。","Deposit = our supplier invoices settled; Batch Payment = our invoices settled.")}</p>
+  <div style="max-height:62vh;overflow:auto">${D.map((d,di)=>{const tot=r2(sum(d.rows,r=>r.amt)),bad=d.total!=null&&Math.abs(tot-d.total)>0.01;
+    return `<div class="panel" style="padding:8px 10px;margin:0 0 10px"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b>${d.type==="batch"?"Batch Payment":d.type==="deposit"?"Deposit":d.type==="stmt"?"Contra Statement":"?"}</b>
+      <span>${d.date?dmy(d.date):"—"}</span>${d.ref?`<span class="mute">${esc(d.ref)}</span>`:""}<span class="mute" style="font-size:12px">${esc(d.name)}</span><span style="flex:1"></span>
+      ${d.rows.length?`<span class="${bad?"tag warn":"mute"}" style="font-size:12px">${L(`读到 ${d.rows.length} 行 $${money(tot)}`,`${d.rows.length} rows $${money(tot)}`)}${d.total!=null?` / PDF Total $${money(d.total)}`:""}</span>`:""}</div>
+      ${d.err?`<p class="tag bad">${esc(d.err)}</p>`:d.skip?`<p class="tag warn" style="margin:6px 0 0">${esc(d.skip)}</p>`:d.dup?`<p class="tag mute" style="margin:6px 0 0">${L(`这个 PDF 已经记过（${dmy(d.dup.payment_date)} $${money(d.dup.amount)}）`,`Already recorded`)}</p>`:""}
+      ${d.items.length?`<table style="font-size:13px;margin-top:6px"><tbody>${d.items.map((it,ii)=>{const[t,l]=CC_ST[it.st]||CC_ST.none;return `<tr><td style="width:24px">${it.st==="ok"||it.st==="diff"?`<input type="checkbox" ${it.on?"checked":""} onchange="CC.docs[${di}].items[${ii}].on=this.checked">`:""}</td><td>${esc(it.no)}</td><td class="num">${money(it.amt)}</td>
+        <td><span class="tag ${t}">${l}</span> ${it.note?`<span class="mute" style="font-size:12px">${esc(it.note)}</span>`:""}</td><td class="mute" style="font-size:12px">${it.si?esc(supName(it.si.supplier_id))+" · "+dmy(it.si.invoice_date):it.inv?esc(custName(it.inv.customer_id))+" · "+dmy(it.inv.invoice_date):""}</td></tr>`}).join("")}</tbody></table>`:""}</div>`}).join("")}</div>
+  <div class="actions" style="margin-top:10px"><button class="btn" id="ccGo" ${go.length?"":"disabled"} onclick="ccApply()">✓ ${L(`处理打勾的 ${go.length} 张`,`Apply ${go.length}`)}</button></div><p id="ccProg" class="mute"></p>`)}
+async function ccApply(){const b=$("#ccGo");if(b)b.disabled=true;const undo={si:[],pay:[]},co=S.company;let nS=0,nP=0;const touched=[];
+  try{for(const d of CC.docs){const its=d.items.filter(i=>i.on);if(!its.length)continue;
+      if(d.type==="deposit"){for(const it of its){const si=it.si;undo.si.push({id:si.id,payment_date:si.payment_date??null,status:si.status??null,remark:si.remark??null});
+          const{error}=await sb.from("supplier_invoices").update({payment_date:d.date,status:"Contra",remark:[si.remark,`Contra ${dmy(d.date)}（CHC Deposit Summary${d.ref?" "+d.ref:""}）`].filter(Boolean).join(" · ").slice(0,250)}).eq("id",si.id);if(error)throw error;nS++}}
+      else if(d.type==="batch"){const byC={};its.forEach(it=>(byC[it.inv.customer_id]=byC[it.inv.customer_id]||[]).push(it));
+        for(const[cid,list]of Object.entries(byC)){const amt=r2(sum(list,i=>i.amt2));
+          const{data:p,error}=await sb.from("payments").insert({company:co,customer_id:cid,payment_date:d.date,amount:amt,method:"Contra",reference:(d.ref||"CHC Contra").slice(0,200),remark:`CHC Contra Summary (Batch Payment ${dmy(d.date)})`}).select().single();if(error)throw error;undo.pay.push(p.id);nP++;
+          const{error:e2}=await sb.from("payment_allocations").insert(list.map(i=>({payment_id:p.id,invoice_id:i.inv.id,amount:i.amt2})));if(e2)throw e2;list.forEach(i=>touched.push(i.inv.id))}}
+      const e=$("#ccProg");if(e)e.textContent=`${nS+nP} …`}}
+  catch(e){alert(L("中断：","Stopped: ")+(e.message||e))}
+  $("#photoOv")?.remove();await loadAll();await syncStatuses(touched);render();
+  undoToast(L(`完成：${nS} 张 Supplier Invoice 标 Contra，记了 ${nP} 笔 Contra 收款`,`Done: ${nS} supplier invoices, ${nP} receipts`),async()=>{
+    for(const id of undo.pay){await sb.from("payment_allocations").delete().eq("payment_id",id);await sb.from("payments").delete().eq("id",id)}
+    for(const r of undo.si)await sb.from("supplier_invoices").update({payment_date:r.payment_date,status:r.status,remark:r.remark}).eq("id",r.id);
+    await loadAll();await syncStatuses(touched);render();toast(L("已还原","Restored"))})}
 function ctScan(){CTS={rows:ctScanRows()};ctsRender()}
 function ctsRender(){const R=CTS.rows,ok=R.filter(r=>r.g.length);
   pvOv(`<div class="pvhead"><h3 style="margin:0">🔁 ${L("对 Contra：客户那边记了，Supplier 那边还没标","Match contras: recorded on customer side, supplier side not yet")}</h3><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
+  <div class="actions" style="margin:0 0 8px"><label class="btn file">⬆ ${L("上传 CHC Contra 单（Deposit / Batch Payment Summary PDF，可以选很多个）","Upload CHC contra summaries (PDF)")}<input type="file" hidden multiple accept=".pdf,application/pdf,.zip" onchange="ccFiles(this)"></label></div>
   <p class="mute" style="font-size:13px;margin-top:0">${L("系统按客户名字找同名的供应商，再用单号 / 金额 / 几张加起来刚好来配。打勾的会把 Supplier Invoice 标成 Contra（付款日期 = 收款日期），收款的 Reference 会补上 supplier invoice 单号。不会多记收款。","Matched by name, then invoice no / amount / combination. Ticked rows mark the supplier invoices as Contra; no new receipts are recorded.")}</p>
   ${R.length?`<div class="tw" style="max-height:55vh"><table><thead><tr><th></th><th>${L("客户那边的 Contra 收款","Customer contra receipt")}</th><th class="num">${L("还没对上","Unmatched")}</th><th>${L("配到的 Supplier Invoice","Supplier invoices")}</th></tr></thead><tbody>
   ${R.map((r,i)=>`<tr><td>${r.g.length?`<input type="checkbox" ${r.on?"checked":""} onchange="CTS.rows[${i}].on=this.checked">`:""}</td>
