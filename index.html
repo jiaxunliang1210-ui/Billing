@@ -333,7 +333,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-27b";
+const APP_VER="2026-10-27c";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -1024,12 +1024,39 @@ async function doGaps(keep){toast(L("检查中…","Checking…"));
   /* 号码顺序跟日期对不上（后一张比前一张早 3 天以上） */
   const odd=new Set();for(let i=1;i<list.length;i++){if(list[i].n-list[i-1].n<=30&&daysBetween(list[i-1].do_date,list[i].do_date)<-3){odd.add(list[i].n);odd.add(list[i-1].n)}}
   GP={list,segs:segs.reverse(),odd,plate:keep?.plate||"",open:keep?.open||new Set()};gpRender()}
+const gpBilled=v=>{const m=String(v?.reason||"").match(/^已开单\s*(.+)$/);if(!m)return null;return S.d.invoices.find(i=>normNo(i.invoice_no)===normNo(m[1]))||{invoice_no:m[1]}};
+/* 🔍 从导入的旧单 PDF 认红色的 DO 号码，只认缺号清单里的 */
+async function gpRedNumbers(a){const ck="doocr:"+a.id;try{const c=localStorage.getItem(ck);if(c)return JSON.parse(c)}catch(e){}
+  const{data,error}=await sb.storage.from("attachments").download(a.file_path);if(error)throw error;const cvs=[];
+  if(/pdf/i.test(data.type||"")||/\.pdf$/i.test(a.file_path)){await loadPdfJs();const pdf=await pdfjsLib.getDocument({data:await data.arrayBuffer()}).promise;
+    for(let i=1;i<=Math.min(pdf.numPages,25);i++){const pg=await pdf.getPage(i),v0=pg.getViewport({scale:1}),sc=Math.min(3,2600/Math.max(v0.width,v0.height)),vp=pg.getViewport({scale:sc}),c=document.createElement("canvas");c.width=vp.width;c.height=vp.height;await pg.render({canvasContext:c.getContext("2d"),viewport:vp}).promise;cvs.push(c)}}
+  else{const im=new Image();im.src=URL.createObjectURL(data);await new Promise((r,j)=>{im.onload=r;im.onerror=j});const k=Math.min(2,2600/Math.max(im.naturalWidth,im.naturalHeight)),c=document.createElement("canvas");c.width=im.naturalWidth*k;c.height=im.naturalHeight*k;c.getContext("2d").drawImage(im,0,0,c.width,c.height);cvs.push(c)}
+  const nums=new Set();
+  for(const c of cvs){const x=c.getContext("2d"),id=x.getImageData(0,0,c.width,c.height),d=id.data;let red=0;
+    for(let j=0;j<d.length;j+=4){const r=d[j],g=d[j+1],b=d[j+2],on=r>140&&r-g>60&&r-b>60;if(on)red++;d[j]=d[j+1]=d[j+2]=on?0:255}
+    if(red<200)continue;x.putImageData(id,0,0);
+    const txt=await withWorker(async w=>{await w.setParameters({tessedit_char_whitelist:"0123456789",tessedit_pageseg_mode:"11"});try{return (await w.recognize(c))?.data?.text||""}finally{await w.setParameters({tessedit_char_whitelist:"",tessedit_pageseg_mode:"3"})}});
+    (txt.match(/\d{4,7}/g)||[]).forEach(n=>nums.add(String(+n)))}
+  const arr=[...nums];try{localStorage.setItem(ck,JSON.stringify(arr))}catch(e){}return arr}
+async function gpAuto(){const G=GP,miss=new Map();for(const g of G.segs)for(const sN of g.miss)miss.set(String(+sN),{s:sN,g});
+  if(!miss.size)return;const withDO=new Set(G.list.map(d=>d.invoice_id).filter(Boolean));
+  const wins=G.segs.map(g=>[addDays(g.a.do_date<g.b.do_date?g.a.do_date:g.b.do_date,-10),addDays(g.a.do_date>g.b.do_date?g.a.do_date:g.b.do_date,60)]);
+  const cands=S.d.invoices.filter(i=>i.company===S.company&&i.status!=="Cancelled"&&!withDO.has(i.id)&&signedOf(i)&&wins.some(([x,y])=>i.invoice_date>=x&&i.invoice_date<=y)).sort((a,b)=>a.invoice_date.localeCompare(b.invoice_date));
+  const pr=$("#gpProg"),say=t=>{if(pr)pr.innerHTML=`<p class="tag warn" style="margin:4px 0 8px">${t}</p>`};
+  if(!cands.length){say(L("找不到可以读的 invoice（没有 DO 记录、又有签名 PDF 的单）","No imported invoices with PDFs to read"));return}
+  const found=[];let k=0;
+  for(const inv of cands){say(`⏳ ${L("读取中","Reading")} ${++k}/${cands.length} · ${esc(inv.invoice_no)} · ${L(`已找到 ${found.length} 张`,`${found.length} found`)}`);
+    try{const nums=await gpRedNumbers(signedOf(inv));for(const n of nums){const m=miss.get(n);if(m){found.push({s:m.s,inv});miss.delete(n)}}}catch(e){console.warn(inv.invoice_no,e)}}
+  if(found.length){const{data,error}=await sb.from("do_voids").insert(found.map(f=>({company:S.company,do_no:f.s,reason:`已开单 ${f.inv.invoice_no}`}))).select();if(error)return say(esc(error.message));S.d.do_voids.push(...(data||[]))}
+  await doGaps({plate:G.plate,open:G.open});
+  const p2=$("#gpProg");if(p2)p2.innerHTML=`<p class="tag ${found.length?"ok":"warn"}" style="margin:4px 0 8px">${L(`读了 ${cands.length} 张导入的旧单，找到 ${found.length} 张缺号已经开单（标成「已开在 …」），还剩 ${miss.size} 张找不到`,`Read ${cands.length} invoices, found ${found.length}, ${miss.size} still missing`)}${found.length?`：${found.slice(0,20).map(f=>`${esc(f.s)}→${esc(f.inv.invoice_no)}`).join("、")}${found.length>20?"…":""}`:""}</p>`}
 function gpRow(d){const od=GP.odd.has(d.n);return `<tr class="${od?"amb":""}"><td><b>${esc(d.s)}</b></td><td>${dmy(d.do_date)}${od?` <span class="tag warn" title="${L("号码顺序跟日期对不上","Number order and date don't match")}">⚠</span>`:""}</td><td class="wrap">${esc(custName(d.customer_id))}</td><td>${esc(d.project||"")}</td><td>${esc(d.service||"")}</td><td>${esc(d.plate||"")}</td><td>${esc(d.driver||"")}</td><td style="white-space:nowrap">${d.start_time?d.start_time.slice(0,5)+"–"+String(d.end_time||"").slice(0,5):""}</td><td class="wrap" style="font-size:12px">${esc([d.from_loc,d.to_loc].filter(Boolean).join(" → "))}</td></tr>`}
 function gpRender(){const G=GP,plates=[...new Set(G.list.map(d=>d.plate).filter(Boolean))].sort();
   const segs=G.segs.filter(g=>!G.plate||g.rows.some(r=>r.d&&r.d.plate===G.plate)),nMiss=sum(segs,g=>g.miss.length);
   let ov=$("#photoOv");if(ov)ov.remove();ov=document.createElement("div");ov.id="photoOv";
   ov.innerHTML=`<div class="pvbox" style="max-width:1150px"><div class="pvhead"><h3 style="margin:0">🔢 ${L("DO 断号","Missing DO numbers")} <span class="tag ${nMiss?"warn":"ok"}">${nMiss}</span></h3><span style="flex:1"></span>
-      <button class="btn sec sm" data-a="xl">⬇ Excel</button><button class="btn sec sm" data-a="x">✕ ${L("关闭","Close")}</button></div>
+      ${nMiss?`<button class="btn sm" data-a="auto" title="${L("从没有 DO 记录、但有签名 PDF 的 invoice（导入的旧单）里认红色的 DO 号码","Read red DO numbers from imported invoice PDFs")}">🔍 ${L("自动从已开的 invoice 找","Find in billed invoices")}</button>`:""}<button class="btn sec sm" data-a="xl">⬇ Excel</button><button class="btn sec sm" data-a="x">✕ ${L("关闭","Close")}</button></div>
+    <div id="gpProg"></div>
     <p class="mute" style="font-size:13px;margin-top:0">${L("照 DO 本子的号码顺序连续列出：缺的、作废的号码插在中间，上下各多列 2 张已经录的 DO，对着 DO 本子看缺的是哪一张。号码跳很多（超过 30 号）就当作另一本，不会连在一起。黄色 ⚠ = 号码顺序跟日期对不上（可能号码打错或用了别本）。「只记录 NIL」的供应商 DO 不算。","Gaps shown in book order with 3 recorded DOs either side. ⚠ = number order and date don't match.")}</p>
     <div class="filters" style="margin:0 0 8px"><label class="f">${L("车牌","Vehicle")}<select data-a="plate">${optList(plates.map(p=>[p,p]),G.plate,L("全部","All"))}</select></label></div>
     ${segs.length?`<div style="max-height:62vh;overflow:auto">${segs.map(g=>{const key=g.a.s+"-"+g.b.s,open=G.open.has(key),prevOf=n=>[...g.rows].reverse().find(r=>r.d&&r.d.n<n)?.d||g.a;
@@ -1038,15 +1065,21 @@ function gpRender(){const G=GP,plates=[...new Set(G.list.map(d=>d.plate).filter(
         if(run.length===1||open)run.forEach(sN=>out.push(`<tr class="red"><td><b>${esc(sN)}</b></td><td colspan="7">⚠ ${L("缺","Missing")}</td><td style="white-space:nowrap;text-align:right"><button class="btn sm" data-new="${esc(sN)}" data-date="${p.do_date}" data-cust="${p.customer_id||""}" data-plate="${esc(p.plate||"")}">${L("去录","Key in")}</button> <button class="btn sec sm" data-void="${esc(sN)}">${L("作废","Void")}</button></td></tr>`));
         else out.push(`<tr class="red"><td><b>${esc(run[0])}–${esc(run.at(-1))}</b></td><td colspan="7">⚠ ${L(`缺 ${run.length} 张`,`${run.length} missing`)}</td><td style="white-space:nowrap;text-align:right"><button class="btn sec sm" data-open="${esc(key)}">${L("一张一张看","One by one")}</button> <button class="btn sec sm" data-voidall="${esc(run.join(","))}">${L("整段作废","Void all")}</button></td></tr>`);run=[]};
       for(const r of g.rows){if(r.m){run.push(r.m);continue}flush();
-        out.push(r.d?gpRow(r.d):`<tr style="opacity:.6"><td>${esc(r.s)}</td><td colspan="8" class="mute">${L("已作废","Voided")}${r.v.reason?"："+esc(r.v.reason):""}</td></tr>`)}flush();
+        out.push(r.d?gpRow(r.d):gpBilled(r.v)?`<tr style="opacity:.75"><td>${esc(r.s)}</td><td colspan="8"><span class="tag ok">✓ ${L("已开在","Billed on")} ${(()=>{const iv=gpBilled(r.v);return iv?`<a href="#" data-inv="${iv.id}">${esc(iv.invoice_no)}</a>`:esc(r.v.reason.replace(/^已开单\s*/,""))})()}</span> <span class="mute" style="font-size:12px">${L("（导入的旧单，没有 DO 记录）","(imported invoice, no DO record)")}</span> <a href="#" data-unbill="${r.v.id}" class="mute" style="font-size:12px" title="${L("认错了？按这里取消","Wrong? Undo")}">✕ ${L("取消","undo")}</a></td></tr>`
+          :`<tr style="opacity:.6"><td>${esc(r.s)}</td><td colspan="8" class="mute">${L("已作废","Voided")}${r.v.reason?"："+esc(r.v.reason):""}</td></tr>`)}flush();
       return `<div class="panel" style="padding:8px 10px;margin:0 0 10px"><div class="mute" style="font-size:12px;margin-bottom:4px">${esc(String(g.lo).padStart(g.w,"0"))} – ${esc(String(g.hi).padStart(g.w,"0"))} · ${L(`缺 ${g.miss.length} 张`,`${g.miss.length} missing`)}${open?` · <a href="#" data-open="${esc(key)}">${L("合起来","Collapse")}</a>`:""}</div><table style="font-size:13px"><thead><tr><th>DO No</th><th>${L("日期","Date")}</th><th>${L("客户","Customer")}</th><th>Project</th><th>Service</th><th>${L("车牌","Vehicle")}</th><th>${L("司机","Driver")}</th><th>${L("时间","Time")}</th><th>${L("地点","Location")}</th></tr></thead><tbody>
         ${out.join("")}</tbody></table></div>`}).join("")}</div>`
       :`<div class="pvnone">✓ ${L("没有断号","No gaps")}</div>`}
-    ${S.d.do_voids.length?`<details style="margin-top:10px"><summary class="mute">${L("已作废","Voided")} (${S.d.do_voids.length})</summary><p style="font-size:13px">${S.d.do_voids.map(v=>`${esc(v.do_no)}${v.reason?" – "+esc(v.reason):""}`).join("、")}</p></details>`:""}</div>`;
+    ${(()=>{const vb=S.d.do_voids.filter(v=>/^已开单/.test(v.reason||"")),vv=S.d.do_voids.filter(v=>!/^已开单/.test(v.reason||""));
+      return (vb.length?`<details style="margin-top:10px"><summary class="mute">${L("已开在导入的旧单","Billed on imported invoices")} (${vb.length})</summary><p style="font-size:13px">${vb.map(v=>`<span style="white-space:nowrap">${esc(v.do_no)} → ${esc(v.reason.replace(/^已开单\s*/,""))} <a href="#" data-unbill="${v.id}" class="mute" title="${L("认错了？按这里取消","Wrong? Undo")}">✕</a></span>`).join("、 ")}</p></details>`:"")
+        +(vv.length?`<details style="margin-top:6px"><summary class="mute">${L("已作废","Voided")} (${vv.length})</summary><p style="font-size:13px">${vv.map(v=>`${esc(v.do_no)}${v.reason?" – "+esc(v.reason):""}`).join("、")}</p></details>`:"")})()}</div>`;
   document.body.appendChild(ov);
   ov.querySelector("[data-a=plate]").onchange=e=>{GP.plate=e.target.value;gpRender()};
   ov.onclick=async e=>{if(e.target.closest("[data-a=x]")||e.target===ov){ov.remove();return}
     if(e.target.closest("[data-a=xl]"))return gpXlsx();
+    if(e.target.closest("[data-a=auto]"))return gpAuto();
+    const ub=e.target.closest("[data-unbill]");if(ub){e.preventDefault();const{error}=await sb.from("do_voids").delete().eq("id",ub.dataset.unbill);if(error)return toast(error.message);S.d.do_voids=S.d.do_voids.filter(v=>v.id!==ub.dataset.unbill);doGaps({plate:GP.plate,open:GP.open});return}
+    const oi=e.target.closest("[data-inv]");if(oi){e.preventDefault();ov.remove();openInv(oi.dataset.inv);return}
     const op=e.target.closest("[data-open]");if(op){e.preventDefault();const k=op.dataset.open;GP.open.has(k)?GP.open.delete(k):GP.open.add(k);gpRender();return}
     const nw=e.target.closest("[data-new]");if(nw){ov.remove();S.doForm=recompute({...blankDO(),do_no:nw.dataset.new,do_date:nw.dataset.date,customer_id:nw.dataset.cust||"",plate:nw.dataset.plate||""});S.dirty=true;S.tab="do";render();window.scrollTo({top:0,behavior:"smooth"});toast(L("号码、日期、客户、车牌先照前一张填好，请照 DO 本子改","Prefilled from the previous DO — check against the book"));return}
     const vd=e.target.closest("[data-void],[data-voidall]");if(vd){const nos=(vd.dataset.void||vd.dataset.voidall).split(",");const reason=prompt(L(`DO ${nos.length>1?nos[0]+"–"+nos.at(-1)+`（${nos.length} 张）`:nos[0]} 作废的原因（例：写错、撕掉、取消）`,`Reason for voiding ${nos.join(", ")}`),"");if(reason==null)return;
