@@ -333,7 +333,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-27d";
+const APP_VER="2026-10-27e";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -4858,9 +4858,9 @@ function invoiceHTML(inv,hasBd){const s=settingsOf(inv.company),c=custOf(inv.cus
   <div class="body"><table class="lines"><colgroup><col style="width:10mm"><col><col style="width:13mm"><col style="width:13mm"><col style="width:28mm"><col style="width:31mm"></colgroup>
   <thead><tr><th>No.</th><th class="c">Description</th><th class="c">Qty</th><th class="c">UOM</th><th class="r">Unit Price $</th><th class="r">Total Amount $</th></tr></thead><tbody>
   ${inv.description?`<tr><td></td><td ${l3?'colspan="5" style="white-space:nowrap"':""}>${String(inv.description).split("\n").filter(Boolean).map(x=>`<div class="d1"><span class="ul">${esc(x)}</span></div>`).join("")}</td>${l3?"":`<td colspan="4"></td>`}</tr>`:""}
-  ${lines.map((l,i)=>{const u=lineUnit(l),nu=(l3||u!=="LS")&&u!=="hrs"&&u!=="LS"&&l.unit_price!=null;if(l.unit_price==null&&u!=="hrs")return `<tr><td>${i+1})</td><td>${desc(l.description)}</td><td class="c">${l.qty==null||l.qty===""?1:Number(l.qty)%1?Number(l.qty).toFixed(2):l.qty}</td><td class="c">${esc(u)}</td><td><div class="r">LS</div></td><td>${acc(l.amount)}</td></tr>`;return nu?`<tr><td>${i+1})</td><td>${desc(l.description)}</td><td class="c">${Number(l.qty)%1?Number(l.qty).toFixed(2):l.qty}</td><td class="c">${esc(u)}</td>
+  ${lines.map((l,i)=>{const u=lineUnit(l),nu=(l3||u!=="LS")&&u!=="hrs"&&u!=="LS"&&l.unit_price!=null;if(l.unit_price==null&&u!=="hrs")return `<tr><td>${i+1})</td><td>${desc(l.description)}</td><td class="c">${l.qty==null||l.qty===""?1:Number(l.qty)%1?Number(l.qty).toFixed(2):l.qty}</td><td class="c">${esc(u)}</td><td><div class="c">LS</div></td><td>${acc(l.amount)}</td></tr>`;return nu?`<tr><td>${i+1})</td><td>${desc(l.description)}</td><td class="c">${Number(l.qty)%1?Number(l.qty).toFixed(2):l.qty}</td><td class="c">${esc(u)}</td>
     <td>${acc(l.unit_price)}</td><td>${acc(l.amount)}</td></tr>`:`<tr><td>${i+1})</td><td>${desc(l.description)}</td><td class="c">${u==="hrs"?Number(l.qty||0).toFixed(2):(l.qty??1)}</td><td class="c">${u==="hrs"?"hrs":"LS"}</td>
-    <td>${u==="hrs"||l.unit_price==null?`<div class="r">LS</div>`:acc(l.unit_price)}</td><td>${acc(l.amount)}</td></tr>`}).join("")}</tbody></table>
+    <td>${u==="hrs"||l.unit_price==null?`<div class="c">LS</div>`:acc(l.unit_price)}</td><td>${acc(l.amount)}</td></tr>`}).join("")}</tbody></table>
   ${l3&&inv.summary_no?`<div class="attx">Refer to summary list No: ${esc(inv.summary_no)}</div>`:""}
   ${hasBd?`<div class="attx">${l3?"(Please refer to attach for all detailed breakdown)":"(Please see the attachment)"}</div>`:""}</div>
   <table class="tot"><tr><td class="lab">Sub Total</td><td class="col">:</td><td class="dol">$</td><td class="amt">${money(inv.amount_before_gst)}</td></tr>
