@@ -333,7 +333,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-27c";
+const APP_VER="2026-10-27d";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -1024,6 +1024,9 @@ async function doGaps(keep){toast(L("检查中…","Checking…"));
   /* 号码顺序跟日期对不上（后一张比前一张早 3 天以上） */
   const odd=new Set();for(let i=1;i<list.length;i++){if(list[i].n-list[i-1].n<=30&&daysBetween(list[i-1].do_date,list[i].do_date)<-3){odd.add(list[i].n);odd.add(list[i-1].n)}}
   GP={list,segs:segs.reverse(),odd,plate:keep?.plate||"",open:keep?.open||new Set()};gpRender()}
+/* 打 invoice 单号：全号、或后面几个字（例：2609/17），只有一张对得上才用 */
+function gpFindInv(q){const k=suAn(q);if(!k)return null;const L0=S.d.invoices.filter(i=>i.company===S.company);
+  return L0.find(i=>suAn(i.invoice_no)===k)||(()=>{const m=L0.filter(i=>suAn(i.invoice_no).endsWith(k));return m.length===1?m[0]:null})()}
 const gpBilled=v=>{const m=String(v?.reason||"").match(/^已开单\s*(.+)$/);if(!m)return null;return S.d.invoices.find(i=>normNo(i.invoice_no)===normNo(m[1]))||{invoice_no:m[1]}};
 /* 🔍 从导入的旧单 PDF 认红色的 DO 号码，只认缺号清单里的 */
 async function gpRedNumbers(a){const ck="doocr:"+a.id;try{const c=localStorage.getItem(ck);if(c)return JSON.parse(c)}catch(e){}
@@ -1062,8 +1065,8 @@ function gpRender(){const G=GP,plates=[...new Set(G.list.map(d=>d.plate).filter(
     ${segs.length?`<div style="max-height:62vh;overflow:auto">${segs.map(g=>{const key=g.a.s+"-"+g.b.s,open=G.open.has(key),prevOf=n=>[...g.rows].reverse().find(r=>r.d&&r.d.n<n)?.d||g.a;
       /* 连着缺的号码合成一行；按「一张一张看」再分开 */
       const out=[];let run=[];const flush=()=>{if(!run.length)return;const p=prevOf(+run[0]);
-        if(run.length===1||open)run.forEach(sN=>out.push(`<tr class="red"><td><b>${esc(sN)}</b></td><td colspan="7">⚠ ${L("缺","Missing")}</td><td style="white-space:nowrap;text-align:right"><button class="btn sm" data-new="${esc(sN)}" data-date="${p.do_date}" data-cust="${p.customer_id||""}" data-plate="${esc(p.plate||"")}">${L("去录","Key in")}</button> <button class="btn sec sm" data-void="${esc(sN)}">${L("作废","Void")}</button></td></tr>`));
-        else out.push(`<tr class="red"><td><b>${esc(run[0])}–${esc(run.at(-1))}</b></td><td colspan="7">⚠ ${L(`缺 ${run.length} 张`,`${run.length} missing`)}</td><td style="white-space:nowrap;text-align:right"><button class="btn sec sm" data-open="${esc(key)}">${L("一张一张看","One by one")}</button> <button class="btn sec sm" data-voidall="${esc(run.join(","))}">${L("整段作废","Void all")}</button></td></tr>`);run=[]};
+        if(run.length===1||open)run.forEach(sN=>out.push(`<tr class="red"><td><b>${esc(sN)}</b></td><td colspan="7">⚠ ${L("缺","Missing")}</td><td style="white-space:nowrap;text-align:right"><button class="btn sm" data-new="${esc(sN)}" data-date="${p.do_date}" data-cust="${p.customer_id||""}" data-plate="${esc(p.plate||"")}">${L("去录","Key in")}</button> <button class="btn sec sm" data-bill="${esc(sN)}">${L("已开单","Billed")}</button> <button class="btn sec sm" data-void="${esc(sN)}">${L("作废","Void")}</button></td></tr>`));
+        else out.push(`<tr class="red"><td><b>${esc(run[0])}–${esc(run.at(-1))}</b></td><td colspan="7">⚠ ${L(`缺 ${run.length} 张`,`${run.length} missing`)}</td><td style="white-space:nowrap;text-align:right"><button class="btn sec sm" data-open="${esc(key)}">${L("一张一张看","One by one")}</button> <button class="btn sec sm" data-bill="${esc(run.join(","))}">${L("整段已开单","All billed")}</button> <button class="btn sec sm" data-voidall="${esc(run.join(","))}">${L("整段作废","Void all")}</button></td></tr>`);run=[]};
       for(const r of g.rows){if(r.m){run.push(r.m);continue}flush();
         out.push(r.d?gpRow(r.d):gpBilled(r.v)?`<tr style="opacity:.75"><td>${esc(r.s)}</td><td colspan="8"><span class="tag ok">✓ ${L("已开在","Billed on")} ${(()=>{const iv=gpBilled(r.v);return iv?`<a href="#" data-inv="${iv.id}">${esc(iv.invoice_no)}</a>`:esc(r.v.reason.replace(/^已开单\s*/,""))})()}</span> <span class="mute" style="font-size:12px">${L("（导入的旧单，没有 DO 记录）","(imported invoice, no DO record)")}</span> <a href="#" data-unbill="${r.v.id}" class="mute" style="font-size:12px" title="${L("认错了？按这里取消","Wrong? Undo")}">✕ ${L("取消","undo")}</a></td></tr>`
           :`<tr style="opacity:.6"><td>${esc(r.s)}</td><td colspan="8" class="mute">${L("已作废","Voided")}${r.v.reason?"："+esc(r.v.reason):""}</td></tr>`)}flush();
@@ -1078,6 +1081,10 @@ function gpRender(){const G=GP,plates=[...new Set(G.list.map(d=>d.plate).filter(
   ov.onclick=async e=>{if(e.target.closest("[data-a=x]")||e.target===ov){ov.remove();return}
     if(e.target.closest("[data-a=xl]"))return gpXlsx();
     if(e.target.closest("[data-a=auto]"))return gpAuto();
+    const bl=e.target.closest("[data-bill]");if(bl){const nos=bl.dataset.bill.split(",");const q=prompt(L(`DO ${nos.length>1?nos[0]+"–"+nos.at(-1)+`（${nos.length} 张）`:nos[0]} 开在哪一张 invoice？\n打单号就可以，例：ETK/INV/2609/17 或 2609/17`,`Which invoice is DO ${nos.join(", ")} billed on?`),"");if(!q)return;
+      const inv=gpFindInv(q);if(!inv)return alert(L(`找不到 invoice「${q}」，请检查单号`,`Invoice "${q}" not found`));
+      const{data,error}=await sb.from("do_voids").insert(nos.map(n=>({company:S.company,do_no:n,reason:`已开单 ${inv.invoice_no}`}))).select();if(error)return toast(error.message);
+      S.d.do_voids.push(...(data||[]));toast(L(`${nos.length} 张标成已开在 ${inv.invoice_no}`,`${nos.length} marked billed on ${inv.invoice_no}`));doGaps({plate:GP.plate,open:GP.open});return}
     const ub=e.target.closest("[data-unbill]");if(ub){e.preventDefault();const{error}=await sb.from("do_voids").delete().eq("id",ub.dataset.unbill);if(error)return toast(error.message);S.d.do_voids=S.d.do_voids.filter(v=>v.id!==ub.dataset.unbill);doGaps({plate:GP.plate,open:GP.open});return}
     const oi=e.target.closest("[data-inv]");if(oi){e.preventDefault();ov.remove();openInv(oi.dataset.inv);return}
     const op=e.target.closest("[data-open]");if(op){e.preventDefault();const k=op.dataset.open;GP.open.has(k)?GP.open.delete(k):GP.open.add(k);gpRender();return}
