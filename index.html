@@ -279,6 +279,21 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 #print .inv .sig{width:68mm;border-top:1px solid #000;text-align:center;font-family:"Century Gothic","Questrial",Arial,sans-serif;font-size:10pt;padding-top:1mm;margin-bottom:2.6mm}
 #print .inv .eoe{font-family:Arial,Helvetica,sans-serif;font-size:7.5pt;margin-top:6mm}
 #print .inv .nb{display:grid;grid-template-columns:14mm 1fr;row-gap:2.6mm;font-family:Arial,Helvetica,sans-serif;font-size:6.8pt;margin-top:7mm}
+/* 放不下一页时自动缩紧 */
+#print .pg.inv.fit1 .ttl{margin:4mm 0 3mm}
+#print .pg.inv.fit1 .body{min-height:50mm}
+#print .pg.inv.fit1 table.lines td{padding-top:3mm} #print .pg.inv.fit1 table.lines tr+tr td{padding-top:2mm}
+#print .pg.inv.fit1 .attx{margin-top:7mm}
+#print .pg.inv.fit1 .foot{margin-top:6mm} #print .pg.inv.fit1 .eoe{margin-top:3mm}
+#print .pg.inv.fit1 .nb{margin-top:4mm;row-gap:1.6mm}
+#print .pg.inv.fit2{padding-top:10mm;padding-bottom:8mm}
+#print .pg.inv.fit2 .body{min-height:0}
+#print .pg.inv.fit2 table.lines .d1,#print .pg.inv.fit2 table.lines .d2{line-height:1.35}
+#print .pg.inv.fit2 table.lines td{padding-top:2mm} #print .pg.inv.fit2 table.lines tr+tr td{padding-top:1.2mm}
+#print .pg.inv.fit2 .attx{margin-top:4mm}
+#print .pg.inv.fit2 .foot p{margin-bottom:1.4mm} #print .pg.inv.fit2 .sig{margin-bottom:1.4mm}
+#print .pg.inv.fit3 table.lines .d1,#print .pg.inv.fit3 table.lines .d2,#print .pg.inv.fit3 table.lines td{font-size:8.5pt}
+#print .pg.inv.fit3 .co .n{font-size:16pt} #print .pg.inv.fit3 .ttl{font-size:20pt}
 
 /* ---- Summary (landscape) ---- */
 #print .sumh{font-family:Calibri,Carlito,Arial,sans-serif;font-size:11pt;line-height:1.55;margin-bottom:5mm}
@@ -333,7 +348,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-27e";
+const APP_VER="2026-10-27f";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -1317,7 +1332,7 @@ async function invPagesHTML(inv){const dos=await fetchAll(()=>sb.from("delivery_
 /* ---- 在线预览 ---- */
 async function previewInv(ids){const list=sortInvIds(ids);if(!list.length)return;toast(L("准备预览…","Preparing preview…"));
   try{let html="";for(const inv of list)html+=(await invPagesHTML(inv)).html;
-    const box=$("#print");box.innerHTML=html;box.classList.add("pv");
+    const box=$("#print");box.innerHTML=html;box.classList.add("pv");fitInv(box);
     let bar=$("#pvBar");if(bar)bar.remove();bar=document.createElement("div");bar.id="pvBar";
     const one=list.length===1?list[0]:null;
     bar.innerHTML=`<b>${one?esc(one.invoice_no):L(`${list.length} 张 invoice`,`${list.length} invoices`)}</b><span style="flex:1"></span>
@@ -4634,7 +4649,7 @@ async function buildCustomerPdf(inv,doOnly,opt){opt=opt||{};
   if(doOnly){}else if(sg)await addImagePage(pdf,true,await attDataURL(sg),0);
   else{warn.push(L("还没上传签名页，第一页用没签名的 invoice","No signed page — unsigned invoice used"));box.innerHTML=invoiceHTML(inv,!!breakdownHTML(inv,dos).trim())}
   if(!doOnly&&(!sg||dos.length||isMachInv(inv))){if(sg)box.innerHTML="";box.innerHTML+=breakdownHTML(inv,dos);box.classList.add("cap");
-    try{if(document.fonts?.ready)await document.fonts.ready;await new Promise(r=>setTimeout(r,60));let first=!sg;
+    try{if(document.fonts?.ready)await document.fonts.ready;await new Promise(r=>setTimeout(r,60));fitInv(box);let first=!sg;
       for(const pg of box.querySelectorAll(".pg")){const land=pg.classList.contains("land"),W=land?297:210,H=land?210:297,cv=await html2canvas(pg,{scale:2,backgroundColor:"#ffffff",logging:false});
         if(!first)pdf.addPage("a4",land?"landscape":"portrait");first=false;let w=W,h=cv.height*W/cv.width;if(h>H){h=H;w=cv.width*H/cv.height}
         pdf.addImage(cv.toDataURL("image/jpeg",0.85),"JPEG",0,0,w,h,undefined,"FAST")}}finally{box.classList.remove("cap")}}
@@ -4909,10 +4924,13 @@ let pdfLibs=null;
 function loadPdfLibs(){if(window.html2canvas&&window.jspdf)return Promise.resolve();
   const one=src=>new Promise((res,rej)=>{const sc=document.createElement("script");sc.src=src;sc.onload=res;sc.onerror=()=>rej(new Error(L("PDF 工具载入失败，请检查网络","Could not load the PDF tool")));document.head.appendChild(sc)});
   return pdfLibs||(pdfLibs=Promise.all([window.html2canvas?0:one("https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"),window.jspdf?0:one("https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js")]).catch(e=>{pdfLibs=null;throw e}))}
+function fitInv(box){box=box||$("#print");const hid=getComputedStyle(box).display==="none";if(hid)box.classList.add("cap");
+  try{const H=297*96/25.4+2;for(const pg of box.querySelectorAll(".pg.inv")){pg.classList.remove("fit1","fit2","fit3");
+    for(const c of["fit1","fit2","fit3"]){if(pg.scrollHeight<=H)break;pg.classList.add(c)}}}finally{if(hid)box.classList.remove("cap")}}
 async function makePdf(filename,opt={}){
   const box=$("#print");toast(L("正在生成 PDF…","Creating PDF…"));
   try{await loadPdfLibs();box.classList.add("cap");if(document.fonts?.ready)await document.fonts.ready;await new Promise(r=>setTimeout(r,60));
-    const{jsPDF}=window.jspdf;let pdf=null;
+    fitInv(box);const{jsPDF}=window.jspdf;let pdf=null;
     for(const pg of box.querySelectorAll(".pg")){const land=pg.classList.contains("land"),W=land?297:210,H=land?210:297;
       const cv=await html2canvas(pg,{scale:2.5,backgroundColor:"#ffffff",logging:false,useCORS:true});
       const img=cv.toDataURL("image/jpeg",0.95);let w=W,h=cv.height*W/cv.width;if(h>H){h=H;w=cv.width*H/cv.height}
@@ -4924,7 +4942,7 @@ async function makePdf(filename,opt={}){
   }catch(e){toast(e.message||String(e))}finally{box.classList.remove("cap")}}
 async function printInv(id,mode){const inv=invById(id);try{const dos=await fetchAll(()=>sb.from("delivery_orders").select("*").eq("invoice_id",id).order("do_date").order("start_time"));
   const bd=breakdownHTML(inv,dos);$("#print").innerHTML=invoiceHTML(inv,!!bd.trim())+bd;const fn=fileBase(inv);
-  if(mode==="print"){document.title=fn;setTimeout(()=>{window.print();document.title="ETK · L3H 开单系统"},100)}else await makePdf(fn)}catch(e){toast(e.message)}}
+  if(mode==="print"){document.title=fn;setTimeout(()=>{fitInv();window.print();document.title="ETK · L3H 开单系统"},100)}else await makePdf(fn)}catch(e){toast(e.message)}}
 
 /* ---- SOA：照 ETK SOA template，一页 ---- */
 const W1=["","One","Two","Three","Four","Five","Six","Seven","Eight","Nine","Ten","Eleven","Twelve","Thirteen","Fourteen","Fifteen","Sixteen","Seventeen","Eighteen","Nineteen"],W10=["","","Twenty","Thirty","Forty","Fifty","Sixty","Seventy","Eighty","Ninety"];
