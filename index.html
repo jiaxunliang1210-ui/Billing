@@ -351,7 +351,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-29a";
+const APP_VER="2026-10-29b";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -1484,7 +1484,7 @@ function pvView(){const rows=sortRows("pv",(S.d.pvs||[]).filter(p=>p.company===S
   if(!S.d._pvOK)return `<div class="panel"><h2>${L("付款 / PV","Payments / PV")}</h2><p>${L("还没跑第二批的 SQL（第二批-付款PV-Supabase.sql）。跑完重新整理页面就可以用。","Run the batch-2 SQL first, then refresh.")}</p></div>`;
   return `<div class="actions" style="margin:0 0 8px"><button class="btn" onclick="pvForm()">＋ ${L("新 PV（提交付款）","New PV")}</button>
     <button class="btn sec" onclick="pvListingXlsx(${esc(JSON.stringify(rows.map(p=>p.id)))})">⬇ PV Excel（${L("每张一个 sheet + Listing","one sheet each + listing")}）</button>
-    <button class="btn sec" onclick="pvPdf(${esc(JSON.stringify(rows.map(p=>p.id)))})">⬇ PV PDF</button></div>
+    <button class="btn sec" onclick="pvPdf(${esc(JSON.stringify(rows.map(p=>p.id)))})">⬇ PV PDF</button><button class="btn sec" data-drop="opvUp" onclick="opvUp()">⬆ ${L("导入旧 PV（PDF / zip）","Import old PVs")}</button></div>
   <div class="filters" style="margin:0 0 6px">${sqBox("pv")}</div>${dfBar("pv",yearsOf(S.d.pvs||[],"pv_date"))}${sqNote("pv",rows.length,(S.d.pvs||[]).filter(p=>p.company===S.company).length)}
   <p class="mute" style="font-size:13px;margin:0 0 8px">${L("流程：新 PV → 印出来给批准人签 → 上传签好的 PV → 按「已批准」→ key in bank → 按「已付」（supplier invoice 会自动记付款日期）。","Flow: new PV → print & sign → upload signed PV → Approved → key in bank → Paid.")}</p>
   ${rows.length?`<div class="tw"><table><thead><tr>${thS("pv","date",L("日期","Date"))}${thS("pv","sup","Pay to")}<th>Invoice</th>${thS("pv","amt",L("金额","Amount"),"num")}${thS("pv","st",L("状态","Status"))}<th>${L("签名 PV","Signed PV")}</th><th>A/C · Cheque No.</th><th>${L("银行 Ref","Bank ref")}</th></tr></thead><tbody>
@@ -3938,6 +3938,158 @@ async function tiApply(){const go=TI.files.filter(x=>TI.take.has(x.name)&&["ok",
     await loadAll();tiAnalyse();tiRender();render();
     alert(L(`完成：上传 ${go.length-fail.length} 个${nw.length?`，新增 supplier invoice ${nw.length} 张`:""}${fail.length?`\n\n失败 ${fail.length} 个（可以再上传一次）：\n`+fail.slice(0,15).join("\n"):""}`,`Uploaded ${go.length-fail.length}${fail.length?`, failed ${fail.length}`:""}`))}
   catch(e){alert(e.message);await loadAll();tiAnalyse();tiRender();render()}}
+
+/* ================= 导入旧 PV（签好名扫描的 PDF：第 1 页 PV，后面是 supplier tax invoice） ================= */
+let OPV=null;
+const opvAn=s=>String(s??"").toUpperCase().replace(/[^A-Z0-9]/g,"");
+function opvUp(){OPV={files:[],take:new Set()};opvRender();warmOCR()}
+async function opvFiles(input){const fs=[...input.files];input.value="";const add=[];
+  for(const f of fs){if(/\.zip$/i.test(f.name)){try{await loadJSZip();const z=await JSZip.loadAsync(await f.arrayBuffer());
+        for(const e of Object.values(z.files)){if(e.dir||!/\.pdf$/i.test(e.name)||/(^|\/)__MACOSX\//.test(e.name))continue;add.push(new File([await e.async("blob")],e.name.split("/").pop(),{type:"application/pdf"}))}}
+      catch(e){alert(f.name+": "+e.message)}}
+    else if(/\.pdf$/i.test(f.name))add.push(f)}
+  for(const f of add)if(!OPV.files.some(x=>x.name===f.name))OPV.files.push(opvNameParse({name:f.name,file:f,st:"reading",lines:[],pages:[],warn:[]}));
+  opvRender();opvRead()}
+/* 文件名：L3H_PV-_HWA_AIK_1482.40 31-08-2026.pdf → 供应商、金额、日期 */
+function opvNameParse(x){const b=x.name.replace(/\.pdf$/i,"").replace(/^[0-9a-f]{8}-(?=L3H|ETK|PV)/i,"");
+  const m=b.match(/(\d[\d,]*\.\d{2})\s*[_\s-]*(\d{1,2})[-.\/](\d{1,2})[-.\/](\d{4}|\d{2})\s*$/);
+  if(m){x.fTotal=r2(Number(m[1].replace(/,/g,"")));x.fDate=okYMD(+(m[4].length===2?"20"+m[4]:m[4]),+m[3],+m[2]);
+    const s=b.slice(0,m.index).replace(/^.*?\bPV\b[\s_\-]*/i,"").replace(/[_]+/g," ").replace(/\s+/g," ").trim();if(s)x.fSup=s}
+  return x}
+async function opvPdf(x){if(!x._pdf){await loadPdfJs();x._pdf=await pdfjsLib.getDocument({data:await x.file.arrayBuffer()}).promise;x.nPages=x._pdf.numPages}return x._pdf}
+async function opvCanvas(x,i,scale){const pdf=await opvPdf(x),pg=await pdf.getPage(i),vp=pg.getViewport({scale}),c=document.createElement("canvas");c.width=vp.width;c.height=vp.height;
+  const g=c.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,c.width,c.height);await pg.render({canvasContext:g,viewport:vp}).promise;return c}
+async function opvPageLines(x,i){const pdf=await opvPdf(x),pg=await pdf.getPage(i);
+  try{const tc=await pg.getTextContent(),rows=new Map();for(const it of tc.items){const t=String(it.str||"");if(!t.trim())continue;const y=Math.round(it.transform[5]/3);(rows.get(y)||rows.set(y,[]).get(y)).push({x:it.transform[4],t})}
+    const out=[...rows.entries()].sort((a,b)=>b[0]-a[0]).map(([,r])=>r.sort((a,b)=>a.x-b.x).map(z=>z.t).join(" ").replace(/\s+/g," ").trim());
+    if(out.join("").replace(/\s/g,"").length>=30)return{lines:out,ocr:false}}catch(e){}
+  const c=await opvCanvas(x,i,2.78),r=await withWorker(w=>w.recognize(c));return{lines:String(r?.data?.text||"").split("\n").map(s=>s.trim()).filter(Boolean),ocr:true}}
+/* 读 PV 那一页 */
+function opvParsePV(lines){const money=s=>(s.match(/\(?-?\s*\$?\s*\d{1,3}(?:,\d{3})+\.\d{2}\)?|\(?-?\s*\$?\s*\d+\.\d{2}\)?/g)||[]),num=s=>{const neg=/^\(|-/.test(s.trim());const v=Number(s.replace(/[^\d.]/g,""));return neg?-v:v};
+  const o={date:null,sup:"",cheque:"",account:"",total:null,lines:[]};let inL=false;
+  for(const l of lines){
+    if(!o.date&&/\bdate\b/i.test(l)){const d=dateIn2(l.slice(l.search(/date/i)));if(d)o.date=d}
+    let m;if(!o.sup&&(m=l.match(/PAY\s*TO\s*[:：]?\s*(.+)$/i)))o.sup=m[1].replace(/[^A-Za-z0-9.)&]+$/,"").replace(/\s+/g," ").trim();
+    if(/cheque\s*no|A\s*[\/I]?\s*C\s*[:：]/i.test(l)){inL=false;
+      if((m=l.match(/cheque\s*no\.?\s*[:：]?\s*(.*?)\s*(?:\(?-?\s*\$\s*[\d,]+\.\d{2}|[|,.]*\s*$)/i)))o.cheque=m[1].replace(/[|,]+$/,"").trim();
+      if((m=l.match(/A\s*[\/I]?\s*C\s*[:：]\s*(.*?)\s*cheque/i)))o.account=m[1].replace(/[|:]+/g,"").trim();
+      const a=money(l);if(a.length)o.total=Math.abs(num(a.at(-1)));continue}
+    if(/sum\s*of\s*dollars|prepared\s*by/i.test(l)){inL=false;continue}
+    if(/^invoice\s*[:：]?\s*$/i.test(l)||/^description\b/i.test(l)){inL=true;continue}
+    if(inL){const a=money(l);if(!a.length)continue;let amt=num(a.at(-1));const head=l.slice(0,l.lastIndexOf(a.at(-1)));
+      const cn=/less|credit\s*note|\bCN\b/i.test(head);let no=(head.match(/#\s*([A-Z0-9][A-Z0-9\/\-._]*)/i)||[])[1];
+      if(!no)no=(head.replace(/less\s*[:：]?|credit\s*note\s*\/?|invoice\s*#?/ig," ").match(/([A-Z0-9][A-Z0-9\/\-._]*\d[A-Z0-9\/\-._]*)/i)||[])[1]||"";
+      no=no.replace(/[.,_\-\/]+$/,"");if(cn&&amt>0)amt=-amt;if(no||amt)o.lines.push({no,amt:r2(amt),cn})}}
+  return o}
+function opvSupFind(name){const k=normCo(name);if(!k)return null;let best=null,bs=0;
+  for(const s of S.d.suppliers){const n=normCo(s.name);if(!n)continue;let v=n===k?1:simCo(k,n);if(v<0.86&&k.length>=3&&((n+" ").startsWith(k+" ")||(k+" ").startsWith(n+" ")))v=0.9;if(v>bs){bs=v;best=s}}
+  return bs>=0.86?best:null}
+function opvSIFind(no,sid){const k=opvAn(no);if(k.length<3)return null;const nz=s=>s.replace(/(^|[A-Z])0+(?=\d)/g,"$1");
+  const pool=S.d.supplier_invoices.filter(si=>!sid||si.supplier_id===sid);
+  return pool.find(si=>opvAn(si.invoice_no)===k)||pool.find(si=>{const a=opvAn(si.invoice_no);return a.length>=5&&k.length>=5&&(a.endsWith(k)||k.endsWith(a))})||pool.find(si=>nz(opvAn(si.invoice_no))===nz(k))||null}
+const opvSame=(a,b)=>{a=opvAn(a);b=opvAn(b);return!!a&&!!b&&(a===b||(Math.min(a.length,b.length)>=6&&lev(a,b)<=1)||(a.length>=5&&b.length>=5&&(a.endsWith(b)||b.endsWith(a))))};
+async function opvRead(){if(OPV._busy)return;OPV._busy=true;
+  try{await pool(OPV.files.filter(x=>x.st==="reading"),OCR_N,async x=>{
+    try{const p1=await opvPageLines(x,1);x.ocr=p1.ocr;const r=opvParsePV(p1.lines);x.pvDate=r.date;x.pvSup=r.sup;x.cheque=r.cheque;x.account=r.account;x.pvTotal=r.total;
+      x.date=x.fDate||r.date;x.sup=r.sup||x.fSup||"";x.total=x.fTotal??r.total;x.lines=r.lines;
+      opvAnalyse(x);
+      /* 后面的页：要新增 invoice 或要补 Tax Invoice 附件才去认 */
+      if(x.nPages>1&&x.lines.some(l=>!l.si||!opvHasTI(l.si))){x.readingPages=true;opvRender();
+        for(let i=2;i<=x.nPages;i++){try{const pl=await opvPageLines(x,i),pr=parseInvText(pl.lines),txt=pl.lines.join(" ");
+          x.pages.push({i,no:pr.no,date:pr.date,total:pr.total,gst:/\bGST\b\s*(\d+\s*%|@)|add\s*\d+\s*%\s*GST|GST\s*\d+\s*%/i.test(txt)?true:/\bGST\b/i.test(txt)?null:false,txt:txt.slice(0,3000)})}catch(e){x.pages.push({i})}}
+        x.readingPages=false}}
+    catch(e){x.err=e.message||String(e)}
+    x.st="";opvAnalyse(x);if($("#opvGo")||$("#photoOv"))opvRender()})}finally{OPV._busy=false}
+  if(OPV.files.some(f=>f.st==="reading"))setTimeout(opvRead,0)}
+const opvHasTI=si=>S.d.attachments.some(a=>a.entity_type==="supplier_invoices"&&a.entity_id===si.id&&a.kind==="Tax Invoice");
+function opvAnalyse(x){if(x.st==="reading"&&!x.lines.length)return;
+  const sup=opvSupFind(x.sup)||(x.fSup?opvSupFind(x.fSup):null);x.sid=sup?.id||null;x.warn=[];
+  /* 每一页对哪一张 invoice */
+  const pages=x.pages||[];pages.forEach(p=>p.li=null);
+  x.lines.forEach(l=>{l.si=opvSIFind(l.no,x.sid);l.page=null;l.sup=[]});
+  if(!x.sid){const ss=[...new Set(x.lines.filter(l=>l.si).map(l=>l.si.supplier_id))];if(ss.length===1){x.sid=ss[0];x.lines.forEach(l=>{if(l.si&&l.si.supplier_id!==x.sid)l.si=null})}else x.lines.forEach(l=>l.si=null)}
+  x.lines.forEach((l,li)=>{const p=pages.find(p=>p.li==null&&p.no&&opvSame(p.no,l.no));if(p){p.li=li;l.page=p.i}});
+  const freeP=pages.filter(p=>p.li==null),freeL=x.lines.filter(l=>l.page==null);
+  if(pages.length===x.lines.length&&freeP.length&&freeP.length===freeL.length)freeL.forEach((l,j)=>{l.page=freeP[j].i;freeP[j].li=x.lines.indexOf(l);l.byOrder=1});
+  let last=null;for(const p of pages){if(p.li!=null)last=p.li;else if(last!=null)x.lines[last].sup.push(p.i)}
+  /* 新 invoice 要用的资料 */
+  for(const l of x.lines){l.warn="";const pg=pages.find(p=>p.i===l.page);l.pg=pg||null;
+    if(l.si){if(Math.abs(Number(l.si.total)-l.amt)>0.01)l.warn=L(`系统金额 $${money(l.si.total)}`,`System amount $${money(l.si.total)}`);
+      const pv=pvOfSI(l.si);if(pv)l.dupPV=pv;else l.dupPV=null}
+    else{l.dupPV=null;if(!l.no)l.warn=L("没读到 invoice 号码","No invoice number");else if(pg&&pg.total!=null&&Math.abs(pg.total-Math.abs(l.amt))>0.01)l.warn=L(`Invoice 页读到 $${money(pg.total)}`,`Invoice page says $${money(pg.total)}`)}}
+  const sumL=r2(sum(x.lines,l=>l.amt));
+  if(!x.sid&&x.sup)x.warn.push(L(`系统没有供应商「${x.sup}」→ 会新增`,`Supplier "${x.sup}" not in system → will be added`));
+  if(x.total!=null&&Math.abs(sumL-x.total)>0.01)x.warn.push(L(`明细加起来 $${money(sumL)}，PV 总额 $${money(x.total)}`,`Lines add up to $${money(sumL)}, PV total $${money(x.total)}`));
+  if(x.fDate&&x.pvDate&&x.fDate!==x.pvDate)x.warn.push(L(`文件名日期 ${dmy(x.fDate)}，PV 上是 ${dmy(x.pvDate)}`,`File date ${dmy(x.fDate)}, PV says ${dmy(x.pvDate)}`));
+  if(x.ocr)x.warn.push("OCR");
+  const nNew=x.lines.filter(l=>!l.si).length;
+  const dupPV=x.sid&&(S.d.pvs||[]).find(p=>p.company===S.company&&p.supplier_id===x.sid&&p.pv_date===x.date&&Math.abs(Number(p.total)-(x.total??sumL))<0.01);
+  const dupSI=x.lines.find(l=>l.dupPV);
+  x.dup=dupPV?L(`已经有这张 PV（${dmy(dupPV.pv_date)} $${money(dupPV.total)}）`,`PV already exists`):dupSI?L(`${dupSI.si.invoice_no} 已经在 ${dmy(dupSI.dupPV.pv_date)} 的 PV 里`,`${dupSI.si.invoice_no} already in a PV`):"";
+  if(x.st==="reading")return;
+  x.st=x.err?"bad":x.dup?"dup":!x.lines.length||!(x.sup||x.sid)||!x.date||x.lines.some(l=>!l.si&&!l.no)?"bad":x.warn.filter(w=>w!=="OCR").length||x.lines.some(l=>l.warn)?"warn":"ok";
+  x.nNew=nNew;if(!x._init&&x.st!=="reading"){if(x.st==="ok")OPV.take.add(x.name);x._init=1}}
+function opvSet(name,k,v,li){const x=OPV.files.find(f=>f.name===name);if(!x)return;v=String(v??"").trim();
+  if(li!=null){const l=x.lines[li];if(!l)return;if(k==="amt")l.amt=r2(numOr(v,0));else if(k==="no")l.no=v;else if(k==="del")x.lines.splice(li,1)}
+  else if(k==="add")x.lines.push({no:"",amt:0});
+  else if(k==="date"){const d=easyDate(v);if(v&&!d){toast(L(`看不懂「${v}」`,`Can't read "${v}"`));setTimeout(opvRender,0);return}x.date=d}
+  else if(k==="total")x.total=v===""?null:r2(numOr(v,0));else x[k]=v;
+  x._init=0;opvAnalyse(x);if(x.st==="ok")OPV.take.add(x.name);setTimeout(opvRender,0)}
+const OPV_ST={ok:["ok",["全部对到","All matched"]],warn:["warn",["要检查","Check"]],bad:["bad",["读不到 / 要补资料","Can't read / fill in"]],dup:["mute",["已经有了，跳过","Already in system"]],reading:["mute",["读取中…","Reading…"]]};
+function opvRender(){const F=OPV.files,cnt=k=>F.filter(x=>x.st===k).length,go=F.filter(x=>OPV.take.has(x.name)&&["ok","warn"].includes(x.st));
+  const order={reading:0,bad:1,warn:2,ok:3,dup:4},rows=[...F].sort((a,b)=>order[a.st]-order[b.st]||String(a.date).localeCompare(String(b.date)));
+  const N=x=>esc(JSON.stringify(x.name));
+  pvOv(`<div class="pvhead"><h3 style="margin:0">⬆ ${L("导入旧 PV","Import old PVs")} · ${S.company}</h3><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
+  <p class="mute" style="font-size:13px;margin-top:0">${L("选签好名的 PV 扫描 PDF（第 1 页是 PV，后面是 supplier tax invoice），可以一次选很多个或整包 zip。系统读 PV 上的供应商、日期、每张 invoice 号码和金额，对系统里的 supplier invoice。没有的会从后面的 tax invoice 页新增。导入后 PV = 已付，invoice 一起标已付，PDF 挂上去当签名 PV，tax invoice 页补到那张 invoice 的附件。扫描件要认字，每页约 10–20 秒。","Pick signed PV scans (page 1 = PV, then supplier tax invoices), many at once or a zip. Matched to supplier invoices; missing ones are created from the tax invoice pages. Imported as Paid with the PDF as signed PV.")}</p>
+  <label class="btn file">⬆ ${L("选 PV PDF / zip","Choose PV PDFs / zip")}<input type="file" accept=".pdf,.zip" multiple hidden onchange="opvFiles(this)"></label>
+  ${F.length?`<ul style="margin:8px 0 4px 18px;font-size:14px"><li>🟢 ${L("全部对到","All matched")}: <b>${cnt("ok")}</b></li><li>🟡 ${L("要检查（看黄色说明，可以直接改）","Check (see notes, editable)")}: ${cnt("warn")}</li><li>🔴 ${L("读不到 / 要补资料","Can't read / fill in")}: ${cnt("bad")}</li><li>${L("已经在系统，跳过","Already in system, skipped")}: ${cnt("dup")}</li>
+    ${cnt("reading")||F.some(x=>x.readingPages)?`<li>⏳ ${L(`认字中，还有 ${cnt("reading")+F.filter(x=>x.readingPages).length} 个（可以先做别的）`,`Reading: ${cnt("reading")} left`)}</li>`:""}</ul>
+  <p style="font-size:13px;margin:6px 0"><a href="#" onclick="event.preventDefault();OPV.files.forEach(x=>{if(['ok','warn'].includes(x.st))OPV.take.add(x.name)});opvRender()">${L("全选","All")}</a> · <a href="#" onclick="event.preventDefault();OPV.take.clear();opvRender()">${L("全不选","None")}</a></p>
+  <div style="max-height:56vh;overflow:auto">${rows.map(x=>{const[t,lb]=OPV_ST[x.st],can=["ok","warn"].includes(x.st),inp=(k,v,attr,li)=>`<input class="tiin${(v==null||v==="")&&!["cheque","account"].includes(k)?" miss":""}" ${attr||""} value="${esc(v??"")}" onchange="opvSet(${N(x)},'${k}',this.value${li!=null?","+li:""})">`;
+    return `<div class="panel" style="padding:10px 12px;margin:0 0 8px">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${can?`<input type="checkbox" ${OPV.take.has(x.name)?"checked":""} onchange="OPV.take[this.checked?'add':'delete'](${N(x)});opvRender()">`:""}
+      <span class="tag ${t}">${L(...lb)}</span>${x.ocr?'<span class="tag bad">OCR</span>':""}<a href="#" style="font-size:12px" onclick="window.open(URL.createObjectURL(OPV.files.find(f=>f.name===${N(x)}).file));return false">👁 ${esc(x.name)}</a>${x.readingPages?` <span class="mute" style="font-size:12px">⏳ ${L("认 invoice 页中…","Reading invoice pages…")}</span>`:""}</div>
+    ${x.st==="reading"?"":`<div style="display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 4px;font-size:13px;align-items:center">
+      <label>${L("日期","Date")} ${inp("date",x.date?dmy(x.date):"",'style="width:105px" placeholder="31/8/26"')}</label>
+      <label>Pay to ${inp("sup",x.sup,'list="opvSups" style="width:250px"')}</label>${x.sid?`<span class="tag ok" title="${L("系统里的供应商","Supplier in system")}">✓ ${esc(supName(x.sid))}</span>`:""}
+      <label>Cheque No. ${inp("cheque",x.cheque,'style="width:120px"')}</label><label>A/C ${inp("account",x.account,'style="width:110px"')}</label>
+      <label>Total ${inp("total",x.total,'type="number" step="0.01" style="width:100px;text-align:right"')}</label></div>
+    <table style="font-size:13px;width:100%"><thead><tr><th>Invoice No</th><th class="num">${L("金额","Amount")}</th><th>${L("系统里","In system")}</th><th>${L("Invoice 页","Invoice page")}</th><th></th></tr></thead><tbody>
+    ${x.lines.map((l,i)=>`<tr><td>${inp("no",l.no,'style="width:160px"',i)}</td><td class="num">${inp("amt",l.amt,'type="number" step="0.01" style="width:100px;text-align:right"',i)}</td>
+      <td>${l.si?`<span class="tag ok">✓ ${esc(l.si.invoice_no)}</span>${l.si.status==="Paid"?` <span class="mute" style="font-size:12px">${L("已付","paid")}</span>`:""}`:`<span class="tag warn">＋ ${L("新增","New")}</span>`}${l.warn?` <span class="tag warn">${esc(l.warn)}</span>`:""}${l.dupPV?` <span class="tag bad">${L("已在别的 PV","In another PV")}</span>`:""}</td>
+      <td style="font-size:12px">${l.page?`${L("第","p.")} ${l.page}${L(" 页","")}${l.sup.length?` + ${l.sup.join(",")}`:""}${l.pg&&!l.si?` · ${l.pg.date?dmy(l.pg.date):"—"}${l.pg.total!=null?" · $"+money(l.pg.total):""}`:""}${l.si&&opvHasTI(l.si)?` <span class="mute">${L("（已有附件，不再挂）","(has attachment)")}</span>`:""}`:x.readingPages?"⏳":`<span class="mute">—</span>`}</td>
+      <td><a href="#" onclick="opvSet(${N(x)},'del','',${i});return false" title="${L("删掉这行","Remove")}">✕</a></td></tr>`).join("")}
+    <tr><td colspan="5"><a href="#" style="font-size:12px" onclick="opvSet(${N(x)},'add','');return false">＋ ${L("加一行","Add line")}</a></td></tr></tbody></table>
+    ${x.warn.filter(w=>w!=="OCR").length||x.dup||x.err?`<div style="margin-top:6px">${[x.err,x.dup,...x.warn.filter(w=>w!=="OCR")].filter(Boolean).map(w=>`<span class="tag warn" style="margin-right:4px">${esc(w)}</span>`).join("")}</div>`:""}`}</div>`}).join("")}</div>
+  <datalist id="opvSups">${S.d.suppliers.map(s=>`<option value="${esc(s.name)}">`).join("")}</datalist>
+  <div class="actions" style="margin-top:10px"><button class="btn" id="opvGo" ${go.length&&!F.some(x=>x.readingPages&&OPV.take.has(x.name))?"":"disabled"} onclick="opvApply()">${L(`导入 ${go.length} 张 PV`,`Import ${go.length} PVs`)}</button></div>`:""}<p id="opvProg" class="mute"></p>`)}
+async function opvJpeg(x,i){const c=await opvCanvas(x,i,2);return await new Promise(r=>c.toBlob(r,"image/jpeg",0.8))}
+async function opvApply(){const go=OPV.files.filter(x=>OPV.take.has(x.name)&&["ok","warn"].includes(x.st));if(!go.length)return;
+  const nNew=sum(go,x=>x.lines.filter(l=>!l.si).length);
+  if(!confirm(L(`导入 ${go.length} 张 PV（状态 = 已付）？${nNew?`\n会新增 ${nNew} 张 supplier invoice`:""}`,`Import ${go.length} PVs as Paid?${nNew?`\n${nNew} supplier invoices will be created`:""}`)))return;
+  const b=$("#opvGo");if(b)b.disabled=true;const prog=t=>{const p=$("#opvProg");if(p)p.textContent=t};let ok=0;const fail=[];
+  for(const x of go){prog(`${L("导入中","Importing")} ${ok+fail.length+1}/${go.length} · ${x.name}`);
+    try{let sid=x.sid;
+      if(!sid){const{data,error}=await sb.from("suppliers").insert({name:x.sup.replace(/\s+/g," ").trim(),payment_terms_days:30}).select().single();if(error)throw new Error("suppliers: "+error.message);S.d.suppliers.push(data);sid=data.id}
+      const sup=S.d.suppliers.find(s=>s.id===sid),noG=supNoGst(sid),pvd=x.date;
+      for(const l of x.lines){if(l.si)continue;const pg=l.pg,d=pg?.date&&pg.date<=pvd?pg.date:pvd,tot=l.amt,useG=pg?.gst===true||(pg?.gst!==false&&!noG),rt=useG?gstRateOn(d):0,before=r2(tot/(1+rt/100));
+        const row={supplier_id:sid,charged_to:S.company,invoice_no:l.no,invoice_date:d,due_date:addDays(d,Number(sup?.payment_terms_days??30)),amount_before_gst:before,gst_amount:r2(tot-before),total:tot,
+          payment_date:pvd,status:"Paid",received_date:d,remark:L(`从旧 PV 导入（${x.name}）`,`Imported from old PV (${x.name})`)};
+        const{data,error}=await sb.from("supplier_invoices").insert(row).select().single();if(error)throw new Error("supplier_invoices: "+error.message);S.d.supplier_invoices.push(data);l.si=data;l._made=1}
+      const lines=x.lines.map((l,i)=>({supplier_invoice_id:l.si.id,description:l.amt<0?`LESS:CREDIT NOTE/INVOICE#${l.si.invoice_no}`:String(l.si.invoice_no),amount:l.amt,line_no:i+1}));
+      const pv={company:S.company,supplier_id:sid,pv_date:pvd,account:x.account||null,cheque_no:x.cheque||null,prepared_by:null,remark:L(`旧 PV 导入：${x.name}`,`Imported old PV: ${x.name}`),total:r2(x.total??sum(lines,l=>l.amount)),status:"Paid",paid_at:pvd};
+      let{data:pd,error:pe}=await sb.from("payment_vouchers").insert(pv).select().single();if(pe)throw new Error("payment_vouchers: "+pe.message);
+      {const{error}=await sb.from("payment_voucher_lines").insert(lines.map(l=>({...l,pv_id:pd.id})));if(error)throw new Error("payment_voucher_lines: "+error.message)}
+      const upd=x.lines.filter(l=>!l._made&&l.si.status!=="Paid").map(l=>l.si.id);
+      if(upd.length){const{error}=await sb.from("supplier_invoices").update({payment_date:pvd,status:"Paid"}).in("id",upd);if(error)throw new Error(error.message)}
+      await attUploadFile("pv",pd.id,x.file,"Signed PV");
+      for(const l of x.lines){if(!l.page||opvHasTI(l.si))continue;const base=`${l.si.invoice_no}`.replace(/[\\/:*?"<>|]+/g,"-");
+        await storeJpeg("supplier_invoices",l.si.id,"Tax Invoice",await opvJpeg(x,l.page),`${base}.jpg`);
+        for(const p of l.sup)await storeJpeg("supplier_invoices",l.si.id,"Supporting",await opvJpeg(x,p),`${base}_p${p}.jpg`)}
+      ok++;x.st="dup";x.dup=L("已导入","Imported");OPV.take.delete(x.name)}
+    catch(e){fail.push(`${x.name}: ${e.message}`)}}
+  await loadAll();OPV.files.forEach(x=>{if(x.dup!==L("已导入","Imported"))opvAnalyse(x)});opvRender();render();
+  alert(L(`完成：导入 ${ok} 张 PV${fail.length?`\n\n失败 ${fail.length} 张：\n`+fail.slice(0,10).join("\n"):""}`,`Imported ${ok}${fail.length?`, failed ${fail.length}`:""}`))}
 
 /* ================= 导入 AP-AR Summary（她自己的 Excel） ================= */
 const normNo=s=>String(s??"").toUpperCase().replace(/\s+/g,"").replace(/[–—]/g,"-");
