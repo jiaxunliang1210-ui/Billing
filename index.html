@@ -73,6 +73,9 @@ label.chk{display:flex;gap:8px;align-items:center;font-size:14px;cursor:pointer}
 .btn.sec{background:var(--panel2);color:var(--ink);border:1px solid var(--line);font-weight:500}
 .btn.del{background:transparent;color:var(--bad);border:1px solid var(--bad);font-weight:500}
 .btn.sm{padding:5px 10px;font-size:13px}
+.cs{display:inline-flex;gap:2px;margin-left:6px;vertical-align:middle}
+.cs button{border:1px solid #c9ced6;background:#fff;color:#555;border-radius:5px;font-size:11px;line-height:1;padding:2px 5px;cursor:pointer;font-weight:600}
+.cs button.on{background:#2f6fde;border-color:#2f6fde;color:#fff}
 .tag{display:inline-block;padding:1px 8px;border-radius:20px;font-size:12px;border:1px solid currentColor;white-space:nowrap}
 .tag.Night{color:var(--night)} .tag.Day{color:var(--day)}
 .tag.ok,.tag.Paid{color:var(--ok)} .tag.bad,.tag.Overdue{color:var(--bad)} .tag.Partial,.tag.warn{color:var(--warnc)} .tag.Unpaid,.tag.mute{color:var(--mute)}
@@ -348,7 +351,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-27f";
+const APP_VER="2026-10-29a";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -530,6 +533,41 @@ function done(){S.dirty=false;S.gEdit=null;if(S.pending){S.pending=false}}
 const TABS=[["do","Key in DO","Key in DO"],["inv","Invoice","Invoice"],["exc","Excavator","Excavator"],["pay","收款","Payments"],["soa","SOA","SOA"],["sum","AR / AP 总表","AR / AP"],
   ["mf","Monthly Fix","Monthly Fix"],["sup","Supplier","Supplier"],["master","Master List","Master List"],["set","设定","Settings"]];
 const rKey=()=>[S.tab,S.company,S.lang,S.theme,S.user?.id].join("|");
+/* ---- 英文自动大小写：Aa 首字大写 / AA 全大写 / ✎ 原样 ---- */
+const CASE_UP=new Set("PIE CTE AYE ECP KPE TPE SLE BKE KJE MCE NSC MRT LRT LTA HDB PUB URA JTC NEA BCA SCDF ICA MOM TMA VMS SG BLK CHC ETK GST PO DO SOA UOM LS JB KL CCK AMK MRT NTU NUS SIT SP".split(" "));
+const CASE_SMALL=new Set("of and at the to in on for by an or with per via".split(" "));
+const CASE_ENT=["name","attention","contact","line_title","address"];
+const CASE_MAP=[["input[name=from_loc],input[name=to_loc]","loc","Aa"],["input[name=description]","desc","Aa"],
+  ["textarea[data-k=description]","inv_head","AA"],["textarea[data-lk=description]","inv_line","Aa"],["[data-case]","","Aa"]];
+function caseWord(w,first){const lw=w.toLowerCase(),up=w.toUpperCase();
+  if(/\d/.test(w))return /^\d+(st|nd|rd|th)$/i.test(w)?lw:up;
+  if(CASE_UP.has(up))return up;
+  if(/[a-z]/.test(w)&&/[A-Z]/.test(w.slice(1)))return w; // 本来就大小写混合（例 McDonald）就不动
+  if(!first&&CASE_SMALL.has(lw))return lw;
+  return lw.charAt(0).toUpperCase()+lw.slice(1)}
+function titleCase(t){return String(t||"").split("\n").map(line=>{let first=true;
+  return line.replace(/[A-Za-z0-9]+/g,(w,i,str)=>{const pv=str[i-1]||"";let r;
+    if(pv==="'"&&/^[a-z]{1,2}$/i.test(w)&&/[A-Za-z]{2}'$/.test(str.slice(Math.max(0,i-3),i)))r=w.toLowerCase(); // driver's
+    else r=caseWord(w,first||!(pv===" "||pv===""));first=false;return r})}).join("\n")}
+function caseApply(v,m){return m==="AA"?String(v||"").toUpperCase():m==="Aa"?titleCase(v):v}
+function caseMode(k,def){try{return localStorage.getItem("case:"+k)||def}catch(e){return def}}
+function caseKeyOf(el){for(const[sel,k,def]of CASE_MAP)if(el.matches(sel))return[k||("m_"+el.dataset.case),def];return null}
+function caseFix(el,m){const nv=caseApply(el.value,m);if(nv!==el.value){el.value=nv;el.dispatchEvent(new Event("input",{bubbles:true}));el.dispatchEvent(new Event("change",{bubbles:true}))}}
+function caseSet(btn,m){const k=btn.parentNode.dataset.ck;try{localStorage.setItem("case:"+k,m)}catch(e){}
+  document.querySelectorAll(`.cs[data-ck="${k}"] button`).forEach(b=>b.classList.toggle("on",b.dataset.m===m));
+  if(m!=="raw")document.querySelectorAll("input,textarea").forEach(el=>{if(el.closest("#print"))return;const x=caseKeyOf(el);if(x&&x[0]===k&&el.value)caseFix(el,m)})}
+function caseChip(k,def){const m=caseMode(k,def),b=(v,t,tip)=>`<button type="button" data-m="${v}" class="${m===v?"on":""}" title="${tip}" onmousedown="event.preventDefault()" onclick="event.preventDefault();event.stopPropagation();caseSet(this,'${v}')">${t}</button>`;
+  const sp=document.createElement("span");sp.className="cs";sp.dataset.ck=k;
+  sp.innerHTML=b("Aa","Aa",L("每个词第一个字大写","Title Case"))+b("AA","AA",L("全部大写","ALL CAPS"))+b("raw","✎",L("原样，自己打什么就是什么","Keep as typed"));return sp}
+function caseDecorate(){document.querySelectorAll("input,textarea").forEach(el=>{if(el.dataset.csd||el.closest("#print"))return;
+  if(el.type&&!["text","textarea",""].includes(el.type)&&el.tagName==="INPUT")return;const x=caseKeyOf(el);if(!x)return;el.dataset.csd=1;
+  const[k,def]=x,lab=el.closest("label");
+  if(lab){if(!lab.querySelector(".cs"))lab.insertBefore(caseChip(k,def),el)}
+  else{const tb=el.closest("table"),th=tb&&[...tb.querySelectorAll("th")].find(h=>/^Description/.test(h.textContent));if(th&&!th.querySelector(".cs"))th.appendChild(caseChip(k,def))}})}
+document.addEventListener("input",e=>{const el=e.target;if(el.dataset&&el.dataset.csd&&e.isTrusted)el._csTyped=1},true);
+document.addEventListener("focusout",e=>{const el=e.target;if(!el.dataset||!el.dataset.csd||!el._csTyped)return;el._csTyped=0;
+  const x=caseKeyOf(el);if(!x)return;const m=caseMode(x[0],x[1]);if(m!=="raw")caseFix(el,m)},true);
+let _csT=0;new MutationObserver(()=>{clearTimeout(_csT);_csT=setTimeout(caseDecorate,30)}).observe(document.documentElement,{childList:true,subtree:true});
 function render(){
   const app=$("#app");
   if(S.user&&S.modal&&render._key===rKey()&&app.querySelector("main")){const mr=$("#modalRoot");if(mr){const ob=mr.querySelector(".box"),om=mr.querySelector(".modal"),st=[ob?.scrollTop||0,om?.scrollTop||0];
@@ -2892,9 +2930,9 @@ function genInput(f,v){const lab=L(...(isL3()&&f.labelL3||f.label))+(f.req?" *":
     case"materialOpt":return `<label class="f">${lab}<select name="${f.k}">${optList(MATERIALS.map(m=>[m,m]),v,L("所有材料","Any"))}</select></label>`;
     case"bool":return `<label class="f">${lab}<select name="${f.k}">${optList([["true",L("是","Yes")],["false",L("停止","Stopped")]],String(v))}</select></label>`;
     case"month":return `<label class="f">${lab}<input type="month" name="${f.k}" value="${esc(String(v).slice(0,7))}"></label>`;
-    case"textarea":return `<label class="f wide">${lab}<textarea name="${f.k}" rows="${Math.min(8,Math.max(2,String(v).split("\n").length+1))}" oninput="this.rows=Math.min(8,Math.max(2,this.value.split('\\n').length+1))">${esc(v)}</textarea></label>`;
+    case"textarea":return `<label class="f wide">${lab}<textarea name="${f.k}" ${CASE_ENT.includes(f.k)?`data-case="${f.k}" `:""}rows="${Math.min(8,Math.max(2,String(v).split("\n").length+1))}" oninput="this.rows=Math.min(8,Math.max(2,this.value.split('\\n').length+1))">${esc(v)}</textarea></label>`;
     case"money":case"number":return `<label class="f">${lab}<input type="number" step="0.01" name="${f.k}" value="${esc(v)}"></label>`;
-    default:return `<label class="f">${lab}<input type="${f.type}" name="${f.k}" value="${esc(v)}"></label>`}}
+    default:return `<label class="f">${lab}<input type="${f.type}" name="${f.k}" value="${esc(v)}"${CASE_ENT.includes(f.k)?` data-case="${f.k}"`:""}></label>`}}
 function genForm(ent,cfg,e,sk){
   return `<section class="panel"><h2>${e.id?L("修改","Edit"):L("新增","Add")} · ${L(...cfg.label)}</h2>
   ${ent==="supplier_invoices"?`<div class="actions" style="margin:0 0 8px"><label class="btn sec file">📄 ${L("从 PDF 读资料（可以拖进来）","Read details from PDF (drag & drop OK)")}<input type="file" hidden accept="application/pdf,.pdf,image/*" onchange="siPdf(this)"></label><span id="siPdfMsg" class="mute" style="font-size:13px"></span></div><div id="siPdfDiff"></div>`:""}
