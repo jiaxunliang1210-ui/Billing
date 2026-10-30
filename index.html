@@ -356,7 +356,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-30b";
+const APP_VER="2026-10-30c";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -5163,8 +5163,8 @@ function invoiceHTML(inv,hasBd){const s=settingsOf(inv.company),c=custOf(inv.cus
   <table class="tot"><tr><td class="lab">Sub Total</td><td class="col">:</td><td class="dol">$</td><td class="amt">${money(A(inv.amount_before_gst))}</td></tr>
   <tr><td class="lab">Add GST ${Number(inv.gst_rate)}%</td><td class="col">:</td><td class="dol">$</td><td class="amt">${money(A(inv.gst_amount))}</td></tr>
   <tr class="grand"><td class="lab">Total</td><td class="col">:</td><td class="dol">$</td><td class="amt">${money(A(inv.total))}</td></tr></table>
-  ${cnD?`<div class="foot" style="justify-content:flex-end"><div class="sig">Authorised Signature</div></div>`:payFoot(s)}<div class="eoe">E. &amp; O. E.</div>
-  ${cnD?"":`<div class="nb"><div>N.B:</div><div>- Invoices considered correct unless disputes notified to us within SEVEN (7) days from date of invoice</div><div></div><div>- Interest at the rate of 1.5% per month will be charged on all overdue amounts</div></div>`}</div>`}
+  ${payFoot(s)}<div class="eoe">E. &amp; O. E.</div>
+  <div class="nb"><div>N.B:</div><div>- Invoices considered correct unless disputes notified to us within SEVEN (7) days from date of invoice</div><div></div><div>- Interest at the rate of 1.5% per month will be charged on all overdue amounts</div></div></div>`}
 function sumMonth(inv,list){const a=inv.period_from||list[0].do_date,b=inv.period_to||list[list.length-1].do_date;
   return a.slice(0,7)===b.slice(0,7)?monthLong(a):`${MONL[+a.slice(5,7)-1]}${a.slice(0,4)!==b.slice(0,4)?" "+a.slice(0,4):""} & ${monthLong(b)}`}
 function sumHead(lines){return `<div class="sumh">${lines.map((t,i)=>i===0?`<div class="t"><span class="ul">${esc(t)}</span></div>`:`<div>${esc(t)}</div>`).join("")}</div>`}
