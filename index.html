@@ -356,7 +356,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-30a";
+const APP_VER="2026-10-30b";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -463,7 +463,19 @@ function recompute(f){{const d=cSvc(f.service);if(d)return recomputeSvc(f,d)}if(
       if(f.amount!=null)f.amount=r2((f.amount-sur)*k+f._shSur)}}
   return f;
 }
-const paidOf=inv=>sum(S.d.payment_allocations.filter(a=>a.invoice_id===inv.id),a=>a.amount);
+/* ---- Credit Note / Debit Note：号码有 /CN/ 或负数 = CN，/DN/ = DN；Our Ref = 原本那张 invoice 号码 ---- */
+const isCNDoc=i=>!!i&&(Number(i.total)<0||/(^|\/)CN\//i.test(i.invoice_no||""));
+const isDNDoc=i=>!!i&&!isCNDoc(i)&&/(^|\/)DN\//i.test(i.invoice_no||"");
+let _cnC={arr:null,n:-1,by:new Map(),ref:new Map()};
+function cnCache(){const A=S.d.invoices;if(_cnC.arr===A&&_cnC.n===A.length)return _cnC;const by=new Map(),ref=new Map(),idx=new Map();
+  for(const i of A)if(!isCNDoc(i)&&!isDNDoc(i))idx.set(i.company+"|"+normNo(i.invoice_no),i);
+  for(const x of A)if((isCNDoc(x)||isDNDoc(x))&&x.our_ref&&x.status!=="Cancelled"){const o=idx.get(x.company+"|"+normNo(x.our_ref));if(o&&o.id!==x.id&&o.customer_id===x.customer_id){ref.set(x.id,o);(by.get(o.id)||by.set(o.id,[]).get(o.id)).push(x)}}
+  return _cnC={arr:A,n:A.length,by,ref}}
+const noteRef=x=>cnCache().ref.get(x.id)||null;
+const notesOf=inv=>cnCache().by.get(inv.id)||[];
+/* CN 抵掉原本那张：原本那张算已付这笔，CN 自己余额变 0 */
+const cnApplied=inv=>{if(isCNDoc(inv))return noteRef(inv)?Number(inv.total)||0:0;return -sum(notesOf(inv).filter(isCNDoc),x=>Number(x.total)||0)};
+const paidOf=inv=>sum(S.d.payment_allocations.filter(a=>a.invoice_id===inv.id),a=>a.amount)+cnApplied(inv);
 const balOf=inv=>inv.status==="Cancelled"?0:r2(Number(inv.total)-paidOf(inv));
 function statusOf(inv){if(inv.status==="Cancelled")return"Cancelled";const p=paidOf(inv),t=Number(inv.total);if(t<0)return"CN";
   if(t>0&&p>=t-0.005)return"Paid";return p>0?"Partial":"Unpaid"}
@@ -472,7 +484,8 @@ function interestOf(inv,asOf=today()){if(!inv.interest_enabled)return 0;const d=
 function lastPayDate(inv){const ids=S.d.payment_allocations.filter(a=>a.invoice_id===inv.id).map(a=>a.payment_id);
   return S.d.payments.filter(p=>ids.includes(p.id)).map(p=>p.payment_date).sort().at(-1)||""}
 function statusTag(inv){const s=statusOf(inv);if(s==="CN")return `<span class="tag CN">CN${Math.abs(balOf(inv))<0.005?L(" · 已抵销"," · applied"):""}</span>`;if(s!=="Paid"&&s!=="Cancelled"&&overdueDays(inv)>0)return `<span class="tag Overdue">${L("逾期","Overdue")} ${overdueDays(inv)}${L("天","d")}</span>`;
-  const lab={Paid:L("已付","Paid"),Partial:L("部分付款","Partial"),Unpaid:L("未付","Unpaid"),Cancelled:L("取消","Cancelled")}[s];return `<span class="tag ${s}">${lab}</span>`}
+  const cn=s!=="Cancelled"&&notesOf(inv).some(isCNDoc)?" · CN":"";
+  const lab={Paid:L("已付","Paid"),Partial:L("部分付款","Partial"),Unpaid:L("未付","Unpaid"),Cancelled:L("取消","Cancelled")}[s];return `<span class="tag ${s}">${lab}${cn}</span>${isDNDoc(inv)?' <span class="tag mute">DN</span>':""}`}
 function nextInvNo(date){const s=settingsOf(S.company);const[y,m]=date.split("-");const base=`${s.inv_prefix||""}${y.slice(2)}${m}/`;let max=0;
   for(const i of S.d.invoices)if(i.invoice_no.startsWith(base)){const n=parseInt(i.invoice_no.slice(base.length),10);if(n>max)max=n}
   return base+z2(max+1)}
@@ -1404,7 +1417,7 @@ function invSheet(wb,inv){const s=settingsOf(inv.company),c=custOf(inv.customer_
   let r=1;const put=(txt,o={})=>{const row=ws.getRow(r);ws.mergeCells(r,1,r,6);const cell=row.getCell(1);cell.value=txt;cell.alignment={horizontal:"center"};if(o.b)cell.font={bold:true,size:o.sz||11,italic:o.i};r++};
   put(s.name,{b:1,sz:16,i:l3});put(s.address||"");put(`Co. Reg No: ${s.reg_no||""}   GST Reg No: ${s.gst_no||""}`);
   put(l3?[s.tel&&"Tel: "+s.tel,s.fax&&"Fax: "+s.fax].filter(Boolean).join("   "):[s.tel&&"Mobile: "+s.tel,s.email&&"Email: "+s.email].filter(Boolean).join("   "));if(l3&&s.email)put("Email : "+s.email);
-  r++;ws.getRow(r).getCell(6).value="Tax Invoice";ws.getRow(r).getCell(6).font={bold:true,size:16};ws.getRow(r).getCell(6).alignment={horizontal:"right"};r+=2;
+  r++;ws.getRow(r).getCell(6).value=isCNDoc(inv)?"Credit Note":isDNDoc(inv)?"Debit Note":"Tax Invoice";ws.getRow(r).getCell(6).font={bold:true,size:16};ws.getRow(r).getCell(6).alignment={horizontal:"right"};r+=2;
   const td=Number(c.payment_terms_days),terms=td===0?"C.O.D":`${c.payment_terms_days??30} Days`;
   const mg=l3&&!inv.project&&!isMachInv(inv)&&!isCHC(inv.customer_id);
   const meta=mg?[["No",inv.invoice_no],["D.O. No",""],["Your PO No",inv.customer_po||""],["Terms",terms],["Date",dmy(inv.invoice_date)]]:[["Invoice No.",inv.invoice_no],["Our Ref No.",inv.our_ref||""],["Terms",terms],["Date",dmy(inv.invoice_date)],["Your PO",inv.customer_po||""]];
@@ -2368,6 +2381,44 @@ const lineUnit=l=>l.unit||(l.unit_price==null?"hrs":"LS");
 /* 单价那栏印「LS」：存成 unit_price = null（hrs 那种照旧） */
 const lineLS=l=>l._ls!==undefined?!!l._ls:(l.unit_price==null&&lineUnit(l)!=="hrs");
 
+/* ---- 开 Credit Note / Debit Note ---- */
+let NF=null;
+function nextNoteNo(type,date){const s=settingsOf(S.company),[y,m]=date.split("-"),p=String(s.inv_prefix||"");
+  const pre=/INV/i.test(p)?p.replace(/INV/i,type):p+(p&&!p.endsWith("/")?"/":"")+type+"/",base=`${pre}${y.slice(2)}${m}/`;let max=0;
+  for(const i of S.d.invoices)if(String(i.invoice_no).toUpperCase().startsWith(base.toUpperCase())){const n=parseInt(String(i.invoice_no).slice(base.length),10);if(n>max)max=n}
+  return base+z2(max+1)}
+function noteForm(id,type){const o=invById(id);if(!o)return;const d=today(),done=-sum(notesOf(o).filter(isCNDoc),x=>Number(x.amount_before_gst)||0);
+  const left=r2((Number(o.amount_before_gst)||0)-done);
+  NF={id,type,date:d,no:nextNoteNo(type,d),noAuto:true,amt:type==="CN"?(left>0?left:""):"",gst:Number(o.gst_rate)||0,
+    desc:`Being ${type==="CN"?"Credit":"Debit"} Note for Tax Invoice ${o.invoice_no} - Due to `};noteRender()}
+function noteCalc(){const a=r2(Number(NF.amt)||0),g=r2(a*(Number(NF.gst)||0)/100);return{a,g,t:r2(a+g)}}
+function noteRender(){const o=invById(NF.id),c=noteCalc(),cn=NF.type==="CN",left=r2((Number(o.amount_before_gst)||0)+sum(notesOf(o).filter(isCNDoc),x=>Number(x.amount_before_gst)||0));
+  pvOv(`<div class="pvhead"><h3 style="margin:0">${cn?"↩ Credit Note":"＋ Debit Note"} · ${esc(o.invoice_no)}</h3><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
+  <p class="mute" style="font-size:13px;margin-top:0">${cn?L("Credit Note = 减少客户欠的钱（例：免利息、打折、开多了）。开好后原本那张 invoice 自动当作被抵掉，SOA / outstanding 一起更新。","Credit note reduces what the customer owes; the original invoice is offset automatically."):L("Debit Note = 补收客户的钱（例：漏收、加收费用）。会变成一张新的应收单。","Debit note adds a charge; it becomes a new receivable.")}</p>
+  <div class="kv" style="margin-bottom:10px"><div><span>${L("原本的 invoice","Original")}</span>${esc(o.invoice_no)} · ${dmy(o.invoice_date)}</div><div><span>${L("客户","Customer")}</span>${esc(custName(o.customer_id))}</div><div><span>Amt before GST</span>$${money(o.amount_before_gst)}${cn&&Math.abs(left-(Number(o.amount_before_gst)||0))>0.005?` <span class="mute">（${L("还可以 credit","left")} $${money(left)}）</span>`:""}</div><div><span>Total</span>$${money(o.total)}</div></div>
+  <div class="grid" onchange="noteIn(event.target)">
+    <label class="f">${L("日期","Date")}<input type="date" data-k="date" value="${NF.date}"></label>
+    <label class="f">${cn?"Credit Note No.":"Debit Note No."}<input data-k="no" value="${esc(NF.no)}"></label>
+    <label class="f">${L("金额（未加 GST）","Amount before GST")}${cn&&left>0?` <a href="#" style="font-size:12px" onclick="NF.amt=${left};noteRender();return false">${L("全额","Full")}</a>`:""}<input type="number" step="0.01" data-k="amt" value="${NF.amt}"></label>
+    <label class="f">GST %<input type="number" step="0.01" data-k="gst" value="${NF.gst}"></label>
+    <label class="f wide">Description<textarea data-k="desc" rows="3">${esc(NF.desc)}</textarea></label></div>
+  <div class="kv" style="margin-top:8px"><div><span>Sub Total</span>$${money(c.a)}</div><div><span>GST ${NF.gst}%</span>$${money(c.g)}</div><div><span>Total</span><b>$${money(c.t)}</b></div></div>
+  <p id="nfWarn" style="color:var(--bad)"></p>
+  <div class="actions"><button class="btn" onclick="noteSave()">✓ ${cn?L("开 Credit Note","Create credit note"):L("开 Debit Note","Create debit note")}</button><button class="btn sec" data-a="x">${L("取消","Cancel")}</button></div>`)}
+function noteIn(el){const k=el.dataset.k;if(!k)return;NF[k]=el.value;if(k==="date"&&NF.noAuto&&el.value)NF.no=nextNoteNo(NF.type,el.value);if(k==="no")NF.noAuto=false;noteRender()}
+async function noteSave(){const o=invById(NF.id),c=noteCalc(),w=$("#nfWarn"),cn=NF.type==="CN",no=String(NF.no||"").trim(),desc=String(NF.desc||"").trim();
+  if(!no)return w.textContent=L("请填号码","Enter a number");if(!NF.date)return w.textContent=L("请填日期","Enter a date");
+  if(!(c.a>0))return w.textContent=L("金额要大过 0","Amount must be more than 0");
+  if(/- Due to\s*$/i.test(desc)&&!confirm(L("Description 的「Due to」后面还没写原因，还是要开吗？","No reason after “Due to”. Continue?")))return;
+  if(S.d.invoices.some(i=>i.company===S.company&&normNo(i.invoice_no)===normNo(no)))return w.textContent=L(`号码 ${no} 已经有了`,`${no} already exists`);
+  if(cn){const left=r2((Number(o.amount_before_gst)||0)+sum(notesOf(o).filter(isCNDoc),x=>Number(x.amount_before_gst)||0));if(c.a>left+0.005&&!confirm(L(`Credit 金额 $${money(c.a)} 比这张还可以 credit 的 $${money(left)} 多，还是要开吗？`,`More than the remaining $${money(left)}. Continue?`)))return}
+  const sg=cn?-1:1,cu=custOf(o.customer_id);
+  const row={company:S.company,customer_id:o.customer_id,invoice_no:no,invoice_date:NF.date,due_date:cn?NF.date:addDays(NF.date,Number(cu.payment_terms_days??30)),our_ref:o.invoice_no,project:o.project||null,description:null,
+    amount_before_gst:sg*c.a,gst_rate:Number(NF.gst)||0,gst_amount:sg*c.g,total:sg*c.t,status:cn?"Paid":"Unpaid",interest_enabled:false};
+  const{data,error}=await sb.from("invoices").insert(row).select().single();if(error)return w.textContent=error.message;
+  {const{error:e2}=await sb.from("invoice_lines").insert({invoice_id:data.id,line_no:1,description:desc||(cn?"Credit Note":"Debit Note"),qty:1,unit:"LS",unit_price:null,amount:sg*c.a});if(e2)return w.textContent=e2.message}
+  await loadAll();await syncStatuses([o.id]);document.querySelector("#photoOv")?.remove();
+  toast(cn?L(`已开 Credit Note ${no}，${o.invoice_no} 余额 $${money(balOf(invById(o.id)))}`,`Credit note ${no} created`):L(`已开 Debit Note ${no}`,`Debit note ${no} created`));openInv(data.id)}
 function openInv(id){S.modal={kind:"inv",id,edits:null,dos:null};render();
   sb.from("delivery_orders").select("id,do_no,do_date").eq("invoice_id",id).then(({data})=>{if(S.modal?.id===id){S.modal.dos=data||[];render()}});
   sb.from("invoice_edits").select("*").eq("invoice_id",id).order("created_at",{ascending:false}).then(({data})=>{if(S.modal?.id===id){S.modal.edits=data||[];render()}})}
@@ -2459,7 +2510,7 @@ function invDetailView(id){
   <div class="tw"><table><thead><tr><th>No</th><th>Description</th><th class="num">Qty</th><th class="num">${L("金额","Amount")}</th></tr></thead><tbody>
     ${lines.map((l,n)=>`<tr><td>${n+1})</td><td class="wrap" style="white-space:pre-line">${esc(l.description)}</td><td class="num">${l.qty??""} ${lineUnit(l)}</td><td class="num">${money(l.amount)}</td></tr>`).join("")}</tbody>
     <tfoot><tr><td colspan="3">Amt before GST</td><td class="num">${money(i.amount_before_gst)}</td></tr><tr><td colspan="3">GST ${i.gst_rate}%</td><td class="num">${money(i.gst_amount)}</td></tr>
-    <tr><td colspan="3">Total</td><td class="num">${money(i.total)}</td></tr><tr><td colspan="3">${L("已付","Paid")}</td><td class="num">${money(paidOf(i))}</td></tr>
+    <tr><td colspan="3">Total</td><td class="num">${money(i.total)}</td></tr><tr><td colspan="3">${isCNDoc(i)?L("已抵销","Applied"):L("已付","Paid")}</td><td class="num">${money(paidOf(i))}</td></tr>
     <tr><td colspan="3">${L("余额","Balance")}</td><td class="num">${money(bal)}</td></tr>${intr?`<tr><td colspan="3">Interest（${od}${L("天","d")} × 1.5%/30）</td><td class="num">${money(intr)}</td></tr>`:""}</tfoot></table></div>
   <div class="actions">
     <button class="btn sec" onclick="invPv('${id}')">👁 ${L("预览","Preview")}</button><button class="btn" onclick="invDl('${id}')">⬇ ${L("下载 PDF","Download PDF")}</button>${invOrig(invById(id))?`<span class="tag ok" title="${L("导入的旧单，用你上传的原本 PDF","Imported invoice: your uploaded original is used")}">${L("用原本 PDF","Original PDF")}</span>`:""}<button class="btn sec" onclick="printInv('${id}','print')">🖨 ${L("打印","Print")}</button><button class="btn sec" onclick="invXlsx('${id}')">⬇ Excel · Invoice</button><button class="btn sec" onclick="sumXlsx('${id}')">⬇ Excel · Summary</button>
@@ -2467,7 +2518,10 @@ function invDetailView(id){
     <button class="btn sec" onclick="sendInv('${id}','WhatsApp')">WhatsApp</button><button class="btn sec" onclick="sendInv('${id}','Email')">Email</button>
     <button class="btn sec" onclick="openPayForm({customer_id:'${i.customer_id}',invoice_id:'${id}'})">${L("记录收款","Record payment")}</button>
     ${bal>0.005?`<button class="btn sec" onclick="remind('${id}','WhatsApp')">${L("WhatsApp 提醒","WhatsApp reminder")}</button><button class="btn sec" onclick="remind('${id}','Email')">${L("Email 提醒","Email reminder")}</button>`:""}
+    ${!isCNDoc(i)&&!isDNDoc(i)&&i.status!=="Cancelled"?`<button class="btn sec" onclick="noteForm('${id}','CN')">↩ ${L("开 Credit Note","Credit Note")}</button><button class="btn sec" onclick="noteForm('${id}','DN')">＋ ${L("开 Debit Note","Debit Note")}</button>`:""}
     ${quoteBtn(i.customer_id,id)}<button class="btn sec" onclick="invRefresh('${id}')" title="${L("价钱、Service 设定或客户 Terms 改过，用最新的重算这张","Recalculate with the latest prices / services / terms")}">🔄 ${L("按最新资料重算","Recalculate")}</button><button class="btn sec" onclick="openInvForm(invById('${id}'))">${L("修改","Edit")}</button><button class="btn del" onclick="delInv('${id}')">${L("删除","Delete")}</button></div>
+  ${(()=>{const ns=notesOf(i),r=noteRef(i);if(r)return `<div class="note" style="margin:10px 0">${isCNDoc(i)?L("这张 Credit Note 抵掉","This credit note offsets"):L("这张 Debit Note 是补收","This debit note adds to")} <a href="#" onclick="openInv('${r.id}');return false"><b>${esc(r.invoice_no)}</b></a>（${dmy(r.invoice_date)} · $${money(r.total)}）</div>`;
+    if(!ns.length)return"";return `<div class="note" style="margin:10px 0"><b>Credit / Debit Note</b>：${ns.map(x=>`<a href="#" onclick="openInv('${x.id}');return false">${esc(x.invoice_no)}</a> ${isCNDoc(x)?"CN":"DN"} $${money(x.total)}（${dmy(x.invoice_date)}）`).join("；")}</div>`})()}
   ${signBox(i)}
   <div class="kv" style="margin-top:14px"><div><span>${L("检查","Checked")}</span>${i.checked?`✓ ${i.checked_at?dmy(i.checked_at.slice(0,10)):""}`:L("未检查","Not yet")}</div>
     <div><span>${L("发送","Sent")}</span>${i.sent_at?`${dmy(i.sent_at)} · ${esc(viaLabel(i.sent_via||""))}`:L("未发送","Not sent")} <a href="#" onclick="sentForm(['${id}']);return false">✎ ${L("自己填","Edit")}</a></div>
@@ -2560,7 +2614,7 @@ function payView(){
 }
 const payUnalloc=p=>r2(Number(p.amount)-sum(S.d.payment_allocations.filter(a=>a.payment_id===p.id),a=>a.amount));
 const custCredits=(cid,exceptId)=>S.d.payments.filter(p=>p.customer_id===cid&&p.id!==exceptId&&payUnalloc(p)>0.005);
-const balExcl=(inv,pid)=>r2(Number(inv.total)-sum(S.d.payment_allocations.filter(a=>a.invoice_id===inv.id&&a.payment_id!==pid),a=>a.amount));
+const balExcl=(inv,pid)=>r2(Number(inv.total)-cnApplied(inv)-sum(S.d.payment_allocations.filter(a=>a.invoice_id===inv.id&&a.payment_id!==pid),a=>a.amount));
 function openPayForm(p){
   const f=p.id?{...p,alloc:Object.fromEntries(S.d.payment_allocations.filter(a=>a.payment_id===p.id).map(a=>[a.invoice_id,Number(a.amount)]))}
     :{customer_id:p.customer_id||"",payment_date:today(),amount:null,method:"Bank Transfer",reference:"",remark:"",alloc:{}};
@@ -5094,21 +5148,23 @@ function invoiceHTML(inv,hasBd){const s=settingsOf(inv.company),c=custOf(inv.cus
   const meta=mg?[["No",inv.invoice_no],["D.O. No",""],["Your PO No",inv.customer_po||""],["Terms",td===0?"C.O.D":terms],["Date",dmy(inv.invoice_date)]]:[["Invoice No.",inv.invoice_no],["Our Ref No.",inv.our_ref||""],["Terms",terms],["Date",dmy(inv.invoice_date)],["Your PO",inv.customer_po||""]];
   const desc=t=>{const nu=noUl(t);const xs=String(t||"").replace(NOUL,"").split("\n").filter(x=>x.trim()!=="");
     if(nu)return xs.map((x,i)=>`<div class="${i===0?"d1":"d2"}">${i===0?`<b>${esc(x)}</b>`:esc(x)}</div>`).join("");if(mg&&xs[0]==="Lorry Crane Transport Charges")return xs.map(x=>`<div class="d1"><span class="ul">${esc(x)}</span></div>`).join("");return xs.map((x,i)=>l3?(i===0&&xs.length>1?`<div class="d1"><span class="ul">${esc(x)}</span></div>`:`<div class="d2">${esc(x)}</div>`):(i>0&&/^(Location|Date|DO|Customer)\s*:/i.test(x)?`<div class="d2">${esc(x)}</div>`:`<div class="d1"><span class="ul">${esc(x)}</span></div>`)).join("")};
-  return `<div class="doc pg inv">${coHeader(s)}<div class="ttl">Tax Invoice</div>
+  const cnD=isCNDoc(inv),dnD=isDNDoc(inv);if(cnD||dnD){meta[0]=[cnD?"Credit Note No.":"Debit Note No.",inv.invoice_no];if(!mg)meta[1]=["Our Ref No.",inv.our_ref||""]}
+  const A=v=>v==null||v===""?v:cnD?Math.abs(Number(v)):v;
+  return `<div class="doc pg inv">${coHeader(s)}<div class="ttl">${cnD?"Credit Note":dnD?"Debit Note":"Tax Invoice"}</div>
   <div class="hdr">${toBlock(c)}<table class="meta">${meta.map(([k,v])=>`<tr><td>${k}</td><td>:</td><td>${esc(v)}</td></tr>`).join("")}</table></div>
   <div class="body"><table class="lines"><colgroup><col style="width:10mm"><col><col style="width:13mm"><col style="width:13mm"><col style="width:28mm"><col style="width:31mm"></colgroup>
   <thead><tr><th>No.</th><th class="c">Description</th><th class="c">Qty</th><th class="c">UOM</th><th class="r">Unit Price $</th><th class="r">Total Amount $</th></tr></thead><tbody>
   ${inv.description?`<tr><td></td><td ${l3?'colspan="5" style="white-space:nowrap"':""}>${String(inv.description).split("\n").filter(Boolean).map(x=>`<div class="d1"><span class="ul">${esc(x)}</span></div>`).join("")}</td>${l3?"":`<td colspan="4"></td>`}</tr>`:""}
-  ${lines.map((l,i)=>{const u=lineUnit(l),nu=(l3||u!=="LS")&&u!=="hrs"&&u!=="LS"&&l.unit_price!=null;if(l.unit_price==null&&u!=="hrs")return `<tr><td>${i+1})</td><td>${desc(l.description)}</td><td class="c">${l.qty==null||l.qty===""?1:Number(l.qty)%1?Number(l.qty).toFixed(2):l.qty}</td><td class="c">${esc(u)}</td><td><div class="c">LS</div></td><td>${acc(l.amount)}</td></tr>`;return nu?`<tr><td>${i+1})</td><td>${desc(l.description)}</td><td class="c">${Number(l.qty)%1?Number(l.qty).toFixed(2):l.qty}</td><td class="c">${esc(u)}</td>
-    <td>${acc(l.unit_price)}</td><td>${acc(l.amount)}</td></tr>`:`<tr><td>${i+1})</td><td>${desc(l.description)}</td><td class="c">${u==="hrs"?Number(l.qty||0).toFixed(2):(l.qty??1)}</td><td class="c">${u==="hrs"?"hrs":"LS"}</td>
-    <td>${u==="hrs"||l.unit_price==null?`<div class="c">LS</div>`:acc(l.unit_price)}</td><td>${acc(l.amount)}</td></tr>`}).join("")}</tbody></table>
+  ${lines.map((l,i)=>{const u=lineUnit(l),nu=(l3||u!=="LS")&&u!=="hrs"&&u!=="LS"&&l.unit_price!=null;if(l.unit_price==null&&u!=="hrs")return `<tr><td>${i+1})</td><td>${desc(l.description)}</td><td class="c">${l.qty==null||l.qty===""?1:Number(l.qty)%1?Number(l.qty).toFixed(2):l.qty}</td><td class="c">${esc(u)}</td><td><div class="c">LS</div></td><td>${acc(A(l.amount))}</td></tr>`;return nu?`<tr><td>${i+1})</td><td>${desc(l.description)}</td><td class="c">${Number(l.qty)%1?Number(l.qty).toFixed(2):l.qty}</td><td class="c">${esc(u)}</td>
+    <td>${acc(A(l.unit_price))}</td><td>${acc(A(l.amount))}</td></tr>`:`<tr><td>${i+1})</td><td>${desc(l.description)}</td><td class="c">${u==="hrs"?Number(l.qty||0).toFixed(2):(l.qty??1)}</td><td class="c">${u==="hrs"?"hrs":"LS"}</td>
+    <td>${u==="hrs"||l.unit_price==null?`<div class="c">LS</div>`:acc(A(l.unit_price))}</td><td>${acc(A(l.amount))}</td></tr>`}).join("")}</tbody></table>
   ${l3&&inv.summary_no?`<div class="attx">Refer to summary list No: ${esc(inv.summary_no)}</div>`:""}
   ${hasBd?`<div class="attx">${l3?"(Please refer to attach for all detailed breakdown)":"(Please see the attachment)"}</div>`:""}</div>
-  <table class="tot"><tr><td class="lab">Sub Total</td><td class="col">:</td><td class="dol">$</td><td class="amt">${money(inv.amount_before_gst)}</td></tr>
-  <tr><td class="lab">Add GST ${Number(inv.gst_rate)}%</td><td class="col">:</td><td class="dol">$</td><td class="amt">${money(inv.gst_amount)}</td></tr>
-  <tr class="grand"><td class="lab">Total</td><td class="col">:</td><td class="dol">$</td><td class="amt">${money(inv.total)}</td></tr></table>
-  ${payFoot(s)}<div class="eoe">E. &amp; O. E.</div>
-  <div class="nb"><div>N.B:</div><div>- Invoices considered correct unless disputes notified to us within SEVEN (7) days from date of invoice</div><div></div><div>- Interest at the rate of 1.5% per month will be charged on all overdue amounts</div></div></div>`}
+  <table class="tot"><tr><td class="lab">Sub Total</td><td class="col">:</td><td class="dol">$</td><td class="amt">${money(A(inv.amount_before_gst))}</td></tr>
+  <tr><td class="lab">Add GST ${Number(inv.gst_rate)}%</td><td class="col">:</td><td class="dol">$</td><td class="amt">${money(A(inv.gst_amount))}</td></tr>
+  <tr class="grand"><td class="lab">Total</td><td class="col">:</td><td class="dol">$</td><td class="amt">${money(A(inv.total))}</td></tr></table>
+  ${cnD?`<div class="foot" style="justify-content:flex-end"><div class="sig">Authorised Signature</div></div>`:payFoot(s)}<div class="eoe">E. &amp; O. E.</div>
+  ${cnD?"":`<div class="nb"><div>N.B:</div><div>- Invoices considered correct unless disputes notified to us within SEVEN (7) days from date of invoice</div><div></div><div>- Interest at the rate of 1.5% per month will be charged on all overdue amounts</div></div>`}</div>`}
 function sumMonth(inv,list){const a=inv.period_from||list[0].do_date,b=inv.period_to||list[list.length-1].do_date;
   return a.slice(0,7)===b.slice(0,7)?monthLong(a):`${MONL[+a.slice(5,7)-1]}${a.slice(0,4)!==b.slice(0,4)?" "+a.slice(0,4):""} & ${monthLong(b)}`}
 function sumHead(lines){return `<div class="sumh">${lines.map((t,i)=>i===0?`<div class="t"><span class="ul">${esc(t)}</span></div>`:`<div>${esc(t)}</div>`).join("")}</div>`}
