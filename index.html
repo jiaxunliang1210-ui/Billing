@@ -180,6 +180,11 @@ label.file{cursor:pointer}
 #cropOv .cropsel i[data-h=sw]{left:-12px;bottom:-12px;cursor:nesw-resize}#cropOv .cropsel i[data-h=se]{right:-12px;bottom:-12px;cursor:nwse-resize}
 #cropOv .actions{margin-top:10px;flex-wrap:wrap}
 .dobig{font:700 26px/1.1 "IBM Plex Sans",system-ui,sans-serif;color:var(--amber);letter-spacing:.5px}
+#scanOv{position:fixed;inset:0;z-index:195;background:rgba(5,8,12,.88);display:flex;align-items:center;justify-content:center;padding:12px}
+#scanOv .scanbox{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;width:min(900px,100%);max-height:100%;overflow:auto}
+#scanOv .thumbs{display:flex;flex-wrap:wrap;gap:10px;margin:10px 0}
+#scanOv .th{position:relative;width:120px;text-align:center;font-size:12px}#scanOv .th img{width:120px;height:170px;object-fit:contain;background:#fff;border-radius:6px;border:1px solid var(--line);display:block}
+#scanOv .th .tb{display:flex;justify-content:center;gap:4px;margin-top:4px}
 #photoOv{position:fixed;inset:0;z-index:190;background:rgba(5,8,12,.82);display:flex;align-items:center;justify-content:center;padding:12px}
 #photoOv .pvbox{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;width:min(1100px,100%);max-height:100%;overflow:auto}
 #photoOv .pvhead{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}
@@ -351,7 +356,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-29b";
+const APP_VER="2026-10-30a";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -2935,7 +2940,7 @@ function genInput(f,v){const lab=L(...(isL3()&&f.labelL3||f.label))+(f.req?" *":
     default:return `<label class="f">${lab}<input type="${f.type}" name="${f.k}" value="${esc(v)}"${CASE_ENT.includes(f.k)?` data-case="${f.k}"`:""}></label>`}}
 function genForm(ent,cfg,e,sk){
   return `<section class="panel"><h2>${e.id?L("修改","Edit"):L("新增","Add")} · ${L(...cfg.label)}</h2>
-  ${ent==="supplier_invoices"?`<div class="actions" style="margin:0 0 8px"><label class="btn sec file">📄 ${L("从 PDF 读资料（可以拖进来）","Read details from PDF (drag & drop OK)")}<input type="file" hidden accept="application/pdf,.pdf,image/*" onchange="siPdf(this)"></label><span id="siPdfMsg" class="mute" style="font-size:13px"></span></div><div id="siPdfDiff"></div>`:""}
+  ${ent==="supplier_invoices"?`<div class="actions" style="margin:0 0 8px"><label class="btn sec file">📄 ${L("从 PDF 读资料（可以拖进来）","Read details from PDF (drag & drop OK)")}<input type="file" hidden accept="application/pdf,.pdf,image/*" onchange="siPdf(this)"></label><button type="button" class="btn sec" onclick="siScan()">📷 ${L("拍照扫描","Scan with camera")}</button><span id="siPdfMsg" class="mute" style="font-size:13px"></span></div><div id="siPdfDiff"></div>`:""}
   <form id="gForm" class="grid" oninput="S.dirty=true${ent==="supplier_invoices"?";siDupCheck();siDue(event)":""}" onchange="${ent==="supplier_invoices"?"siDue(event)":""}" onsubmit="event.preventDefault();saveGen('${ent}')">${fieldsOf(cfg).map(f=>`<div data-gk="${f.k}" style="display:contents">${genInput(f,e[f.k])}</div>`).join("")}</form>${ent==="rates"&&isL3()?`<p class="mute" id="rateHint" style="font-size:13px;margin:4px 0 0"></p>`:""}
   ${ent==="supplier_invoices"&&e.id?`<p>${L("Surcharge 检查","Surcharge check")}：${genCell(cfg,"_check",e)}</p>`:""}
   ${ent==="supplier_invoices"&&e.id&&siAtts(e).length?`<p style="margin:6px 0"><button class="btn sec sm" onclick="siDownload(['${e.id}'],'first')">⬇ ${L("只下载第一页","Download page 1 only")}</button> <button class="btn sec sm" onclick="siDownload(['${e.id}'],'one')">⬇ ${L("下载全部","Download all")}</button></p>`:""}
@@ -3900,7 +3905,7 @@ function tiRender(){const F=TI.files,cnt=k=>F.filter(x=>x.st===k).length,go=F.fi
   const order={reading:0,fill:1,bad:2,new:3,has:4,ok:5,same:6},rows=[...F].sort((a,b)=>order[a.st]-order[b.st]||String(a.date).localeCompare(String(b.date)));
   pvOv(`<div class="pvhead"><h3 style="margin:0">⬆ ${L("上传 Tax Invoice","Upload tax invoices")} · ${S.company}</h3><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
   <p class="mute" style="font-size:13px;margin-top:0">${L("可以一次选很多个 PDF，或直接选整包 zip（分好的那几包）。文件名要是「日期_供应商_Invoice No_金额.pdf」。文件名不是这个格式也可以：系统会读 PDF 里的字，帮你填日期、供应商、单号、金额，你核对一下就好（扫描 / 拍照的会用 OCR 认字，每张约 10–20 秒，认出来要仔细核对）。系统按 Invoice No（不管 / - 空格）+ 供应商或金额自动配对，存成那张 supplier invoice 的「Tax Invoice」附件。同一个文件上传两次不会重复。","Pick many PDFs or whole zip packs. File names: date_supplier_invoiceNo_total.pdf. Each is matched by invoice no + supplier or amount and saved as that supplier invoice's Tax Invoice attachment.")}</p>
-  <label class="btn file">⬆ ${L("选 PDF / 照片 / zip","Choose PDF / photo / zip")}<input type="file" accept=".pdf,.zip,.jpg,.jpeg,.png" multiple hidden onchange="tiFiles(this)"></label>
+  <label class="btn file">⬆ ${L("选 PDF / 照片 / zip","Choose PDF / photo / zip")}<input type="file" accept=".pdf,.zip,.jpg,.jpeg,.png" multiple hidden onchange="tiFiles(this)"></label> <button class="btn sec" onclick="tiScan()">📷 ${L("拍照扫描","Scan with camera")}</button>
   ${F.length?`<ul style="margin:8px 0 4px 18px;font-size:14px"><li>${L("配对到","Matched")}: <b>${cnt("ok")}</b></li><li>${L("系统没有这张（打勾的会用文件名资料新增）","Not in system (ticked = create from file name)")}: ${cnt("new")}</li>
     <li>${L("那张已经有 Tax Invoice 附件（要再放就打勾）","Already has a tax invoice (tick to add anyway)")}: ${cnt("has")}</li><li>${L("已经上传过，跳过","Already uploaded, skipped")}: ${cnt("same")}</li>${cnt("reading")?`<li>⏳ ${L(`读取 / 认字中，还有 ${cnt("reading")} 个（扫描件每个约 10–20 秒，可以先做别的）`,`Reading / OCR: ${cnt("reading")} left`)}</li>`:""}${F.some(x=>x.ocr&&!x.reading)?`<li><span class="tag bad">OCR</span> ${L("标 OCR 的是扫描件认字读出来的，比较容易错，要仔细对","OCR rows were read from scans — check carefully")}</li>`:""}${cnt("fill")?`<li><b style="color:var(--bad)">${L("要你补资料（读不到字的扫描件）","Need details (scans without text)")}: ${cnt("fill")}</b></li>`:""}${cnt("bad")?`<li>${L("不是 PDF","Not PDF")}: ${cnt("bad")}</li>`:""}
     ${F.some(x=>x.src==="pdf"||x.src==="hint")?`<li>${L("黄色格子是从 PDF 读到的，请核对，可以直接改","Yellow fields were read from the PDF — check and edit")}</li>`:""}</ul>
@@ -4041,7 +4046,7 @@ function opvRender(){const F=OPV.files,cnt=k=>F.filter(x=>x.st===k).length,go=F.
   const N=x=>esc(JSON.stringify(x.name));
   pvOv(`<div class="pvhead"><h3 style="margin:0">⬆ ${L("导入旧 PV","Import old PVs")} · ${S.company}</h3><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
   <p class="mute" style="font-size:13px;margin-top:0">${L("选签好名的 PV 扫描 PDF（第 1 页是 PV，后面是 supplier tax invoice），可以一次选很多个或整包 zip。系统读 PV 上的供应商、日期、每张 invoice 号码和金额，对系统里的 supplier invoice。没有的会从后面的 tax invoice 页新增。导入后 PV = 已付，invoice 一起标已付，PDF 挂上去当签名 PV，tax invoice 页补到那张 invoice 的附件。扫描件要认字，每页约 10–20 秒。","Pick signed PV scans (page 1 = PV, then supplier tax invoices), many at once or a zip. Matched to supplier invoices; missing ones are created from the tax invoice pages. Imported as Paid with the PDF as signed PV.")}</p>
-  <label class="btn file">⬆ ${L("选 PV PDF / zip","Choose PV PDFs / zip")}<input type="file" accept=".pdf,.zip" multiple hidden onchange="opvFiles(this)"></label>
+  <label class="btn file">⬆ ${L("选 PV PDF / zip","Choose PV PDFs / zip")}<input type="file" accept=".pdf,.zip" multiple hidden onchange="opvFiles(this)"></label> <button class="btn sec" onclick="opvScan()">📷 ${L("拍照扫描","Scan with camera")}</button>
   ${F.length?`<ul style="margin:8px 0 4px 18px;font-size:14px"><li>🟢 ${L("全部对到","All matched")}: <b>${cnt("ok")}</b></li><li>🟡 ${L("要检查（看黄色说明，可以直接改）","Check (see notes, editable)")}: ${cnt("warn")}</li><li>🔴 ${L("读不到 / 要补资料","Can't read / fill in")}: ${cnt("bad")}</li><li>${L("已经在系统，跳过","Already in system, skipped")}: ${cnt("dup")}</li>
     ${cnt("reading")||F.some(x=>x.readingPages)?`<li>⏳ ${L(`认字中，还有 ${cnt("reading")+F.filter(x=>x.readingPages).length} 个（可以先做别的）`,`Reading: ${cnt("reading")} left`)}</li>`:""}</ul>
   <p style="font-size:13px;margin:6px 0"><a href="#" onclick="event.preventDefault();OPV.files.forEach(x=>{if(['ok','warn'].includes(x.st))OPV.take.add(x.name)});opvRender()">${L("全选","All")}</a> · <a href="#" onclick="event.preventDefault();OPV.take.clear();opvRender()">${L("全不选","None")}</a></p>
@@ -4063,6 +4068,37 @@ function opvRender(){const F=OPV.files,cnt=k=>F.filter(x=>x.st===k).length,go=F.
     ${x.warn.filter(w=>w!=="OCR").length||x.dup||x.err?`<div style="margin-top:6px">${[x.err,x.dup,...x.warn.filter(w=>w!=="OCR")].filter(Boolean).map(w=>`<span class="tag warn" style="margin-right:4px">${esc(w)}</span>`).join("")}</div>`:""}`}</div>`}).join("")}</div>
   <datalist id="opvSups">${S.d.suppliers.map(s=>`<option value="${esc(s.name)}">`).join("")}</datalist>
   <div class="actions" style="margin-top:10px"><button class="btn" id="opvGo" ${go.length&&!F.some(x=>x.readingPages&&OPV.take.has(x.name))?"":"disabled"} onclick="opvApply()">${L(`导入 ${go.length} 张 PV`,`Import ${go.length} PVs`)}</button></div>`:""}<p id="opvProg" class="mute"></p>`)}
+/* ---- 拍照扫描成 PDF（跟 DO 一样：裁切拉直 + 去影子；可以拍很多页） ---- */
+function scanDoc(title,hint,base){return new Promise(resolve=>{const pages=[];let busy=false;const ov=document.createElement("div");ov.id="scanOv";document.body.appendChild(ov);
+  const urls=[];const draw=()=>{urls.forEach(u=>URL.revokeObjectURL(u));urls.length=0;
+    ov.innerHTML=`<div class="scanbox"><div style="display:flex;align-items:center;gap:8px"><h3 style="margin:0">📷 ${esc(title)}</h3><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
+      ${hint?`<p class="mute" style="font-size:13px;margin:6px 0 0">${hint}</p>`:""}
+      <div class="thumbs">${pages.map((b,i)=>{const u=URL.createObjectURL(b);urls.push(u);return `<div class="th"><img src="${u}"><div>${L(`第 ${i+1} 页`,`Page ${i+1}`)}</div><div class="tb">${i?`<button class="btn sec sm" data-mv="${i}" data-d="-1">◀</button>`:""}<button class="btn sec sm" data-del="${i}">✕</button>${i<pages.length-1?`<button class="btn sec sm" data-mv="${i}" data-d="1">▶</button>`:""}</div></div>`}).join("")}
+        ${pages.length?"":`<div class="mute" style="padding:30px 0">${L("还没有页。按「拍一页」开始。","No pages yet — tap “Take a page”.")}</div>`}</div>
+      <div class="actions" style="flex-wrap:wrap"><label class="btn file">📷 ${L(pages.length?"再拍一页":"拍一页","Take a page")}<input type="file" hidden accept="image/*" capture="environment"></label>
+        <label class="btn sec file">🖼 ${L("从相册选（可多张）","From gallery (multi)")}<input type="file" hidden accept="image/*" multiple></label><span style="flex:1"></span>
+        <button class="btn sec" data-a="x">${L("取消","Cancel")}</button><button class="btn" data-a="ok" ${pages.length&&!busy?"":"disabled"}>✓ ${L(`完成（${pages.length} 页）`,`Done (${pages.length} pages)`)}</button></div>
+      ${busy?`<p class="mute">${L("处理中…","Processing…")}</p>`:""}</div>`};
+  const close=v=>{urls.forEach(u=>URL.revokeObjectURL(u));ov.remove();resolve(v)};
+  ov.addEventListener("change",async e=>{const inp=e.target;if(inp.type!=="file")return;const fs=[...inp.files];inp.value="";if(!fs.length)return;busy=true;draw();
+    try{for(const f of fs){const b=await cropImage(f,L(`第 ${pages.length+1} 页`,`Page ${pages.length+1}`));if(b)pages.push(b)}}finally{busy=false;draw()}});
+  ov.addEventListener("click",async e=>{const t=e.target.closest("button");if(!t)return;
+    if(t.dataset.a==="x"){if(!pages.length||confirm(L("不要这些照片？","Discard these photos?")))close(null);return}
+    if(t.dataset.del!=null){pages.splice(+t.dataset.del,1);draw();return}
+    if(t.dataset.mv!=null){const i=+t.dataset.mv,j=i+(+t.dataset.d);[pages[i],pages[j]]=[pages[j],pages[i]];draw();return}
+    if(t.dataset.a==="ok"&&pages.length){busy=true;draw();try{close(await scanPdf(pages,base))}catch(err){busy=false;draw();toast(err.message||String(err))}}});
+  draw()})}
+async function scanPdf(blobs,base){await loadPdfLibs();const{jsPDF}=window.jspdf,pdf=new jsPDF({unit:"mm",format:"a4",orientation:"portrait"});
+  const durl=b=>new Promise((ok,no)=>{const r=new FileReader();r.onload=()=>ok(r.result);r.onerror=no;r.readAsDataURL(b)});
+  for(let i=0;i<blobs.length;i++){const bm=await createImageBitmap(blobs[i]);let w=210,h=bm.height*210/bm.width;if(h>297){h=297;w=bm.width*297/bm.height}if(bm.close)bm.close();
+    if(i)pdf.addPage("a4","portrait");pdf.addImage(await durl(blobs[i]),"JPEG",(210-w)/2,0,w,h,undefined,"FAST")}
+  const t=new Date(),st=`${t.getFullYear()}${z2(t.getMonth()+1)}${z2(t.getDate())}-${z2(t.getHours())}${z2(t.getMinutes())}${z2(t.getSeconds())}`;
+  return new File([pdf.output("blob")],`${base||"scan"}_${st}.pdf`,{type:"application/pdf"})}
+async function opvScan(){const f=await scanDoc(L("拍旧 PV","Scan an old PV"),L("先拍 PV（第 1 页），再拍后面那几张 tax invoice。拍完按「完成」，再按一次 📷 拍下一张 PV。","Page 1 = the PV, then its tax invoices. Tap Done, then 📷 again for the next PV."),"PV_scan");
+  if(!f||!OPV)return;OPV.files.push(opvNameParse({name:f.name,file:f,st:"reading",lines:[],pages:[],warn:[]}));opvRender();opvRead()}
+async function tiScan(){const f=await scanDoc(L("拍 Tax Invoice","Scan a tax invoice"),L("一张 invoice 拍一次；有好几页就连续拍，拍完按「完成」。下一张 invoice 再按一次 📷。","One invoice per scan (several pages OK). Tap Done, then 📷 again for the next one."),"TaxInvoice_scan");
+  if(!f||!TI)return;TI.files.push({name:f.name,file:f});tiAnalyse();tiRender();tiReadPdfs()}
+async function siScan(){const f=await scanDoc(L("拍 Supplier Invoice","Scan supplier invoice"),L("拍完按「完成」，系统会读资料，保存时自动附上。","Tap Done; details are read and the scan is attached on save."),"Invoice_scan");if(f)await siPdfRead(f,true)}
 async function opvJpeg(x,i){const c=await opvCanvas(x,i,2);return await new Promise(r=>c.toBlob(r,"image/jpeg",0.8))}
 async function opvApply(){const go=OPV.files.filter(x=>OPV.take.has(x.name)&&["ok","warn"].includes(x.st));if(!go.length)return;
   const nNew=sum(go,x=>x.lines.filter(l=>!l.si).length);
