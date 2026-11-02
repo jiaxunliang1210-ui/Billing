@@ -356,7 +356,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-11-02c";
+const APP_VER="2026-11-02e";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -1493,7 +1493,7 @@ const pvById=id=>(S.d.pvs||[]).find(p=>p.id===id);
 const pvOfSI=si=>(S.d.pvl||[]).filter(l=>l.supplier_invoice_id===si.id).map(l=>pvById(l.pv_id)).filter(Boolean)[0]||null;
 const supById=id=>S.d.suppliers.find(s=>s.id===id)||{};
 const supAcct=s=>[s.bank_name,s.bank_account].filter(Boolean).join(" ");
-const pvSigned=p=>S.d.attachments.filter(a=>a.entity_type==="pv"&&a.entity_id===p.id).sort((a,b)=>String(b.created_at||"").localeCompare(String(a.created_at||"")))[0]||null;
+const pvSigned=p=>S.d.attachments.filter(a=>a.entity_type==="pv"&&a.entity_id===p.id&&a.kind!=="Bank Proof").sort((a,b)=>String(b.created_at||"").localeCompare(String(a.created_at||"")))[0]||null;
 const defCheque=()=>S.company==="L3H"?"OCBC":"DBS Giro";
 function numWords(d){const p=[];for(const[v,w]of[[1e6,"Million"],[1e3,"Thousand"],[1,""]]){const q=Math.floor(d/v);if(q){p.push(w999(q)+(w?" "+w:""));d%=v}}return p.join(" ")||"Zero"}
 function pvWords(x){x=Math.abs(r2(x));const d=Math.floor(x+1e-9),c=Math.round((x-d)*100);return `${numWords(d)}${c?` And ${w999(c)} Cents`:""} Only.`}
@@ -1581,7 +1581,7 @@ function pvOpen(id){const p=pvById(id);if(!p)return;const st=p.status||"Pending"
     <tfoot><tr><td>A/C: ${esc(p.account||"")} · Cheque No.: ${esc(p.cheque_no||"")}</td><td class="num">${money(p.total)}</td></tr></tfoot></table></div>
   <p style="font-size:13px">${esc(pvWords(p.total))}</p>
   <div class="ckl panel"><h3 style="margin-top:0">${L("流程","Steps")}</h3>
-    <div class="ck ${pvSigned(p)?"ok":"warn"}"><b>${pvSigned(p)?"✓":"1"}</b><div>${L("印 PV 给批准人签，签好后上传","Print, get it signed, upload it")}${attBox("pv",id,["Signed PV","Other"])}</div></div>
+    <div class="ck ${pvSigned(p)?"ok":"warn"}"><b>${pvSigned(p)?"✓":"1"}</b><div>${L("印 PV 给批准人签，签好后上传","Print, get it signed, upload it")}${attBox("pv",id,["Signed PV","Bank Proof","Other"])}</div></div>
     <div class="ck ${st!=="Pending"?"ok":"warn"}"><b>${st!=="Pending"?"✓":"2"}</b><div>${st!=="Pending"?L(`已批准：${esc(p.approved_by||"")} ${dmy(p.approved_at)}`,`Approved by ${esc(p.approved_by||"")}`):`<button class="btn sm" onclick="pvApprove('${id}')">✓ ${L("已批准","Approved")}</button>`}</div></div>
     <div class="ck ${["Keyed","Paid"].includes(st)?"ok":"warn"}"><b>${["Keyed","Paid"].includes(st)?"✓":"3"}</b><div>${["Keyed","Paid"].includes(st)?L(`已 key in bank ${dmy(p.keyed_at)} · Ref: ${esc(p.bank_ref||"")}`,`Keyed ${dmy(p.keyed_at)}`):st==="Approved"?`<button class="btn sm" onclick="pvKey('${id}')">🏦 ${L("已 key in bank","Keyed in bank")}</button>`:`<span class="mute">${L("批准后才可以","After approval")}</span>`}</div></div>
     <div class="ck ${st==="Paid"?"ok":"warn"}"><b>${st==="Paid"?"✓":"4"}</b><div>${st==="Paid"?L(`已付 ${dmy(p.paid_at)}`,`Paid ${dmy(p.paid_at)}`):st==="Keyed"?`<button class="btn sm" onclick="pvPaid('${id}')">💰 ${L("已付（银行确认）","Paid")}</button>`:`<span class="mute">${L("key in bank 后才可以","After keying in")}</span>`}</div></div></div>
@@ -2642,6 +2642,12 @@ async function payReceipt(input){const file=input.files?.[0];input.value="";cons
   if(r.ref&&!f.reference){f.reference=r.ref;filled.push("reference")}
   if(r.method&&(!f.id)){if(f.method!==r.method){f.method=r.method;filled.push("method")}}
   let ticked=0;if(r.invs.length&&!Object.keys(f.alloc).length&&f.customer_id){let left=Number(f.amount)||0;for(const i of r.invs.filter(i=>i.customer_id===f.customer_id).sort((a,b)=>a.invoice_date.localeCompare(b.invoice_date))){const b=balExcl(i,f.id);if(b<=0.005)continue;const x=left>0?r2(Math.min(b,left)):b;f.alloc[i.id]=x;left=r2(left-x);ticked++}}
+  if(!ticked&&!Object.keys(f.alloc).length&&f.customer_id&&Number(f.amount)>0){const T=lines.join(" ").toUpperCase(),open=S.d.invoices.filter(i=>i.customer_id===f.customer_id&&i.status!=="Cancelled"&&balExcl(i,f.id)>0.005);
+    /* 截图上有 2210/11 这种号码尾巴 → 对 invoice；不然金额刚好等于一张的余额 */
+    const toks=[...T.matchAll(/\b(\d{4}\s*\/\s*\d{1,3})\b/g)].map(m=>m[1].replace(/\s+/g,""));
+    let hit=open.filter(i=>toks.some(t=>String(i.invoice_no).toUpperCase().replace(/\s+/g,"").endsWith("/"+t)||String(i.invoice_no).toUpperCase().replace(/\s+/g,"").endsWith(t)));
+    if(!hit.length){const eq=open.filter(i=>Math.abs(balExcl(i,f.id)-Number(f.amount))<0.005);if(eq.length===1)hit=eq}
+    let left=Number(f.amount);for(const i of hit.sort((a,b)=>a.invoice_date.localeCompare(b.invoice_date))){const b=balExcl(i,f.id),x=r2(Math.min(b,left));if(x<=0)break;f.alloc[i.id]=x;left=r2(left-x);ticked++}}
   f._fillK=new Set(filled);
   f._rcMsg=`<span class="tag warn">${L(`读出 ${filled.length} 格（黄色）${ticked?`，收据上写的 ${ticked} 张 invoice 已打勾`:""}，请检查`,`${filled.length} field(s) filled${ticked?`, ${ticked} invoice(s) ticked`:""} — please check`)}</span>${ocr?` <span class="tag bad">OCR</span>`:""} · ${L("保存时会附上这个文件","file will be attached on save")}${r.cust?"":` · <span class="tag warn">${L("认不出客户，请选","Customer not recognised")}</span>`}`;
   render();setTimeout(()=>{for(const k of f._fillK||[]){const el=document.querySelector(`.modal [data-k="${k}"]`);if(el)el.classList.add("pdfFill")}},0)}
@@ -2649,7 +2655,7 @@ function payInvList(f){return S.d.invoices.filter(i=>i.customer_id===f.customer_
 function payFormView(f){
   const list=payInvList(f),allocSum=sum(Object.values(f.alloc),x=>x),un=r2((Number(f.amount)||0)-allocSum);
   return `<div class="mhead"><h2>${f.id?L("修改收款","Edit payment"):L("记录收款","Record payment")}</h2><button class="close" onclick="closeModal()">✕</button></div>
-  <div class="actions" style="margin:0 0 8px"><label class="btn sec file">📄 ${L("从收据 / 转账截图 / Payment Advice 读资料（可以拖进来）","Read from receipt / transfer screenshot / payment advice")}<input type="file" hidden accept="application/pdf,.pdf,image/*" onchange="payReceipt(this)"></label><span id="payRcMsg" class="mute" style="font-size:13px">${f._rcMsg||""}</span></div>
+  <div class="actions" style="margin:0 0 8px"><label class="btn sec file">📄 ${L("从收据 / 转账截图 / Payment Advice 读资料（可以拖进来）","Read from receipt / transfer screenshot / payment advice")}<input type="file" hidden accept="application/pdf,.pdf,image/*" onchange="payReceipt(this)"></label><button type="button" class="btn sec" title="${L("截图后按这里，或直接按 Ctrl+V","Paste a screenshot (or Ctrl+V)")}" onclick="clipPaste({pay:1})">📋 ${L("贴上截图（银行月结单 / 转账）","Paste screenshot")}</button><span id="payRcMsg" class="mute" style="font-size:13px">${f._rcMsg||""}</span></div>
   <div class="grid" oninput="payIn(event.target)" onchange="payIn(event.target,true)">
     <label class="f">${L("客户","Customer")} *<select data-k="customer_id">${custOpts(f.customer_id)}</select></label>
     <label class="f">${L("收款日期","Payment date")} *<input type="date" data-k="payment_date" value="${f.payment_date||""}"></label>
@@ -3032,10 +3038,37 @@ async function delGen(ent,id){if(!confirm(L("确定删除？","Delete this recor
 
 /* ================= 附件 ================= */
 function attBox(type,id,kinds){const list=S.d.attachments.filter(a=>a.entity_type===type&&a.entity_id===id);
-  return `<div class="att"><h3>${L("附件","Attachments")}</h3>
+  return `<div class="att" data-type="${type}" data-id="${id}"><h3>${L("附件","Attachments")}</h3>
   ${list.length?`<ul>${list.map(a=>`<li>${type!=="pv"?`<a href="#" title="${L("预览","Preview")}" onclick="attPreview('${id}','${a.id}');return false">👁</a> `:""}<a href="#" onclick="openAtt('${a.id}');return false">${esc(a.kind||"")} · ${esc(a.file_name||"")}</a> <button class="x" onclick="delAtt('${a.id}')" title="Delete">✕</button></li>`).join("")}</ul>`:`<p class="mute">${L("还没有附件","No files yet")}</p>`}
   <div class="attadd"><select id="attKind-${id}">${kinds.map(k=>`<option>${k}</option>`).join("")}</select>
-  <label class="btn sec sm file">📎 ${L("上传文件","Upload file")}<input type="file" hidden onchange="upAtt('${type}','${id}',this)"></label><button type="button" class="btn sec sm" onclick="attScan('${type}','${id}')">📷 ${L("扫描","Scan")}</button></div></div>`}
+  <label class="btn sec sm file">📎 ${L("上传文件","Upload file")}<input type="file" hidden onchange="upAtt('${type}','${id}',this)"></label><button type="button" class="btn sec sm" onclick="attScan('${type}','${id}')">📷 ${L("扫描","Scan")}</button><button type="button" class="btn sec sm" title="${L("截图后按这里，或直接按 Ctrl+V","Paste a screenshot (or Ctrl+V)")}" onclick="clipPaste({type:'${type}',id:'${id}'})">📋 ${L("贴上截图","Paste screenshot")}</button></div></div>`}
+/* ---- 📋 贴上截图（Win+Shift+S 截图后 Ctrl+V）→ 自动变 PDF 挂上去；记录收款会顺便读资料 ---- */
+let ATT_LAST=null;document.addEventListener("pointerdown",e=>{const b=e.target.closest&&e.target.closest(".att[data-type]");if(b)ATT_LAST=b},true);
+async function shotPdf(blob,base){const bm=await createImageBitmap(blob),c=document.createElement("canvas");c.width=bm.width;c.height=bm.height;const g=c.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,c.width,c.height);g.drawImage(bm,0,0);
+  const jpg=await canvasJpeg(c,0.92),durl=await new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsDataURL(jpg)});
+  await loadPdfLibs();const{jsPDF}=window.jspdf,pdf=new jsPDF({unit:"mm",format:"a4",orientation:"portrait"});
+  let w=Math.min(190,bm.width*0.2),h=bm.height*w/bm.width;if(h>277){h=277;w=bm.width*h/bm.height}if(bm.close)bm.close();
+  pdf.addImage(durl,"JPEG",10,10,w,h,undefined,"FAST");
+  const t=new Date(),st=`${t.getFullYear()}${z2(t.getMonth()+1)}${z2(t.getDate())}-${z2(t.getHours())}${z2(t.getMinutes())}${z2(t.getSeconds())}`;
+  return new File([pdf.output("blob")],`${base||"Screenshot"}_${st}.pdf`,{type:"application/pdf"})}
+function clipTarget(){if(S.modal?.kind==="payForm"&&$("#payRcMsg"))return{pay:1};
+  const vis=b=>b&&document.body.contains(b)&&b.offsetParent!==null,ov=$("#photoOv");
+  const boxes=[...document.querySelectorAll(ov?"#photoOv .att[data-type]":".att[data-type]")].filter(vis);
+  const b=vis(ATT_LAST)&&(!ov||ov.contains(ATT_LAST))?ATT_LAST:boxes.length===1?boxes[0]:null;return b?{type:b.dataset.type,id:b.dataset.id}:null}
+async function clipUse(blob,t){t=t||clipTarget();if(!t)return toast(L("先打开要挂的地方（PV、Supplier invoice、记录收款…），点一下附件框再贴","Open where it should go first, then paste"));
+  try{if(t.pay){const f=S.modal?.f;if(!f)return;const img=new File([blob],"screenshot.png",{type:blob.type||"image/png"});toast(L("截图读取中…","Reading screenshot…"));
+      const pdf=await shotPdf(blob,"Bank");await payReceipt({files:[img],value:""});const g=S.modal?.f;if(g!==f)return;
+      f._receipt=new File([pdf],`Bank_${f.payment_date||today()}_${Number(f.amount)>0?Number(f.amount).toFixed(2):"x"}.pdf`,{type:"application/pdf"});
+      f._rcMsg=(f._rcMsg||"").replace(/保存时会附上这个文件|file will be attached on save/,L("截图已变成 PDF，保存时会附上","Screenshot saved as PDF, attached on save"));render();return}
+    const sel=$(`#attKind-${t.id}`),kind=sel?sel.value:"";const f=await shotPdf(blob,String(kind||"Screenshot").replace(/[^\w]+/g,"_"));await upAtt(t.type,t.id,{files:[f]})}
+  catch(e){toast(e.message||String(e))}}
+async function clipPaste(t){try{if(!navigator.clipboard?.read)throw 0;const items=await navigator.clipboard.read();
+    for(const it of items){const ty=it.types.find(x=>x.startsWith("image/"));if(ty)return clipUse(await it.getType(ty),t)}
+    toast(L("剪贴板里没有截图。先截图（Windows：Win+Shift+S）再按。","No screenshot on the clipboard. Take one first (Win+Shift+S)."))}
+  catch(e){toast(L("这个浏览器不能直接读剪贴板，请按 Ctrl+V 贴上（手机：长按 → 粘贴）","Can't read the clipboard here — press Ctrl+V instead"));ATT_LAST=t&&t.id?document.querySelector(`.att[data-id="${t.id}"]`):ATT_LAST}}
+document.addEventListener("paste",e=>{const cd=e.clipboardData;if(!cd)return;let blob=[...(cd.files||[])].find(f=>/^image\//.test(f.type));
+  if(!blob){const it=[...(cd.items||[])].find(x=>x.kind==="file"&&/^image\//.test(x.type));blob=it&&it.getAsFile()}
+  if(!blob)return;const t=clipTarget();if(!t)return;e.preventDefault();clipUse(blob,t)});
 async function attScan(type,id){const sel=$(`#attKind-${id}`),kind=sel?sel.value:"";
   const f=await scanDoc(L(`扫描 · ${kind}`,`Scan · ${kind}`),L("可以连续拍很多页，拍完按「完成」，会合成一个 PDF 挂上去。","Take as many pages as needed, then Done — saved as one PDF."),String(kind||"scan").replace(/[^\w]+/g,"_"));
   if(!f)return;let s2=$(`#attKind-${id}`);if(!s2){s2=document.createElement("select");s2.id=`attKind-${id}`;s2.innerHTML=`<option>${esc(kind)}</option>`;s2.hidden=true;document.body.appendChild(s2)}else s2.value=kind;
