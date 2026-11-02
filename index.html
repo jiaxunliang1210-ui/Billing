@@ -356,7 +356,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-11-02a";
+const APP_VER="2026-11-02b";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -4904,8 +4904,19 @@ async function doPreview(id,k,all){const inv=invById(id);
         <div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:8px">${it.map((y,j)=>`<button class="btn sm ${j===P.k?"":"sec"}" onclick="doPreview('${id}',${j})">${esc(y.d.do_no||"?")}${y.a?"":" ⚠"}</button>`).join("")}</div>`}
     pvOv(`<div class="pvhead"><h3 style="margin:0">👁 DO · ${esc(inv.invoice_no)}</h3>${nav}<span style="flex:1"></span>
       <button class="btn sm ${P.all?"sec":""}" onclick="doPreview('${id}',null,false)">${L("一张一张","One by one")}</button><button class="btn sm ${P.all?"":"sec"}" onclick="doPreview('${id}',null,true)">${L("全部","All")}</button>
-      <button class="btn sec sm" onclick="doOnlyPdf('${id}')">⬇ ${L("下载 DO PDF","DO PDF")}</button><button class="btn sec sm" data-a="x" onclick="DOPV=null">✕</button></div>${body}`)}
+      ${P.all?"":`<button class="btn sm" onclick="doOneDl('${id}')">⬇ ${L(`下载这张 DO ${esc(it[P.k].d.do_no||"")}`,`This DO ${esc(it[P.k].d.do_no||"")}`)}</button>`}<button class="btn sec sm" onclick="doOnlyPdf('${id}')">⬇ ${L(`全部 DO PDF（${new Set(it.map(x=>x.d.id)).size} 张）`,`All DOs PDF`)}</button><button class="btn sec sm" data-a="x" onclick="DOPV=null">✕</button></div>${body}`)}
   catch(e){toast(e.message||String(e))}}
+/* 只下载正在看的那一张 DO（同一张 DO 有几张照片就合成一个 PDF） */
+async function doOneDl(id){const P=DOPV;if(!P||P.id!==id)return;const x=P.items[P.k],d=x.d,atts=P.items.filter(y=>y.d.id===d.id&&y.a).map(y=>y.a);
+  if(!atts.length)return toast(L("这张 DO 没有照片","No photo for this DO"));
+  const inv=invById(id),base=`${fileBase(inv)}_DO_${String(d.do_no||"").replace(/[\\/:*?"<>|\s]+/g,"-")||"x"}`;
+  const save=(blob,name)=>{const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},2000)};
+  try{toast(L("下载中…","Downloading…"));const blobs=[];for(const a of atts){const{data,error}=await sb.storage.from("attachments").download(a.file_path);if(error)throw error;blobs.push({a,b:data})}
+    const ext=a=>((a.file_name||a.file_path||"").match(/\.(\w+)$/)||[0,"jpg"])[1].toLowerCase();
+    if(blobs.length===1)save(blobs[0].b,`${base}.${ext(blobs[0].a)}`);
+    else if(blobs.every(z=>/^(jpe?g|png|webp)$/.test(ext(z.a)))){const f=await scanPdf(blobs.map(z=>z.b),base);save(f,`${base}.pdf`)}
+    else blobs.forEach((z,i)=>save(z.b,`${base}_${i+1}.${ext(z.a)}`));
+    toast(L(`已下载 DO ${d.do_no||""}`,`DO ${d.do_no||""} downloaded`))}catch(e){toast(e.message||String(e))}}
 let CPV=null;
 async function custPreview(id){const inv=invById(id);
   pvOv(`<div class="pvhead"><h3 style="margin:0">👁 ${L("寄客户版本","Customer copy")} · ${esc(inv.invoice_no)}</h3><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div><p class="mute">${L("正在合成，DO 多的话要等一下…","Building, please wait…")}</p>`);
