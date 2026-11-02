@@ -356,7 +356,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-10-30c";
+const APP_VER="2026-11-02a";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -3035,7 +3035,11 @@ function attBox(type,id,kinds){const list=S.d.attachments.filter(a=>a.entity_typ
   return `<div class="att"><h3>${L("附件","Attachments")}</h3>
   ${list.length?`<ul>${list.map(a=>`<li>${type!=="pv"?`<a href="#" title="${L("预览","Preview")}" onclick="attPreview('${id}','${a.id}');return false">👁</a> `:""}<a href="#" onclick="openAtt('${a.id}');return false">${esc(a.kind||"")} · ${esc(a.file_name||"")}</a> <button class="x" onclick="delAtt('${a.id}')" title="Delete">✕</button></li>`).join("")}</ul>`:`<p class="mute">${L("还没有附件","No files yet")}</p>`}
   <div class="attadd"><select id="attKind-${id}">${kinds.map(k=>`<option>${k}</option>`).join("")}</select>
-  <label class="btn sec sm file">📎 ${L("上传文件","Upload file")}<input type="file" hidden onchange="upAtt('${type}','${id}',this)"></label></div></div>`}
+  <label class="btn sec sm file">📎 ${L("上传文件","Upload file")}<input type="file" hidden onchange="upAtt('${type}','${id}',this)"></label><button type="button" class="btn sec sm" onclick="attScan('${type}','${id}')">📷 ${L("扫描","Scan")}</button></div></div>`}
+async function attScan(type,id){const sel=$(`#attKind-${id}`),kind=sel?sel.value:"";
+  const f=await scanDoc(L(`扫描 · ${kind}`,`Scan · ${kind}`),L("可以连续拍很多页，拍完按「完成」，会合成一个 PDF 挂上去。","Take as many pages as needed, then Done — saved as one PDF."),String(kind||"scan").replace(/[^\w]+/g,"_"));
+  if(!f)return;let s2=$(`#attKind-${id}`);if(!s2){s2=document.createElement("select");s2.id=`attKind-${id}`;s2.innerHTML=`<option>${esc(kind)}</option>`;s2.hidden=true;document.body.appendChild(s2)}else s2.value=kind;
+  await upAtt(type,id,{files:[f]});if(s2.hidden)s2.remove()}
 /* ---- Supplier invoice：Due date 自动算 + 从 PDF 读资料 ---- */
 function siTerms(fm){if(fm.dataset.pdfTerms!==undefined&&fm.dataset.pdfTerms!=="")return Number(fm.dataset.pdfTerms);const s=S.d.suppliers.find(x=>x.id===fm.supplier_id?.value);return Number(s?.payment_terms_days??30)}
 function termsIn(lines){for(const l of lines){if(!/term/i.test(l))continue;const t=l.slice(l.search(/term/i));if(/c\s*\.?\s*[o0]\s*\.?\s*d\b|cash\s*on\s*delivery|\bcash\b/i.test(t))return 0;const m=t.match(/(\d{1,3})\s*days?/i);if(m)return Number(m[1])}return null}
