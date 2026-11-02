@@ -356,7 +356,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-11-02b";
+const APP_VER="2026-11-02c";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -4913,9 +4913,9 @@ async function doOneDl(id){const P=DOPV;if(!P||P.id!==id)return;const x=P.items[
   const save=(blob,name)=>{const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},2000)};
   try{toast(L("下载中…","Downloading…"));const blobs=[];for(const a of atts){const{data,error}=await sb.storage.from("attachments").download(a.file_path);if(error)throw error;blobs.push({a,b:data})}
     const ext=a=>((a.file_name||a.file_path||"").match(/\.(\w+)$/)||[0,"jpg"])[1].toLowerCase();
-    if(blobs.length===1)save(blobs[0].b,`${base}.${ext(blobs[0].a)}`);
-    else if(blobs.every(z=>/^(jpe?g|png|webp)$/.test(ext(z.a)))){const f=await scanPdf(blobs.map(z=>z.b),base);save(f,`${base}.pdf`)}
-    else blobs.forEach((z,i)=>save(z.b,`${base}_${i+1}.${ext(z.a)}`));
+    const img=blobs.filter(z=>ext(z.a)!=="pdf"),pdfs=blobs.filter(z=>ext(z.a)==="pdf");
+    if(img.length)save(await scanPdf(img.map(z=>z.b),base),`${base}${pdfs.length?"_photo":""}.pdf`);
+    pdfs.forEach((z,i)=>save(z.b,`${base}${pdfs.length>1||img.length?"_"+(i+1):""}.pdf`));
     toast(L(`已下载 DO ${d.do_no||""}`,`DO ${d.do_no||""} downloaded`))}catch(e){toast(e.message||String(e))}}
 let CPV=null;
 async function custPreview(id){const inv=invById(id);
