@@ -356,7 +356,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-11-03a";
+const APP_VER="2026-11-03b";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -3710,7 +3710,9 @@ async function bkApply(record){const R=BK.rows,co=S.company,go=record?R.filter(x
     if(go.length){await loadAll();await syncStatuses(go.filter(x=>x.cr>0).flatMap(x=>x.alloc.map(a=>a.inv.id)))}
     pg(L("正在做 Excel…","Building Excel…"));await loadExcelJS();const wb=new ExcelJS.Workbook();let name;
     if(BK.pdf){bkPdfBook(wb,R);name=`${co} Bank ${BK.acct||""} ${BK.ms.length>1?`${BK.ms[0]} to ${BK.ms.at(-1)}`:BK.m} (Remark).xlsx`.replace(/\s+/g," ")}
-    else{await wb.xlsx.load(BK.buf);const ws=wb.getWorksheet(BK.sheet)||wb.worksheets[0];
+    else{/* 旧 .xls / .csv：先转成 .xlsx 再写 Remark（ExcelJS 只读 .xlsx） */let src=BK.buf;const sig=new Uint8Array(src.slice?src.slice(0,2):src).subarray(0,2);
+      if(!(sig[0]===0x50&&sig[1]===0x4B)){const w0=XLSX.read(src,{cellDates:true});src=XLSX.write(w0,{bookType:"xlsx",type:"array",cellDates:true})}
+      await wb.xlsx.load(src);const ws=wb.getWorksheet(BK.sheet)||wb.worksheets[0];
     let col=BK.rmCol>=0?BK.rmCol+1:0;if(!col){col=ws.getRow(BK.hdrRow).cellCount+1;ws.getRow(BK.hdrRow).getCell(col).value="Remark";ws.getRow(BK.hdrRow).getCell(col).font={bold:true}}
     ws.getColumn(col).width=Math.max(ws.getColumn(col).width||0,60);
     for(const x of R){const c=ws.getRow(x.row).getCell(col);c.value=x.remark||"";c.alignment={wrapText:true,vertical:"top"}}
