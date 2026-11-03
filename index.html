@@ -356,7 +356,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-11-03b";
+const APP_VER="2026-11-03c";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -3039,7 +3039,7 @@ async function delGen(ent,id){if(!confirm(L("确定删除？","Delete this recor
 /* ================= 附件 ================= */
 function attBox(type,id,kinds){const list=S.d.attachments.filter(a=>a.entity_type===type&&a.entity_id===id);
   return `<div class="att" data-type="${type}" data-id="${id}"><h3>${L("附件","Attachments")}</h3>
-  ${list.length?`<ul>${list.map(a=>`<li>${type!=="pv"?`<a href="#" title="${L("预览","Preview")}" onclick="attPreview('${id}','${a.id}');return false">👁</a> `:""}<a href="#" onclick="openAtt('${a.id}');return false">${esc(a.kind||"")} · ${esc(a.file_name||"")}</a> <button class="x" onclick="delAtt('${a.id}')" title="Delete">✕</button></li>`).join("")}</ul>`:`<p class="mute">${L("还没有附件","No files yet")}</p>`}
+  ${list.length?`<ul>${list.map(a=>`<li>${type!=="pv"?`<a href="#" title="${L("预览","Preview")}" onclick="attPreview('${id}','${a.id}');return false">👁</a> `:""}<a href="#" onclick="openAtt('${a.id}');return false">${esc(a.kind||"")} · ${esc(a.file_name||"")}</a> <a href="#" title="${L("下载","Download")}" onclick="dlAtt('${a.id}');return false">⬇</a> <button class="x" onclick="delAtt('${a.id}')" title="Delete">✕</button></li>`).join("")}</ul>`:`<p class="mute">${L("还没有附件","No files yet")}</p>`}
   <div class="attadd"><select id="attKind-${id}">${kinds.map(k=>`<option>${k}</option>`).join("")}</select>
   <label class="btn sec sm file">📎 ${L("上传文件","Upload file")}<input type="file" hidden onchange="upAtt('${type}','${id}',this)"></label><button type="button" class="btn sec sm" onclick="attScan('${type}','${id}')">📷 ${L("扫描","Scan")}</button><button type="button" class="btn sec sm" title="${L("截图后按这里，或直接按 Ctrl+V","Paste a screenshot (or Ctrl+V)")}" onclick="clipPaste({type:'${type}',id:'${id}'})">📋 ${L("贴上截图","Paste screenshot")}</button></div></div>`}
 /* ---- 📋 贴上截图（Win+Shift+S 截图后 Ctrl+V）→ 自动变 PDF 挂上去；记录收款会顺便读资料 ---- */
@@ -3181,6 +3181,11 @@ async function upAtt(type,id,input){const file=input.files[0];if(!file)return;co
 async function openAtt(aid){const a=S.d.attachments.find(x=>x.id===aid),w=window.open("","_blank");
   const{data,error}=await sb.storage.from("attachments").createSignedUrl(a.file_path,600);if(error){w?.close();return toast(error.message)}
   if(w)w.location=data.signedUrl;else location.href=data.signedUrl}
+async function dlAtt(aid){const a=S.d.attachments.find(x=>x.id===aid);if(!a)return;
+  try{toast(L("下载中…","Downloading…"));const{data,error}=await sb.storage.from("attachments").download(a.file_path);if(error)throw error;
+    let name=a.file_name||String(a.file_path).split("/").pop();if(!/\.\w{2,5}$/.test(name)){const e=(String(a.file_path).match(/\.(\w{2,5})$/)||[])[1];if(e)name+="."+e}
+    const u=URL.createObjectURL(data),el=document.createElement("a");el.href=u;el.download=name;document.body.appendChild(el);el.click();setTimeout(()=>{URL.revokeObjectURL(u);el.remove()},2000);toast(L(`已下载 ${name}`,`Downloaded ${name}`))}
+  catch(e){toast(e.message||String(e))}}
 async function delAtt(aid){if(!confirm(L("确定删除这个附件？","Delete this file?")))return;const a=S.d.attachments.find(x=>x.id===aid);
   await sb.storage.from("attachments").remove([a.file_path]);const{error}=await sb.from("attachments").delete().eq("id",aid);if(error)return toast(error.message);
   S.d.attachments=S.d.attachments.filter(x=>x.id!==aid);render();if(a.entity_type==="pv"&&$("#photoOv"))pvOpen(a.entity_id)}
