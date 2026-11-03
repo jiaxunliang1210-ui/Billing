@@ -356,7 +356,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-11-02e";
+const APP_VER="2026-11-03a";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -3677,8 +3677,16 @@ function bkRender(){const R=BK.rows||[],cnt=k=>R.filter(x=>x.st===k).length,go=R
       <td><textarea class="inp" rows="${Math.min(6,String(x.remark||"").split("\n").length+1)}" style="min-width:260px;font-size:12px" onchange="bkSetRemark(${i},this.value)">${esc(x.remark||"")}</textarea></td></tr>${pickHTML(i)}`}).join("")}</tbody></table></div>
   <div class="actions" style="margin-top:10px"><button class="btn" id="bkGo" onclick="bkApply(true)">✓ ${L(`记进系统（${go.length} 笔）+ 下载填好 Remark 的 Excel`,`Record ${go.length} + download Excel`)}</button><button class="btn sec" onclick="bkApply(false)">⬇ ${L("只下载 Excel，不记进系统","Excel only")}</button></div><p id="bkProg" class="mute"></p>`:""}`)}
 async function bkFile(input){let fs=[...(input.files||[])];input.value="";if(!fs.length)return;
-  try{/* zip 拆开 */const all=[];for(const f of fs){if(/\.zip$/i.test(f.name)){await loadJSZip();const z=await JSZip.loadAsync(await f.arrayBuffer());
-        for(const e of Object.values(z.files))if(!e.dir&&/\.(pdf|xlsx|xls|csv)$/i.test(e.name))all.push(new File([await e.async("blob")],e.name.split("/").pop(),{type:/\.pdf$/i.test(e.name)?"application/pdf":""}))}else all.push(f)}
+  try{/* zip 拆开（看文件内容判断，不只看名字；坏的 zip 跳过，不会整个停掉） */const all=[],badZip=[];
+    for(const f of fs){const head=f.slice?new Uint8Array(await f.slice(0,5).arrayBuffer()):new Uint8Array(0),sig=String.fromCharCode(...head);
+      if(sig.startsWith("%PDF")){all.push(/\.pdf$/i.test(f.name)?f:new File([f],f.name.replace(/\.\w+$/,"")+".pdf",{type:"application/pdf"}));continue}
+      if(/\.zip$/i.test(f.name)){if(!sig.startsWith("PK")){badZip.push(f.name);continue}
+        try{await loadJSZip();const z=await JSZip.loadAsync(await f.arrayBuffer());
+          for(const e of Object.values(z.files))if(!e.dir&&!/(^|\/)__MACOSX\//.test(e.name)&&/\.(pdf|xlsx|xls|csv)$/i.test(e.name))all.push(new File([await e.async("blob")],e.name.split("/").pop(),{type:/\.pdf$/i.test(e.name)?"application/pdf":""}))}
+        catch(e){badZip.push(f.name)}}
+      else all.push(f)}
+    if(badZip.length)alert(L(`这个 zip 打不开，跳过：\n${badZip.join("\n")}\n\n可能没下载完整，或其实是 .rar / .7z。请重新下载，或先解压，再选里面的 PDF / Excel。`,`Couldn't open zip (skipped):\n${badZip.join("\n")}\n\nRe-download it, or unzip first and pick the PDF / Excel inside.`));
+    if(!all.length)return;
     const pdfs=all.filter(f=>/\.pdf$/i.test(f.name)||/pdf/.test(f.type));
     if(!pdfs.length){const f=all[0],buf=await f.arrayBuffer(),wb=XLSX.read(buf,{cellDates:true}),r=parseBank(wb);if(!r)return alert(L("看不懂这个银行文件（要有 Date / Debit / Credit 栏）","Unrecognised bank statement"));
       BK={file:f.name,buf,...r,pick:null};bkMatchAll();bkRender();return}
