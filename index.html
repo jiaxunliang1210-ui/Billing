@@ -356,7 +356,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-11-03c";
+const APP_VER="2026-11-03d";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -2598,11 +2598,47 @@ async function delInv(id){const i=invById(id);
   toast(L("已删除","Deleted"));closeModal()}
 
 /* ================= 收款 ================= */
+/* ---- 🔗 合并收款：导入时一张 invoice 一笔 → 同客户同一天同总额合成一笔还多张 ---- */
+let PM=null;
+const pmBase=r=>String(r||"").split(" · ")[0].trim();
+const pmTot=r=>{const m=String(r||"").match(/\$\s*([\d,]+\.\d{2})/);return m?r2(Number(m[1].replace(/,/g,""))):null};
+function pmGroups(){const g=new Map();
+  for(const p of S.d.payments){if(p.method==="Contra"||!p.customer_id||!p.payment_date)continue;const t=pmTot(p.reference);
+    const k=[p.customer_id,p.payment_date,p.method||"",t??""].join("|");(g.get(k)||g.set(k,[]).get(k)).push(p)}
+  return [...g.values()].filter(a=>a.length>1).map(ps=>{const t=pmTot(ps[0].reference),sm=r2(sum(ps,p=>Number(p.amount)||0));
+    return{key:ps.map(p=>p.id).sort().join(","),ps:ps.sort((a,b)=>String(a.created_at||"").localeCompare(String(b.created_at||""))),total:t,sum:sm,st:t==null?"nt":Math.abs(t-sm)<0.005?"ok":"diff"}})
+    .sort((a,b)=>b.ps[0].payment_date.localeCompare(a.ps[0].payment_date))}
+function pmOpen(){const G=pmGroups();PM={G,take:new Set(G.filter(g=>g.st==="ok").map(g=>g.key))};pmRender()}
+function pmRender(){const G=PM.G,go=G.filter(g=>PM.take.has(g.key)),ST={ok:["ok",L("总额对得上","Total matches")],nt:["warn",L("Reference 没写总额，请确认","No total in reference — check")],diff:["bad",L("加起来跟 Reference 总额不一样","Sum differs from reference total")]};
+  pvOv(`<div class="pvhead"><h3 style="margin:0">🔗 ${L("合并收款","Merge payments")} · ${S.company}</h3><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
+  <p class="mute" style="font-size:13px;margin-top:0">${L("之前导入的收款是一张 invoice 一笔。同一个客户、同一天、同一个 Reference 总额的会合成一笔（还很多张 invoice），SOA 就只显示一笔还钱。每张 invoice 还是已付，余额不变；每笔自己的备注会搬到 Remark。","Imported receipts were one per invoice. Same customer + date + reference total are merged into one payment; invoices stay paid.")}</p>
+  <p style="font-size:13px;margin:6px 0"><a href="#" onclick="event.preventDefault();PM.G.forEach(g=>PM.take.add(g.key));pmRender()">${L("全选","All")}</a> · <a href="#" onclick="event.preventDefault();PM.take.clear();pmRender()">${L("全不选","None")}</a> · ${L(`共 ${G.length} 组`,`${G.length} groups`)}</p>
+  <div style="max-height:58vh;overflow:auto">${G.map(g=>{const p0=g.ps[0],[t,lb]=ST[g.st];return `<div class="panel" style="padding:10px 12px;margin:0 0 8px">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input type="checkbox" ${PM.take.has(g.key)?"checked":""} onchange="PM.take[this.checked?'add':'delete']('${g.key}');pmRender()">
+      <b>${dmy(p0.payment_date)}</b> · ${esc(custName(p0.customer_id))} · <b>$${money(g.sum)}</b> · ${g.ps.length} ${L("笔","payments")} <span class="tag ${t}">${lb}${g.st==="diff"?` ($${money(g.total)})`:""}</span></div>
+    <div class="mute" style="font-size:12px;margin:4px 0 0">${esc(pmBase(p0.reference)||"—")}</div>
+    <div style="font-size:12px;margin-top:4px">${g.ps.map(p=>S.d.payment_allocations.filter(a=>a.payment_id===p.id).map(a=>`${esc(invById(a.invoice_id)?.invoice_no||"?")} $${money(a.amount)}`).join(", ")||`$${money(p.amount)}`).join(" · ")}</div></div>`}).join("")||`<p class="mute">${L("没有要合并的","Nothing to merge")}</p>`}</div>
+  <div class="actions" style="margin-top:10px"><button class="btn" id="pmGo" ${go.length?"":"disabled"} onclick="pmApply()">${L(`合并 ${go.length} 组`,`Merge ${go.length}`)}</button></div><p id="pmProg" class="mute"></p>`)}
+async function pmApply(){const go=PM.G.filter(g=>PM.take.has(g.key));if(!go.length)return;
+  if(!confirm(L(`合并 ${go.length} 组（共 ${sum(go,g=>g.ps.length)} 笔变成 ${go.length} 笔）？`,`Merge ${go.length} groups?`)))return;
+  const b=$("#pmGo");if(b)b.disabled=true;let ok=0;const fail=[];
+  for(const g of go){const keep=g.ps[0],others=g.ps.slice(1),ids=others.map(p=>p.id);const pr=$("#pmProg");if(pr)pr.textContent=`${ok+fail.length+1}/${go.length}`;
+    try{const bases=[...new Set(g.ps.map(p=>pmBase(p.reference)).filter(Boolean))];
+      const notes=g.ps.flatMap(p=>{const extra=String(p.reference||"").split(" · ").slice(1).join(" · ").trim(),inv=S.d.payment_allocations.filter(a=>a.payment_id===p.id).map(a=>invById(a.invoice_id)?.invoice_no).filter(Boolean).join("/");
+        return [extra&&`${inv||"$"+money(p.amount)}: ${extra}`,p.remark&&p!==keep&&`${inv||""} ${p.remark}`.trim()].filter(Boolean)});
+      const remark=[keep.remark||"",...notes].filter(Boolean).join("\n")||null;
+      const{error:e1}=await sb.from("payments").update({amount:g.sum,reference:bases.join(" / ")||keep.reference||null,remark}).eq("id",keep.id);if(e1)throw e1;
+      const{error:e2}=await sb.from("payment_allocations").update({payment_id:keep.id}).in("payment_id",ids);if(e2)throw e2;
+      await sb.from("attachments").update({entity_id:keep.id}).eq("entity_type","payment").in("entity_id",ids);
+      const{error:e3}=await sb.from("payments").delete().in("id",ids);if(e3)throw e3;ok++}
+    catch(e){fail.push(`${dmy(keep.payment_date)} ${custName(keep.customer_id)}: ${e.message||e}`)}}
+  await loadAll();PM={G:pmGroups(),take:new Set()};pmRender();render();
+  alert(L(`完成：合并 ${ok} 组${fail.length?`\n\n失败 ${fail.length} 组：\n`+fail.join("\n"):""}`,`Merged ${ok}${fail.length?`, failed ${fail.length}`:""}`))}
 function payView(){
   const alloc=p=>sum(S.d.payment_allocations.filter(a=>a.payment_id===p.id),a=>a.amount);
   const rows=sortRows("pay",S.d.payments.filter(p=>dfIn("pay",p.payment_date)&&(!S.payF.customer||p.customer_id===S.payF.customer)&&sqHit(SQ.pay,[...sqRow(p),custName(p.customer_id),...S.d.payment_allocations.filter(a=>a.payment_id===p.id).map(a=>invById(a.invoice_id)?.invoice_no)])),{date:p=>p.payment_date,cust:p=>custName(p.customer_id),amt:p=>Number(p.amount)||0,method:p=>p.method,ref:p=>p.reference,un:p=>r2(p.amount-alloc(p))});
   return `<div class="filters"><label class="f">${L("客户","Customer")}<select onchange="S.payF.customer=this.value;render()">${optList(S.d.customers.map(c=>[c.id,c.name]),S.payF.customer,L("全部","All"))}</select></label>
-    ${sqBox("pay",L("客户 / 金额 / Reference / Invoice No","customer / amount / ref / invoice no"))}<button class="btn" onclick="openPayForm({})">${L("记录收款","Record payment")}</button><button class="btn sec" onclick="bankUp()">🏦 ${L("银行月结单对单","Bank reconciliation")}</button><button class="btn sec" onclick="exportPay()">⬇ Excel</button></div>${dfBar("pay",yearsOf(S.d.payments,"payment_date"))}${sqNote("pay",rows.length,S.d.payments.length)}
+    ${sqBox("pay",L("客户 / 金额 / Reference / Invoice No","customer / amount / ref / invoice no"))}<button class="btn" onclick="openPayForm({})">${L("记录收款","Record payment")}</button><button class="btn sec" onclick="bankUp()">🏦 ${L("银行月结单对单","Bank reconciliation")}</button><button class="btn sec" onclick="exportPay()">⬇ Excel</button>${(()=>{const n=pmGroups().length;return n?`<button class="btn sec" onclick="pmOpen()">🔗 ${L(`合并收款（${n} 组）`,`Merge payments (${n})`)}</button>`:""})()}</div>${dfBar("pay",yearsOf(S.d.payments,"payment_date"))}${sqNote("pay",rows.length,S.d.payments.length)}
   ${rows.length?`<div class="tw"><table><thead><tr>${thS("pay","date",L("日期","Date"))}${thS("pay","cust",L("客户","Customer"))}${thS("pay","amt",L("金额","Amount"),"num")}${thS("pay","method",L("方式","Method"))}${thS("pay","ref","Reference")}
     <th>${L("付了哪些 invoice","Invoices settled")}</th>${thS("pay","un",L("未分配（多付）","Unallocated"),"num")}<th>${L("附件","Files")}</th></tr></thead><tbody>
   ${rows.map(p=>{const un=r2(p.amount-alloc(p));const inv=S.d.payment_allocations.filter(a=>a.payment_id===p.id).map(a=>`${esc(invById(a.invoice_id)?.invoice_no||"?")} ($${money(a.amount)})`).join(", ");
