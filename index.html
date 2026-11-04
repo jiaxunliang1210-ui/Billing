@@ -180,6 +180,8 @@ label.file{cursor:pointer}
 #cropOv .cropsel i[data-h=sw]{left:-12px;bottom:-12px;cursor:nesw-resize}#cropOv .cropsel i[data-h=se]{right:-12px;bottom:-12px;cursor:nwse-resize}
 #cropOv .actions{margin-top:10px;flex-wrap:wrap}
 .dobig{font:700 26px/1.1 "IBM Plex Sans",system-ui,sans-serif;color:var(--amber);letter-spacing:.5px}
+td.arh{cursor:grab;touch-action:none;user-select:none;color:var(--mute,#8a93a3);font-size:16px;text-align:center;width:22px}
+tr.ardrag{opacity:.45}tr.arover-a td{box-shadow:inset 0 3px 0 var(--amber,#f5a623)}tr.arover-b td{box-shadow:inset 0 -3px 0 var(--amber,#f5a623)}
 #scanOv{position:fixed;inset:0;z-index:195;background:rgba(5,8,12,.88);display:flex;align-items:center;justify-content:center;padding:12px}
 #scanOv .scanbox{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;width:min(900px,100%);max-height:100%;overflow:auto}
 #scanOv .thumbs{display:flex;flex-wrap:wrap;gap:10px;margin:10px 0}
@@ -356,7 +358,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-11-03d";
+const APP_VER="2026-11-04a";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -2978,7 +2980,8 @@ function genView(keys,sk){
   const gget=c=>{const f=cfg.fields.find(x=>x.k===c);if(!f)return r=>"";if(f.type==="customer")return r=>custName(r[c]);if(f.type==="supplier")return r=>supName(r[c]);if(["money","number","terms"].includes(f.type))return r=>r[c]==null?null:Number(r[c]);return r=>r[c]};
   const coF=(ent==="supplier_invoices"||ent==="diesel_surcharges")&&!S.siAll,sk2="g_"+ent,base=S.d[ent].filter(r=>(!dk||dfIn(dk,dcol==="received_date"?siRecv(r):r[dcol]))&&(!coF||siMine(r))),hit0=SQ[sk2]?base.filter(r=>sqHit(SQ[sk2],[...sqRow(r),...colsOf(cfg).filter(c=>!SPECIAL[c]).map(c=>gget(c)(r))])):base;
   const qk=si?(S.siQuick||""):"",hit=qk?hit0.filter(SIQ[qk].f):hit0;
-  const rows=sortRows("g_"+ent,hit,Object.fromEntries(colsOf(cfg).map(c=>[c,gget(c)])));
+  const rows=sortRows("g_"+ent,si&&!S.sort["g_"+ent]?siArSort(hit):hit,Object.fromEntries(colsOf(cfg).map(c=>[c,gget(c)])));if(si)SI_ROWS=rows.map(r=>r.id);
+  const drag=si&&!S.sort["g_"+ent];
   const hid=new Set(S.colHide[ent]||[]),vc=colsOf(cfg).filter(c=>!hid.has(c));
   const tabs=keys.length>1?`<div class="sub">${keys.map(k=>`<button class="${k===ent?"on":""}" onclick="S.sub['${sk}']='${k}';S.gEdit=null;S.dirty=false;render()">${L(...ENT[k].label)}</button>`).join("")}</div>`:"";
   const head=c=>{if(SPECIAL[c])return L(...SPECIAL[c]);const f=cfg.fields.find(f=>f.k===c);return L(...(isL3()&&f.labelL3||f.label)).replace(/\s*（[^）]*）|\s*\([^)]*\)/g,"").trim()};
@@ -2987,13 +2990,13 @@ function genView(keys,sk){
   const chips=si?`<div class="chips">${Object.entries(SIQ).map(([k,q])=>`<button class="${qk===k?"on":""}" onclick="S.siQuick='${k}';render()">${L(...q.l)} <b>${k?hit0.filter(q.f).length:hit0.length}</b></button>`).join("")}</div>`:"";
   const colBtn=`<details class="colpick"><summary class="btn sec sm">☰ ${L("栏位","Columns")}${hid.size?` (${vc.length}/${colsOf(cfg).length})`:""}</summary><div class="colbox">${colsOf(cfg).map(c=>`<label class="chk"><input type="checkbox" ${hid.has(c)?"":"checked"} onchange="colToggle('${ent}','${c}',this.checked)">${head(c)}</label>`).join("")}</div></details>`;
   return tabs+(cfg.note?`<p class="mute" style="font-size:13px">${L(...cfg.note)}</p>`:"")+
-    (e?genForm(ent,cfg,e,sk):`<div class="actions" style="margin:0 0 12px"><button class="btn" onclick="S.gEdit={};S.dirty=true;render()">${L("新增","Add")}</button><button class="btn sec" onclick="exportEnt('${ent}')">⬇ Excel</button>${ent==="customers"||ent==="suppliers"?`<button class="btn sec" onclick="dupOpen('${ent}')">🔍 ${L("找重复","Find duplicates")}${(()=>{const n=dupGroups(ent).length;return n?` <span class="badge">${n}</span>`:""})()}</button>`:""}</div>`)+
+    (e?genForm(ent,cfg,e,sk):`<div class="actions" style="margin:0 0 12px"><button class="btn" onclick="S.gEdit={};S.dirty=true;render()">${L("新增","Add")}</button><button class="btn sec" onclick="exportEnt('${ent}')">⬇ Excel</button>${ent==="supplier_invoices"?`<button class="btn sec" onclick="siArXlsx()">⬇ Excel · AR Summary</button>`:""}${ent==="customers"||ent==="suppliers"?`<button class="btn sec" onclick="dupOpen('${ent}')">🔍 ${L("找重复","Find duplicates")}${(()=>{const n=dupGroups(ent).length;return n?` <span class="badge">${n}</span>`:""})()}</button>`:""}</div>`)+
     `<div class="filters" style="margin:0 0 6px">${sqBox(sk2)}${colBtn}${ent==="supplier_invoices"||ent==="diesel_surcharges"?`<label class="chk" style="align-self:end"><input type="checkbox" ${S.siAll?"checked":""} onchange="S.siAll=this.checked;S.siSel.clear();render()">${L("显示两间公司","Show both companies")}</label>`:""}</div>`+(dk?`<div class="filters" style="margin:0 0 4px;align-items:center"><span class="mute" style="font-size:13px">${L("日期按：","Date by:")}</span><div class="seg">${[["recv",L("收到日期（入账月份）","Received (month)")],["inv",L("Invoice 日期","Invoice date")]].map(([k,t])=>`<button class="${(S.siDateBy||"recv")===k?"on":""}" onclick="S.siDateBy='${k}';render()">${t}</button>`).join("")}</div></div>`+dfBar(dk,yearsOf(S.d[ent].map(r=>({d:dcol==="received_date"?siRecv(r):r[dcol]})),"d")):"")+chips+sqNote(sk2,rows.length,base.length)+
     (si?siSelBar(rows):"")+
-    (rows.length?`<div class="tw"><table><thead><tr>${si?`<th onclick="event.stopPropagation()"><input type="checkbox" ${rows.every(r=>S.siSel.has(r.id))?"checked":""} onchange="siSelAll(${esc(JSON.stringify(rows.map(r=>r.id)))},this.checked)"></th>`:""}${vc.map(c=>SPECIAL[c]?`<th>${head(c)}</th>`:thS("g_"+ent,c,head(c),isNum(c)?"num":"")).join("")}</tr></thead><tbody>
+    (rows.length?`<div class="tw"><table id="siTbl"><thead><tr>${si?`<th title="${drag?L("按住 ⠿ 上下拖，排成你要的顺序（下载 AR Summary 照这个顺序）","Drag ⠿ to reorder"):L("按栏位排序中；再按那个栏位标题到 ↕ 就回到你拖好的顺序","Column sort on — click the header until ↕ to get your own order back")}" style="width:22px">${drag?"⠿":"↕"}</th><th onclick="event.stopPropagation()"><input type="checkbox" ${rows.every(r=>S.siSel.has(r.id))?"checked":""} onchange="siSelAll(${esc(JSON.stringify(rows.map(r=>r.id)))},this.checked)"></th>`:""}${vc.map(c=>SPECIAL[c]?`<th>${head(c)}</th>`:thS("g_"+ent,c,head(c),isNum(c)?"num":"")).join("")}</tr></thead><tbody>
       ${rows.map(r=>{const bad=si&&(!surchargeCheck(r).ok||(!r.payment_date&&r.due_date&&r.due_date<today()));
-        return `<tr class="click ${bad?"red":""}${si&&S.siSel.has(r.id)?" sel":""}" onclick="gEdit('${ent}','${r.id}')">${si?`<td onclick="event.stopPropagation()"><input type="checkbox" ${S.siSel.has(r.id)?"checked":""} onchange="siSelToggle('${r.id}',this.checked)"></td>`:""}${vc.map(c=>`<td class="${isNum(c)?"num":""}"${c==="supplier_id"||c==="description"||c==="remark"?' style="white-space:normal;min-width:140px;max-width:280px"':""}>${genCell(cfg,c,r)}</td>`).join("")}</tr>`}).join("")}</tbody>
-      ${si?`<tfoot><tr><td>${L("合计","Total")} ${rows.length}</td>${vc.map(c=>`<td class="${isNum(c)?"num":""}">${c==="total"?money(sum(rows,r=>r.total)):""}</td>`).join("")}</tr></tfoot>`:""}</table></div>`
+        return `<tr class="click ${bad?"red":""}${si&&S.siSel.has(r.id)?" sel":""}" data-sid="${r.id}" onclick="gEdit('${ent}','${r.id}')">${si?`<td onclick="event.stopPropagation()" class="${drag?"arh":""}" ${drag?`onpointerdown="arDown(event,'${r.id}')" title="${L("按住拖","Drag")}"`:""}>${drag?"⠿":""}</td><td onclick="event.stopPropagation()"><input type="checkbox" ${S.siSel.has(r.id)?"checked":""} onchange="siSelToggle('${r.id}',this.checked)"></td>`:""}${vc.map(c=>`<td class="${isNum(c)?"num":""}"${c==="supplier_id"||c==="description"||c==="remark"?' style="white-space:normal;min-width:140px;max-width:280px"':""}>${genCell(cfg,c,r)}</td>`).join("")}</tr>`}).join("")}</tbody>
+      ${si?`<tfoot><tr><td></td><td>${L("合计","Total")} ${rows.length}</td>${vc.map(c=>`<td class="${isNum(c)?"num":""}">${c==="total"?money(sum(rows,r=>r.total)):""}</td>`).join("")}</tr></tfoot>`:""}</table></div>`
     :`<div class="panel empty">${SQ[sk2]||qk?L("搜不到。","No match."):L("还没有资料，按「新增」开始。","Nothing here yet. Press Add to start.")}</div>`);
 }
 const SIQ={"":{l:["全部","All"],f:()=>true},unpaid:{l:["未付","Unpaid"],f:r=>!r.payment_date},over:{l:["逾期","Overdue"],f:r=>!r.payment_date&&r.due_date&&r.due_date<today()},
@@ -3229,11 +3232,61 @@ async function delAtt(aid){if(!confirm(L("确定删除这个附件？","Delete t
 /* ---- Supplier Invoice：勾选 → 一起预览 / 下载（合并 PDF 或 zip） ---- */
 function siSelToggle(id,on){on?S.siSel.add(id):S.siSel.delete(id);render()}
 function siSelAll(ids,on){ids.forEach(id=>on?S.siSel.add(id):S.siSel.delete(id));render()}
+/* ---- AR Summary：拖拉排序（ar_order）+ 照她的格式下载 Excel ---- */
+let SI_ROWS=[],AR=null;
+function siArSort(rows){const k=r=>r.ar_order==null?Infinity:Number(r.ar_order);
+  return [...rows].sort((a,b)=>k(a)-k(b)||String(a.invoice_date||"").localeCompare(String(b.invoice_date||""))||String(a.invoice_no||"").localeCompare(String(b.invoice_no||""),undefined,{numeric:true}))}
+function arDown(e,id){if(e.button>0)return;e.preventDefault();const tr=e.target.closest("tr");if(!tr)return;tr.classList.add("ardrag");AR={id,tr,over:null,before:true};
+  const mv=ev=>{const el=document.elementFromPoint(ev.clientX,ev.clientY),t=el&&el.closest&&el.closest("#siTbl tbody tr[data-sid]");
+    document.querySelectorAll("#siTbl tr.arover-a,#siTbl tr.arover-b").forEach(x=>x.classList.remove("arover-a","arover-b"));
+    if(t&&t!==AR.tr){const r=t.getBoundingClientRect();AR.over=t.dataset.sid;AR.before=ev.clientY<r.top+r.height/2;t.classList.add(AR.before?"arover-a":"arover-b")}else AR.over=null;
+    const H=window.innerHeight;if(ev.clientY<60)window.scrollBy(0,-14);else if(ev.clientY>H-60)window.scrollBy(0,14)};
+  const up=()=>{document.removeEventListener("pointermove",mv);document.removeEventListener("pointerup",up);document.removeEventListener("pointercancel",up);
+    document.querySelectorAll("#siTbl tr.arover-a,#siTbl tr.arover-b,#siTbl tr.ardrag").forEach(x=>x.classList.remove("arover-a","arover-b","ardrag"));
+    const a=AR;AR=null;if(a&&a.over&&a.over!==a.id)arMove(a.id,a.over,a.before)};
+  document.addEventListener("pointermove",mv);document.addEventListener("pointerup",up);document.addEventListener("pointercancel",up)}
+async function arMove(id,target,before){const ids=SI_ROWS.filter(x=>x!==id);let i=ids.indexOf(target);if(i<0)return;if(!before)i++;ids.splice(i,0,id);
+  const by=new Map(S.d.supplier_invoices.map(x=>[x.id,x])),rows=ids.map(x=>by.get(x)).filter(Boolean),k=rows.findIndex(r=>r.id===id);
+  const val=r=>r&&r.ar_order!=null?Number(r.ar_order):null,prev=val(rows[k-1]),next=val(rows[k+1]);let upd;
+  const all=rows.every(r=>r.id===id||val(r)!=null);
+  if(all&&prev!=null&&next!=null&&next-prev>1e-6)upd=[[id,(prev+next)/2]];
+  else if(all&&prev!=null&&next==null)upd=[[id,prev+1024]];
+  else if(all&&prev==null&&next!=null)upd=[[id,next-1024]];
+  else upd=rows.map((r,j)=>[r.id,(j+1)*1024]);
+  const old=new Map(upd.map(([x])=>[x,by.get(x).ar_order]));upd.forEach(([x,v])=>by.get(x).ar_order=v);render();
+  try{for(let j=0;j<upd.length;j+=10){const part=upd.slice(j,j+10);const rs=await Promise.all(part.map(([x,v])=>sb.from("supplier_invoices").update({ar_order:v}).eq("id",x)));
+      const er=rs.find(r=>r.error);if(er)throw er.error}}
+  catch(e){old.forEach((v,x)=>by.get(x).ar_order=v);render();
+    if(/ar_order/i.test(e.message||""))alert(L("还没跑 SQL：请先在 Supabase 跑「补充-AR排序-Supabase.sql」，跑完重新整理就可以拖了。","Run the SQL file 补充-AR排序-Supabase.sql in Supabase first."));else toast(e.message||String(e))}}
+const AR_MONTH_FILL=["DDEBF7","E2EFDA","FFF2CC","FCE4D6","EDE2F6","DDEBF7","E2EFDA","FFF2CC","FCE4D6","EDE2F6","DDEBF7","E2EFDA"];
+async function siArXlsx(ids){const by=new Map(S.d.supplier_invoices.map(x=>[x.id,x]));let list=(ids&&ids.length?SI_ROWS.filter(x=>ids.includes(x)):SI_ROWS).map(x=>by.get(x)).filter(Boolean);
+  if(ids&&ids.length)ids.forEach(x=>{if(!list.some(r=>r.id===x)&&by.get(x))list.push(by.get(x))});
+  if(!list.length)return toast(L("没有资料","Nothing to export"));
+  const key="arNo:"+S.company;let def=1;try{def=Number(localStorage.getItem(key))||1}catch(e){}
+  const st=prompt(L(`No 从几号开始？（共 ${list.length} 张）`,`Start No? (${list.length} rows)`),String(def));if(st==null)return;const n0=Math.max(1,parseInt(st,10)||1);
+  try{await loadExcelJS();const wb=new ExcelJS.Workbook(),ws=wb.addWorksheet(`${S.company} AR Summary`,{views:[{state:"frozen",ySplit:1}]});
+    const H=["No","Invoice Date","Invoice Number","Name of Customer","Description","Invoice Amount before GST ($)","GST ($)","Total","Payment date"],W=[7,12,24,30,44,16,13,14,13];
+    ws.addRow(H);const hr=ws.getRow(1);hr.height=36;
+    const bd={top:{style:"thin",color:{argb:"FF9E9E9E"}},left:{style:"thin",color:{argb:"FF9E9E9E"}},bottom:{style:"thin",color:{argb:"FF9E9E9E"}},right:{style:"thin",color:{argb:"FF9E9E9E"}}};
+    H.forEach((h,i)=>{const c=hr.getCell(i+1);c.font={bold:true};c.alignment={horizontal:"center",vertical:"middle",wrapText:true};c.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FFD6DCE4"}};c.border=bd;ws.getColumn(i+1).width=W[i]});
+    const acc='_("$"* #,##0.00_);_("$"* (#,##0.00);_("$"* "-"??_);_(@_)',dt=v=>{if(!v)return null;const[y,m,d]=String(v).slice(0,10).split("-").map(Number);return new Date(Date.UTC(y,m-1,d))};
+    list.forEach((r,i)=>{const row=ws.addRow([n0+i,dt(r.invoice_date),String(r.invoice_no||""),supName(r.supplier_id),String(r.description||""),r.amount_before_gst==null?null:Number(r.amount_before_gst),r.gst_amount==null?null:Number(r.gst_amount),r.total==null?null:Number(r.total),dt(r.payment_date)]);
+      const m=+String(siRecv(r)||r.invoice_date||"").slice(5,7),fill=m?AR_MONTH_FILL[m-1]:null;
+      row.eachCell({includeEmpty:true},(c,ci)=>{c.border=bd;c.alignment={vertical:"top",wrapText:ci===4||ci===5,horizontal:ci===3?"center":undefined};if(fill)c.fill={type:"pattern",pattern:"solid",fgColor:{argb:"FF"+fill}};
+        if(ci===2||ci===9)c.numFmt="d/m/yyyy";if(ci>=6&&ci<=8)c.numFmt=acc})});
+    ws.autoFilter={from:{row:1,column:1},to:{row:list.length+1,column:H.length}};
+    const tot=ws.addRow(["","","","","Total",r2(sum(list,r=>Number(r.amount_before_gst)||0)),r2(sum(list,r=>Number(r.gst_amount)||0)),r2(sum(list,r=>Number(r.total)||0)),""]);
+    tot.eachCell({includeEmpty:true},(c,ci)=>{c.font={bold:true};c.border=bd;if(ci>=6&&ci<=8)c.numFmt=acc;if(ci===5)c.alignment={horizontal:"right"}});
+    const ms=[...new Set(list.map(r=>String(siRecv(r)||r.invoice_date||"").slice(0,7)).filter(Boolean))].sort();
+    const name=`${S.company} AR Summary ${ms.length===1?ms[0]:ms.length?ms[0]+" to "+ms.at(-1):today()}.xlsx`;
+    saveBlob(new Blob([await wb.xlsx.writeBuffer()],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}),name);
+    try{localStorage.setItem(key,String(n0+list.length))}catch(e){}toast(L(`已下载 ${name}（No ${n0}–${n0+list.length-1}）`,`Downloaded ${name}`))}
+  catch(e){toast(e.message||String(e))}}
 function siSelBar(rows){const ids=[...S.siSel].filter(id=>S.d.supplier_invoices.some(x=>x.id===id));if(!ids.length)return"";
   const sel=S.d.supplier_invoices.filter(x=>S.siSel.has(x.id)),noScan=sel.filter(x=>!siAtts(x).length).length,J=esc(JSON.stringify(ids));
   return `<div class="panel" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 12px;margin:0 0 8px">
     <b>${L(`已选 ${ids.length} 张`,`${ids.length} selected`)}</b><span class="mute">$${money(sum(sel,x=>x.total))}</span>${noScan?`<span class="tag warn">${L(`${noScan} 张没有扫描件`,`${noScan} without scan`)}</span>`:""}<span style="flex:1"></span>
-    <button class="btn sm" onclick="siPreview(${J})">👁 ${L("一起预览","Preview together")}</button>
+    <button class="btn sm" onclick="siPreview(${J})">👁 ${L("一起预览","Preview together")}</button><button class="btn sec sm" onclick="siArXlsx(${J})">⬇ Excel · AR Summary</button>
     <button class="btn sec sm" onclick="siMarkPaid(${J})">✓ ${L("标已付","Mark paid")}</button><button class="btn sec sm" onclick="siMakePV(${J})">💳 ${L("开 PV","New PV")}</button><button class="btn sec sm" onclick="siContra(${J})">🔁 Contra</button>
     <button class="btn sm" onclick="siDownload(${J},'first')">⬇ ${L("合并第一页","Merge page 1 only")}</button><button class="btn sec sm" onclick="siDownload(${J},'pdf')">⬇ ${L("合并成一个 PDF（全部页）","One merged PDF (all pages)")}</button>
     <button class="btn sec sm" onclick="siDownload(${J},'zip')">⬇ ${L("打包 zip（每张一个 PDF）","Zip (one PDF each)")}</button>
