@@ -358,7 +358,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-11-04a";
+const APP_VER="2026-11-05a";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -3208,10 +3208,10 @@ async function siNewSup(){const n=SIPDF?._newSup;if(!n)return;const name=prompt(
   S.d.suppliers.push(data);const fm=$("#gForm");if(!fm)return;const sel=fm.supplier_id;const o=document.createElement("option");o.value=data.id;o.textContent=data.name;sel.appendChild(o);sel.value=data.id;sel.classList.add("pdfFill");
   if(S.gEdit)S.gEdit.supplier_id=data.id;SIPDF._newSup="";const dv=$("#siPdfDiff");if(dv)dv.querySelector(".note")?.remove();siDue({target:{name:"supplier_id"}});siDupCheck();toast(L("已新增供应商","Supplier added"))}
 function siPdfUse(k){const fm=$("#gForm");if(!fm||!SIPDF||SIPDF[k]==null)return;fm.elements[k].value=SIPDF[k];fm.dispatchEvent(new Event("siPdfFilled"));fm.elements[k].classList.add("pdfFill");S.dirty=true;if(k==="invoice_date"||k==="supplier_id")siDue({target:{name:k}});siDupCheck()}
-async function attUploadFile(type,id,file,kind){const safe=file.name.replace(/[^\w.\-]+/g,"_"),path=`${S.user.id}/${type}/${id}/${Date.now()}_${safe}`;
+async function attUploadFile(type,id,file,kind){file=await shrinkUp(file);const safe=file.name.replace(/[^\w.\-]+/g,"_"),path=`${S.user.id}/${type}/${id}/${Date.now()}_${safe}`;
   const up=await sb.storage.from("attachments").upload(path,file);if(up.error)throw up.error;
   const{data,error}=await sb.from("attachments").insert({entity_type:type,entity_id:id,kind,file_path:path,file_name:file.name}).select().single();if(error)throw error;S.d.attachments.push(data);return data}
-async function upAtt(type,id,input){const file=input.files[0];if(!file)return;const kind=$(`#attKind-${id}`).value,safe=file.name.replace(/[^\w.\-]+/g,"_");
+async function upAtt(type,id,input){let file=input.files[0];if(!file)return;file=await shrinkUp(file);const kind=$(`#attKind-${id}`).value,safe=file.name.replace(/[^\w.\-]+/g,"_");
   const path=`${S.user.id}/${type}/${id}/${Date.now()}_${safe}`;toast(L("上传中…","Uploading…"));
   const up=await sb.storage.from("attachments").upload(path,file);if(up.error)return toast(up.error.message);
   const{data,error}=await sb.from("attachments").insert({entity_type:type,entity_id:id,kind,file_path:path,file_name:file.name}).select().single();if(error)return toast(error.message);
@@ -4285,6 +4285,7 @@ function scanDoc(title,hint,base){return new Promise(resolve=>{const pages=[];le
   draw()})}
 async function scanPdf(blobs,base){await loadPdfLibs();const{jsPDF}=window.jspdf,pdf=new jsPDF({unit:"mm",format:"a4",orientation:"portrait"});
   const durl=b=>new Promise((ok,no)=>{const r=new FileReader();r.onload=()=>ok(r.result);r.onerror=no;r.readAsDataURL(b)});
+  blobs=await Promise.all(blobs.map(async b=>{try{const c=await compressImage(b,1800,0.75);return c&&c.size<b.size?c:b}catch(e){return b}}));
   for(let i=0;i<blobs.length;i++){const bm=await createImageBitmap(blobs[i]);let w=210,h=bm.height*210/bm.width;if(h>297){h=297;w=bm.width*297/bm.height}if(bm.close)bm.close();
     if(i)pdf.addPage("a4","portrait");pdf.addImage(await durl(blobs[i]),"JPEG",(210-w)/2,0,w,h,undefined,"FAST")}
   const t=new Date(),st=`${t.getFullYear()}${z2(t.getMonth()+1)}${z2(t.getDate())}-${z2(t.getHours())}${z2(t.getMinutes())}${z2(t.getSeconds())}`;
@@ -4294,7 +4295,7 @@ async function opvScan(){const f=await scanDoc(L("拍旧 PV","Scan an old PV"),L
 async function tiScan(){const f=await scanDoc(L("拍 Tax Invoice","Scan a tax invoice"),L("一张 invoice 拍一次；有好几页就连续拍，拍完按「完成」。下一张 invoice 再按一次 📷。","One invoice per scan (several pages OK). Tap Done, then 📷 again for the next one."),"TaxInvoice_scan");
   if(!f||!TI)return;TI.files.push({name:f.name,file:f});tiAnalyse();tiRender();tiReadPdfs()}
 async function siScan(){const f=await scanDoc(L("拍 Supplier Invoice","Scan supplier invoice"),L("拍完按「完成」，系统会读资料，保存时自动附上。","Tap Done; details are read and the scan is attached on save."),"Invoice_scan");if(f)await siPdfRead(f,true)}
-async function opvJpeg(x,i){const c=await opvCanvas(x,i,2);return await new Promise(r=>c.toBlob(r,"image/jpeg",0.8))}
+async function opvJpeg(x,i){const c=await opvCanvas(x,i,1.7);return await new Promise(r=>c.toBlob(r,"image/jpeg",0.72))}
 async function opvApply(){const go=OPV.files.filter(x=>OPV.take.has(x.name)&&["ok","warn"].includes(x.st));if(!go.length)return;
   const nNew=sum(go,x=>x.lines.filter(l=>!l.si).length);
   if(!confirm(L(`导入 ${go.length} 张 PV（状态 = 已付）？${nNew?`\n会新增 ${nNew} 张 supplier invoice`:""}`,`Import ${go.length} PVs as Paid?${nNew?`\n${nNew} supplier invoices will be created`:""}`)))return;
@@ -4572,6 +4573,73 @@ const BK_TABLES=["customers","vehicles","suppliers","company_settings","rates","
   "payment_vouchers","payment_voucher_lines","projects","drivers","machines","machine_logs","machine_bills","services","deleted_log"];
 const backupAge=()=>{const d=pref("lastBackup","");return d?daysBetween(d,today()):null};
 /* ---- 扫描件备份：一个月的文件打包 zip ---- */
+/* ================= 💾 空间管理：看文件占多少、清没人用的、删重复、压缩大照片 / 扫描 PDF ================= */
+let SM=null;
+const smExt=p=>(String(p).match(/\.([A-Za-z0-9]+)$/)||[0,""])[1].toLowerCase();
+const smMB=b=>(b/1048576).toFixed(b>=104857600?0:1)+" MB";
+const SM_IMG=/^(jpe?g|png|webp)$/;
+async function smList(prefix){const out=[];let off=0;for(;;){const{data,error}=await sb.storage.from("attachments").list(prefix,{limit:1000,offset:off,sortBy:{column:"name",order:"asc"}});if(error)throw error;out.push(...(data||[]));if(!data||data.length<1000)break;off+=1000}return out}
+async function smScan(){SM={busy:true,files:[],done:0,dirs:0,log:[],stop:false};smRender();
+  try{await loadAll();const q=[""],files=[];let active=0;
+    await new Promise((res,rej)=>{const next=()=>{if(SM.stop){res();return}
+        while(active<6&&q.length){const pre=q.shift();active++;smList(pre).then(items=>{for(const it of items){const p=pre?pre+"/"+it.name:it.name;if(it.id==null&&!it.metadata)q.push(p);else files.push({path:p,size:Number(it.metadata?.size)||0,at:it.created_at||it.updated_at||""})}
+            SM.dirs++;SM.found=files.length;active--;if(SM.dirs%25===0)smRender();if(!q.length&&!active)res();else next()}).catch(e=>{active--;rej(e)})}
+        if(!q.length&&!active)res()};next()});
+    SM.files=files;SM.busy=false;smAnalyse();smRender()}catch(e){SM.busy=false;SM.err=e.message||String(e);smRender()}}
+function smAnalyse(){const byPath=new Map(S.d.attachments.map(a=>[a.file_path,a])),old=new Date(Date.now()-86400000).toISOString();
+  SM.total=sum(SM.files,f=>f.size);SM.kinds={};for(const f of SM.files){const k=String(f.path).split("/")[1]||"?";(SM.kinds[k]=SM.kinds[k]||{n:0,b:0});SM.kinds[k].n++;SM.kinds[k].b+=f.size}
+  const mine=String(S.user?.id||"")+"/";SM.orph=SM.files.filter(f=>mine.length>1&&String(f.path).startsWith(mine)&&!byPath.has(f.path)&&(!f.at||f.at<old));
+  const sz=new Map(SM.files.map(f=>[f.path,f.size]));SM.size=sz;
+  const g=new Map();for(const a of S.d.attachments){const s=sz.get(a.file_path);if(!s)continue;const k=[a.entity_type,a.entity_id,a.kind,s,smExt(a.file_path)].join("|");(g.get(k)||g.set(k,[]).get(k)).push(a)}
+  SM.dups=[...g.values()].filter(x=>x.length>1).flatMap(x=>x.sort((a,b)=>String(a.created_at||"").localeCompare(String(b.created_at||""))).slice(1));
+  SM.bigImg=S.d.attachments.filter(a=>SM_IMG.test(smExt(a.file_path))&&(sz.get(a.file_path)||0)>350*1024);
+  SM.bigPdf=S.d.attachments.filter(a=>smExt(a.file_path)==="pdf"&&(sz.get(a.file_path)||0)>1200*1024)}
+function smRender(){const X=SM;if(!X)return;const lim=1.1*1024*1024*1024;
+  if(X.busy&&!X.files.length){pvOv(`<div class="pvhead"><h3 style="margin:0">💾 ${L("空间管理","Storage")}</h3><span style="flex:1"></span><button class="btn sec sm" data-a="x" onclick="SM.stop=true">✕</button></div><p>⏳ ${L(`正在数文件… 已看 ${X.dirs} 个文件夹，找到 ${X.found||0} 个文件（文件多要等 1–3 分钟）`,`Counting files… ${X.found||0} found`)}</p>`);return}
+  if(X.err){pvOv(`<div class="pvhead"><h3 style="margin:0">💾 ${L("空间管理","Storage")}</h3><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div><p class="tag bad">${esc(X.err)}</p>`);return}
+  const kinds=Object.entries(X.kinds).sort((a,b)=>b[1].b-a[1].b),KN={do:L("DO 照片","DO photos"),invoice:L("Invoice 签名页 / PO","Invoice signed pages / PO"),supplier_invoices:"Supplier invoice",pv:"PV",payment:L("收款收据","Receipts"),bank:L("银行月结单","Bank statements"),soa:"SOA",diesel_surcharges:"Diesel surcharge"};
+  const ob=sum(X.orph,f=>f.size),db=sum(X.dups,a=>X.size.get(a.file_path)||0),ib=sum(X.bigImg,a=>X.size.get(a.file_path)||0),pb=sum(X.bigPdf,a=>X.size.get(a.file_path)||0);
+  const est=X.total-ob-db-ib*0.75-pb*0.5;
+  pvOv(`<div class="pvhead"><h3 style="margin:0">💾 ${L("空间管理","Storage")}</h3><span style="flex:1"></span><button class="btn sec sm" data-a="x" onclick="SM.stop=true">✕</button></div>
+  <div class="kv" style="margin-bottom:10px"><div><span>${L("现在用了","Used")}</span><b style="color:${X.total>lim?"var(--bad)":"inherit"}">${smMB(X.total)}</b> / ${L("免费 1.1 GB","free 1.1 GB")}</div><div><span>${L("文件数","Files")}</span>${X.files.length}</div><div><span>${L("全部做完估计剩","After cleanup ≈")}</span><b>${smMB(Math.max(0,est))}</b> ${est<lim?'<span class="tag ok">✓ 够</span>':`<span class="tag warn">${L("还超过，要再备份旧月份","still over")}</span>`}</div></div>
+  <div class="tw" style="max-height:24vh;overflow:auto;margin-bottom:10px"><table style="font-size:13px"><thead><tr><th>${L("种类","Kind")}</th><th class="num">${L("文件","Files")}</th><th class="num">${L("大小","Size")}</th></tr></thead><tbody>${kinds.map(([k,v])=>`<tr><td>${esc(KN[k]||k)}</td><td class="num">${v.n}</td><td class="num">${smMB(v.b)}</td></tr>`).join("")}</tbody></table></div>
+  <div style="display:grid;gap:8px">
+    <div class="panel" style="padding:10px 12px;margin:0"><b>① ${L("没人用的文件","Unused files")}</b>：${X.orph.length} ${L("个","files")} · <b>${smMB(ob)}</b><div class="mute" style="font-size:12px">${L("系统里已经没有连到它（例：清理照片后留下的旧原图、删掉的附件没清干净）。删掉不影响任何资料。","Not linked to anything in the system — safe to delete.")}</div>${X.orph.length?`<button class="btn sm" style="margin-top:6px" onclick="smOrph()">🧹 ${L("删掉","Delete")} ${smMB(ob)}</button>`:""}</div>
+    <div class="panel" style="padding:10px 12px;margin:0"><b>② ${L("重复上传","Duplicates")}</b>：${X.dups.length} ${L("个","files")} · <b>${smMB(db)}</b><div class="mute" style="font-size:12px">${L("同一个地方、同一种、一模一样大小的文件，只留最早那个。","Same record, same kind, same size — keep the oldest.")}</div>${X.dups.length?`<button class="btn sm" style="margin-top:6px" onclick="smDups()">🧹 ${L("删掉重复","Delete duplicates")}</button>`:""}</div>
+    <div class="panel" style="padding:10px 12px;margin:0"><b>③ ${L("压缩大照片","Compress big photos")}</b>：${X.bigImg.length} ${L("张超过 350 KB","over 350 KB")} · ${smMB(ib)}<div class="mute" style="font-size:12px">${L("重新压成约 200–300 KB（最长边 1800 像素），字看得清楚，大约省 70–80%。","Re-saved at ~200–300 KB; text stays readable.")}</div>${X.bigImg.length?`<button class="btn sm" style="margin-top:6px" onclick="smComp('img')">🗜 ${L("开始压缩","Compress")}</button>`:""}</div>
+    <div class="panel" style="padding:10px 12px;margin:0"><b>④ ${L("压缩大的扫描 PDF","Compress big scanned PDFs")}</b>：${X.bigPdf.length} ${L("个超过 1.2 MB","over 1.2 MB")} · ${smMB(pb)}<div class="mute" style="font-size:12px">${L("只压扫描 / 拍照的 PDF；电脑开出来、有字的 PDF 不动。","Only scanned PDFs; computer-generated PDFs are left alone.")}</div>${X.bigPdf.length?`<button class="btn sm" style="margin-top:6px" onclick="smComp('pdf')">🗜 ${L("开始压缩","Compress")}</button>`:""}</div>
+  </div>
+  ${X.run?`<p style="margin-top:10px">⏳ ${esc(X.run)} <button class="btn sec sm" onclick="SM.stop=true">${L("停","Stop")}</button></p>`:""}${X.msg?`<p class="tag ok" style="margin-top:10px">${esc(X.msg)}</p>`:""}
+  <p class="mute" style="font-size:12px;margin-top:8px">${L("建议照 ① → ② → ③ → ④ 的顺序做。压缩时可以先做别的，但不要关掉这个网页。停了下次再按会接着做。","Do ① → ④ in order. Keep this page open while compressing; you can stop and continue later.")}</p>`)}
+async function smOrph(){const L0=SM.orph;if(!L0.length)return;if(!confirm(L(`删掉 ${L0.length} 个没人用的文件（${smMB(sum(L0,f=>f.size))}）？删了不能还原。`,`Delete ${L0.length} unused files?`)))return;
+  let n=0;try{for(let i=0;i<L0.length;i+=100){const part=L0.slice(i,i+100).map(f=>f.path);const{error}=await sb.storage.from("attachments").remove(part);if(error)throw error;n+=part.length;SM.run=`${n}/${L0.length}`;smRender()}}
+  catch(e){alert(e.message||String(e))}const gone=new Set(L0.slice(0,n).map(f=>f.path));SM.files=SM.files.filter(f=>!gone.has(f.path));SM.run="";SM.msg=L(`已删 ${n} 个没人用的文件`,`Deleted ${n} unused files`);smAnalyse();smRender()}
+async function smDups(){const D=SM.dups;if(!D.length)return;if(!confirm(L(`删掉 ${D.length} 个重复文件？每组会留最早那个。`,`Delete ${D.length} duplicates?`)))return;let n=0;
+  try{for(const a of D){await sb.storage.from("attachments").remove([a.file_path]);const{error}=await sb.from("attachments").delete().eq("id",a.id);if(error)throw error;n++;SM.files=SM.files.filter(f=>f.path!==a.file_path);if(n%10===0){SM.run=`${n}/${D.length}`;smRender()}}}
+  catch(e){alert(e.message||String(e))}await loadAll();SM.run="";SM.msg=L(`已删 ${n} 个重复文件`,`Deleted ${n} duplicates`);smAnalyse();smRender()}
+async function smPdfSmall(blob){await loadPdfJs();await loadPdfLibs();const doc=await pdfjsLib.getDocument({data:await blob.arrayBuffer()}).promise;
+  try{const tc=await(await doc.getPage(1)).getTextContent();if(tc.items.map(i=>i.str).join("").replace(/\s/g,"").length>=30)return null}catch(e){}
+  const{jsPDF}=window.jspdf;let pdf=null;for(let i=1;i<=Math.min(doc.numPages,40);i++){const pg=await doc.getPage(i),v0=pg.getViewport({scale:1}),sc=Math.min(2,1700/Math.max(v0.width,v0.height)),vp=pg.getViewport({scale:sc});
+    const c=document.createElement("canvas");c.width=vp.width;c.height=vp.height;const g=c.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,c.width,c.height);await pg.render({canvasContext:g,viewport:vp}).promise;
+    const land=v0.width>v0.height,W=land?297:210,H=land?210:297;if(!pdf)pdf=new jsPDF({unit:"mm",format:"a4",orientation:land?"landscape":"portrait"});else pdf.addPage("a4",land?"landscape":"portrait");
+    let w=W,h=c.height*W/c.width;if(h>H){h=H;w=c.width*H/c.height}pdf.addImage(c.toDataURL("image/jpeg",0.7),"JPEG",(W-w)/2,0,w,h,undefined,"FAST")}
+  return pdf?pdf.output("blob"):null}
+async function smComp(kind){if(SM.run)return;const list=(kind==="img"?SM.bigImg:SM.bigPdf).slice();if(!list.length)return;SM.stop=false;let n=0,saved=0,skip=0;const fail=[];
+  const q=[...list],work=async()=>{while(q.length&&!SM.stop){const a=q.shift();const old=SM.size.get(a.file_path)||0;
+    try{const{data,error}=await sb.storage.from("attachments").download(a.file_path);if(error)throw error;
+      let nb=null;if(kind==="img")nb=await compressImage(data,1800,0.72);else nb=await smPdfSmall(data);
+      if(!nb||nb.size>old*0.8){skip++}else{const base=String(a.file_path).split("/").slice(0,-1).join("/"),nm=String(a.file_path).split("/").pop().replace(/^\d{10,}_/,"").replace(/\.[^.]+$/,""),ext=kind==="img"?"jpg":"pdf";
+        const path=`${base}/${Date.now()}_${Math.random().toString(36).slice(2,6)}_s_${nm}.${ext}`.replace(/[^\w.\-\/]+/g,"_");
+        const up=await sb.storage.from("attachments").upload(path,nb,{contentType:kind==="img"?"image/jpeg":"application/pdf"});if(up.error)throw up.error;
+        const{error:e2}=await sb.from("attachments").update({file_path:path}).eq("id",a.id);if(e2){await sb.storage.from("attachments").remove([path]);throw e2}
+        await sb.storage.from("attachments").remove([a.file_path]);const f=SM.files.find(x=>x.path===a.file_path);if(f){f.path=path;f.size=nb.size}a.file_path=path;saved+=old-nb.size}}
+    catch(e){fail.push(`${a.file_name||a.file_path}: ${e.message||e}`)}
+    n++;SM.run=L(`压缩中 ${n}/${list.length} · 已省 ${smMB(saved)}`,`Compressing ${n}/${list.length} · saved ${smMB(saved)}`);if(n%3===0||!q.length)smRender()}};
+  SM.run=L(`压缩中 0/${list.length}`,`Compressing…`);smRender();await Promise.all([0,1,2].map(work));
+  SM.run="";SM.msg=L(`${SM.stop?"已停。":"完成："}压缩 ${n-skip-fail.length} 个，省了 ${smMB(saved)}${skip?`，${skip} 个本来就够小 / 是电脑开的 PDF，没动`:""}${fail.length?`，${fail.length} 个失败`:""}`,`Saved ${smMB(saved)}`);
+  await loadAll();smAnalyse();smRender();if(fail.length)console.warn(fail)}
+/* 以后上传：大照片先压小 */
+async function shrinkUp(file){try{if(file&&/^image\/(jpe?g|png|webp)$/i.test(file.type||"")&&file.size>500*1024){const b=await compressImage(file,1800,0.75);if(b&&b.size<file.size)return new File([b],String(file.name||"photo").replace(/\.[^.]+$/,"")+".jpg",{type:"image/jpeg"})}}catch(e){}return file}
 async function scanBackup(m){m=m||prompt(L("要备份哪个月的扫描件？（例：2026-09）","Which month? (e.g. 2026-09)"),prevMonthRange()[0].slice(0,7));if(!m||!/^\d{4}-\d{2}$/.test(m))return;
   const from=`${m}-01`,to=lastDayOf(m),co=S.company,inM=d=>d&&d>=from&&d<=to,pick=[];
   for(const a of S.d.attachments){let ok=false,folder="",nm="";
@@ -4753,7 +4821,7 @@ function setView(){const s=settingsOf(S.company);
     :a>7?`<span class="tag warn">${L(`上次备份 ${a} 天前`,`Last backup ${a} days ago`)}</span>`:`<span class="tag ok">${L(`上次备份：${dmy(pref("lastBackup",""))}`,`Last backup: ${dmy(pref("lastBackup",""))}`)}</span>`})()}</p>
   <p class="mute" style="font-size:14px">${L("备份会把 ETK 和 L3H 全部资料下载成一个 Excel（每个表格一个 sheet）。建议每星期备份一次，存在电脑和 Google Drive。附件文件本身还在云端，备份里只有附件记录，所以每个月也按「扫描件备份」把那个月的扫描件、DO 照片、签名页打包下载一次。",
     "Downloads all ETK and L3H data as one Excel file, one sheet per table. Back up weekly and keep a copy on your computer and Google Drive. Attachment files stay in the cloud; the backup lists them.")}</p>
-  <div class="actions"><button class="btn" onclick="backupNow()">⬇ ${L("立即备份","Back up now")}</button><button class="btn sec" onclick="scanBackup()">🗂 ${L("扫描件备份（一个月打包 zip）","Scan backup (month zip)")}</button><button class="btn sec" onclick="binOpen()">🗑 ${L("回收站","Recycle bin")}</button>
+  <div class="actions"><button class="btn" onclick="backupNow()">⬇ ${L("立即备份","Back up now")}</button><button class="btn sec" onclick="scanBackup()">🗂 ${L("扫描件备份（一个月打包 zip）","Scan backup (month zip)")}</button><button class="btn sec" onclick="smScan()">💾 ${L("空间管理（压缩 / 清理文件）","Storage cleanup")}</button><button class="btn sec" onclick="binOpen()">🗑 ${L("回收站","Recycle bin")}</button>
     <label class="btn sec file">⬆ ${L("从备份还原","Restore from backup")}<input type="file" accept=".xlsx" hidden onchange="restoreBackup(this)"></label></div>
   <p class="mute" style="font-size:13px">${L("还原：选之前下载的备份文件。备份里的资料会写回去，备份之后新增的资料不会被删掉。","Restore: choose a backup file. Its records are written back; anything added after the backup is kept.")}</p></section>
   <section class="panel"><h2>${L("账号","Account")}</h2><p>${esc(S.user.email)}</p></section>`}
