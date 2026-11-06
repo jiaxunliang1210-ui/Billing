@@ -358,7 +358,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-11-06b";
+const APP_VER="2026-11-06c";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -2640,7 +2640,7 @@ function payView(){
   const alloc=p=>sum(S.d.payment_allocations.filter(a=>a.payment_id===p.id),a=>a.amount);
   const rows=sortRows("pay",S.d.payments.filter(p=>dfIn("pay",p.payment_date)&&(!S.payF.customer||p.customer_id===S.payF.customer)&&sqHit(SQ.pay,[...sqRow(p),custName(p.customer_id),...S.d.payment_allocations.filter(a=>a.payment_id===p.id).map(a=>invById(a.invoice_id)?.invoice_no)])),{date:p=>p.payment_date,cust:p=>custName(p.customer_id),amt:p=>Number(p.amount)||0,method:p=>p.method,ref:p=>p.reference,un:p=>r2(p.amount-alloc(p))});
   return `<div class="filters"><label class="f">${L("客户","Customer")}<select onchange="S.payF.customer=this.value;render()">${optList(S.d.customers.map(c=>[c.id,c.name]),S.payF.customer,L("全部","All"))}</select></label>
-    ${sqBox("pay",L("客户 / 金额 / Reference / Invoice No","customer / amount / ref / invoice no"))}<button class="btn" onclick="openPayForm({})">${L("记录收款","Record payment")}</button><button class="btn sec" onclick="bankUp()">🏦 ${L("银行月结单对单","Bank reconciliation")}</button><button class="btn sec" onclick="exportPay()">⬇ Excel</button>${(()=>{const n=pmGroups().length;return n?`<button class="btn sec" onclick="pmOpen()">🔗 ${L(`合并收款（${n} 组）`,`Merge payments (${n})`)}</button>`:""})()}</div>${dfBar("pay",yearsOf(S.d.payments,"payment_date"))}${sqNote("pay",rows.length,S.d.payments.length)}
+    ${sqBox("pay",L("客户 / 金额 / Reference / Invoice No","customer / amount / ref / invoice no"))}<button class="btn" onclick="openPayForm({})">${L("记录收款","Record payment")}</button><button class="btn sec" onclick="bankUp()">🏦 ${L("银行月结单对单","Bank reconciliation")}</button><button class="btn sec" onclick="exportPay()">⬇ Excel</button><button class="btn sec" onclick="ctScan()">🔁 ${L("对 Contra / 上传 Contra 单","Contras")}</button>${(()=>{const n=pmGroups().length;return n?`<button class="btn sec" onclick="pmOpen()">🔗 ${L(`合并收款（${n} 组）`,`Merge payments (${n})`)}</button>`:""})()}</div>${dfBar("pay",yearsOf(S.d.payments,"payment_date"))}${sqNote("pay",rows.length,S.d.payments.length)}
   ${rows.length?`<div class="tw"><table><thead><tr>${thS("pay","date",L("日期","Date"))}${thS("pay","cust",L("客户","Customer"))}${thS("pay","amt",L("金额","Amount"),"num")}${thS("pay","method",L("方式","Method"))}${thS("pay","ref","Reference")}
     <th>${L("付了哪些 invoice","Invoices settled")}</th>${thS("pay","un",L("未分配（多付）","Unallocated"),"num")}<th>${L("附件","Files")}</th></tr></thead><tbody>
   ${rows.map(p=>{const un=r2(p.amount-alloc(p));const inv=S.d.payment_allocations.filter(a=>a.payment_id===p.id).map(a=>`${esc(invById(a.invoice_id)?.invoice_no||"?")} ($${money(a.amount)})`).join(", ");
