@@ -358,7 +358,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-11-05b";
+const APP_VER="2026-11-06a";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -3646,6 +3646,7 @@ async function bankPdfRows(file){await loadPdfJs();const pdf=await pdfjsLib.getD
     its.sort((a,b)=>b.y-a.y||a.x-b.x);const rows=[];for(const it of its){const r=rows.find(r=>Math.abs(r.y-it.y)<=2.5);if(r)r.it.push(it);else rows.push({y:it.y,it:[it]})}
     rows.sort((a,b)=>b.y-a.y).forEach(r=>lines.push(r.it.sort((a,b)=>a.x-b.x).map(z=>z.t).join(" ").replace(/\s+/g," ").trim()))}
   const MON={JAN:1,FEB:2,MAR:3,APR:4,MAY:5,JUN:6,JUL:7,AUG:8,SEP:9,OCT:10,NOV:11,DEC:12},num=v=>Number(String(v).replace(/,/g,""));
+  if(lines.some(l=>/OVERSEA-CHINESE BANKING|Daily Statement of Account/i.test(l)))return ocbcRows(lines,MON,num);
   const junk=/^(DBS Bank Ltd|12 Marina|www\.dbs|Page \d|Details Of|Transaction|Date$|Date Date|Value|Currency|Withdrawal|Continue on|Co\. Reg|Account Statement|Messages For You|•)/i;
   const out=[];let prev=null,cur=null,acct="",stop=false;
   for(const l of lines){const am=l.match(/Account No:?\s*([\d\-]+)/i);if(am)acct=am[1];
@@ -3656,6 +3657,18 @@ async function bankPdfRows(file){await loadPdfJs();const pdf=await pdfjsLib.getD
       const up=prev!=null?bal>prev+0.001:false;cur={date:d,c1:m[4].trim(),ext:[],dr:up?0:r2(amt),cr:up?r2(amt):0,bal};out.push(cur);prev=bal;stop=false;continue}
     if(cur&&!stop&&!junk.test(l)&&!/^\d{2}-[A-Za-z]{3}-\d{4}\s+to\s+/i.test(l)&&l.length<90)cur.ext.push(l)}
   return{acct,rows:out.map(x=>({date:x.date,c1:x.c1,desc:[x.c1,...x.ext].join(" ").replace(/\s+/g," ").trim(),dr:x.dr,cr:x.cr,bal:x.bal,old:""}))}}
+/* OCBC「Daily Statement of Account - Details」：新的在上面，用余额判断进 / 出 */
+function ocbcRows(lines,MON,num){let acct="",open=null,skip=false;const tx=[];let cur=null;
+  const junk=/^(Daily Statement of Account|From \d{2} \w{3} \d{4} To|Account (Number|Name)|Debits\s|Credits\s|BIC (Code|Name)|LIMITED$|Post Date|Value Date|Details$|Printed (By|On)|Co\.Reg|Page \d)/i;
+  for(const l of lines){let m;if(!acct&&(m=l.match(/Account Number\s+(\d[\d\-]*)/i)))acct=m[1];
+    if(open==null&&(m=l.match(/Opening Balance\s+(-?[\d,]+\.\d\d)/i)))open=num(m[1]);
+    m=l.match(/^(\d{2})\s+([A-Za-z]{3})\s+(\d{4})\s+(.*?)\s*(-?[\d,]+\.\d\d)\s+(-?[\d,]+\.\d\d)$/);
+    if(m&&MON[m[2].toUpperCase()]){cur={date:`${m[3]}-${z2(MON[m[2].toUpperCase()])}-${m[1]}`,c1:m[4].trim(),ext:[],amt:num(m[5]),bal:num(m[6])};tx.push(cur);continue}
+    if(/^Printed By/i.test(l)){skip=true;continue}if(skip){if(/^(Value Date|Details$)/i.test(l))skip=false;continue}
+    if(!cur||junk.test(l)||/insured|Deposit Insurance|investment products|call centre|facility limits/i.test(l))continue;const v=l.replace(/^\d{2}\s+[A-Za-z]{3}\s+\d{4}\s*/,"").trim();if(v&&v.length<90&&!cur.ext.includes(v))cur.ext.push(v)}
+  const rows=[];let prev=open;for(const x of tx.slice().reverse()){const up=prev!=null?x.bal>prev+0.001:false;
+    rows.push({date:x.date,c1:x.c1,desc:[x.c1,...x.ext].join(" ").replace(/\s+/g," ").trim(),dr:up?0:r2(x.amt),cr:up?r2(x.amt):0,bal:x.bal,old:""});prev=x.bal}
+  return{acct,rows}}
 const BK_STOP=new Set(["PTE","LTD","PRIVATE","LIMITED","THE","AND","N","CO","S","SG","SINGAPORE","SPORE","INTL","INTERNATIONAL","GROUP","HOLDINGS","SERVICES","SERVICE"]);
 function bkParty(desc,list){const dt=normCo(desc).split(" ").filter(Boolean);let best=null,bs=0;
   const firsts={};for(const p of list){const t=normCo(p.name).split(" ").filter(x=>x.length>=2&&!BK_STOP.has(x));if(t[0])firsts[t[0]]=(firsts[t[0]]||0)+1}
@@ -3754,7 +3767,7 @@ function bkRender(){const R=BK.rows||[],cnt=k=>R.filter(x=>x.st===k).length,go=R
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:2px 12px;margin-top:6px;max-height:220px;overflow:auto">${list.map(v=>`<label class="chk"><input type="checkbox" ${sel.has(v.id)?"checked":""} onchange="bkPickToggle(${i},'${v.id}',this.checked)">${esc(v.invoice_no)} · ${dmy(v.invoice_date)} · $${money(x.cr>0?balOf(v):v.total)}</label>`).join("")||`<span class="mute">${L("没有未付的单","No open invoices")}</span>`}</div></td></tr>`};
   pvOv(`<div class="pvhead"><h3 style="margin:0">🏦 ${L("银行月结单对单","Bank reconciliation")} · ${S.company}</h3>${BK.m?`<span class="mute">${esc(BK.file||"")} · ${BK.ms&&BK.ms.length>1?`${monTag(BK.ms[0]+"-01")} – ${monTag(BK.ms.at(-1)+"-01")}`:monTag(BK.m+"-01")}</span>`:""}<span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
   <p class="mute" style="font-size:13px;margin-top:0">${L("上传银行给的 Excel 月结单或 DBS PDF 电子月结单（可以一次放好几个月）。没有名字的入账（支票 QCDM 等）会用金额去找。系统帮每一笔认出客户 / 供应商和付了哪几张单（看说明里的名字、单号，再用金额凑），自动写好 Remark。你确认后：收款记进系统，再下载一份填好 Remark 的月结单。","Upload the bank's Excel statement. Each line is matched to a customer/supplier and invoices; remarks are written for you.")}</p>
-  <label class="btn file">⬆ ${L("选银行月结单（Excel / DBS PDF，可以一次选很多个或 zip）","Choose bank statement (Excel / DBS PDF, many or zip)")}<input type="file" accept=".xlsx,.xls,.csv,.pdf,.zip" multiple hidden onchange="bkFile(this)"></label>
+  <label class="btn file">⬆ ${L("选银行月结单（Excel / DBS / OCBC PDF，可以一次选很多个或 zip）","Choose bank statement (Excel / DBS / OCBC PDF, many or zip)")}<input type="file" accept=".xlsx,.xls,.csv,.pdf,.zip" multiple hidden onchange="bkFile(this)"></label>
   ${BK.bad?.length?`<p class="tag warn">${L("读不到：","Couldn't read: ")}${esc(BK.bad.join(", "))}</p>`:""}
   ${R.length?`<ul style="margin:8px 0;font-size:14px;columns:2"><li>${L("收到","In")}: ${R.filter(x=>x.cr>0).length} ${L("笔","")} $${money(sum(R,x=>x.cr))}</li><li>${L("付出","Out")}: ${R.filter(x=>x.dr>0).length} ${L("笔","")} $${money(sum(R,x=>x.dr))}</li>
     <li>${L("自动配对","Matched")}: <b>${cnt("auto")+cnt("pv")}</b></li><li>${L("系统已经记了（只写 Remark）","Already recorded")}: ${cnt("done")}</li><li>${L("银行收费","Charges")}: ${cnt("charge")}</li><li>${L("不是客户付款（IRAS / 退款 / 退票…）","Other (IRAS / refunds…)")}: ${cnt("other")}</li>
@@ -3788,7 +3801,7 @@ async function bkFile(input){let fs=[...(input.files||[])];input.value="";if(!fs
     let rows=[],acct="",bad=[];for(const f of pdfs){try{const r=await bankPdfRows(f);acct=acct||r.acct;rows.push(...r.rows.map(x=>({...x,src:f.name})))}catch(e){bad.push(f.name)}}
     /* 同一笔出现两次（重复上传同一个月）只留一笔 */
     const seen=new Set();rows=rows.filter(x=>{const k=[x.date,x.c1,x.dr,x.cr,x.bal].join("|");if(seen.has(k))return false;seen.add(k);return true}).sort((a,b)=>a.date.localeCompare(b.date));
-    if(!rows.length)return alert(L("PDF 里读不到交易（要是 DBS 的电子月结单，扫描的读不到）","No transactions found in the PDF(s)"));
+    if(!rows.length)return alert(L("PDF 里读不到交易（要是 DBS / OCBC 的电子月结单，扫描的读不到）","No transactions found in the PDF(s)"));
     const mc={};rows.forEach(x=>{const m=x.date.slice(0,7);mc[m]=(mc[m]||0)+1});const ms=Object.keys(mc).sort();
     BK={file:pdfs.length===1?pdfs[0].name:`${pdfs.length} ${L("份 PDF","PDFs")}`,pdf:true,acct,rows:rows.map((x,i)=>({...x,row:i})),m:ms.at(-1),ms,pick:null,bad};
     bkMatchAll();bkRender()}catch(e){alert(e.message)}}
