@@ -358,7 +358,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-11-06c";
+const APP_VER="2026-11-06d";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -2774,19 +2774,72 @@ function soaData(cid,asOf,all){const off=all?new Set():soaOff(cid);
   const bal=sum(rows,balOf),intr=sum(rows,i=>interestOf(i,asOf));
   return{rows,ag,credit,bal,intr,total:r2(bal+intr-credit)};
 }
+/* ================= 📄 一键做 Contra Statement（客户同时是供应商） ================= */
+let CS=null;
+function csOpp(cid){const c=custOf(cid);if(!c||!c.name)return null;const k=normCo(c.name);let su=null,bs=0;
+  for(const x of S.d.suppliers){const v=normCo(x.name)===k?1:simCo(k,normCo(x.name));if(v>bs){bs=v;su=x}}if(bs<0.86)su=null;
+  const ours=S.d.invoices.filter(i=>i.company===S.company&&i.customer_id===cid&&i.status!=="Cancelled"&&!isCNDoc(i)&&balOf(i)>0.005).sort((a,b)=>String(a.invoice_date).localeCompare(String(b.invoice_date))||String(a.invoice_no).localeCompare(String(b.invoice_no),undefined,{numeric:true}));
+  const theirs=su?S.d.supplier_invoices.filter(x=>siMine(x)&&x.supplier_id===su.id&&!x.payment_date&&!/contra|paid/i.test(x.status||"")).sort((a,b)=>String(a.invoice_date).localeCompare(String(b.invoice_date))):[];
+  return{c,su,ours,theirs}}
+const csList=()=>S.d.customers.filter(c=>(!c.company||c.company===S.company)).map(c=>({c,o:csOpp(c.id)})).filter(x=>x.o&&x.o.su&&x.o.ours.length&&x.o.theirs.length);
+function csOpen(cid){const o=csOpp(cid);if(!o||!o.su)return toast(L("这个客户没有同名的供应商","No supplier with the same name"));
+  CS={cid,date:today(),offO:new Set(),offT:new Set(),rec:false};csRender()}
+function csCalc(){const o=csOpp(CS.cid),ours=o.ours.filter(i=>!CS.offO.has(i.id)),theirs=o.theirs.filter(x=>!CS.offT.has(x.id));
+  const dr=r2(sum(ours,i=>balOf(i))),cr=r2(sum(theirs,x=>Number(x.total)||0));return{o,ours,theirs,dr,cr,out:r2(dr-cr)}}
+function csRender(){const K=csCalc(),{o}=K,ck=(set,id)=>`<input type="checkbox" ${CS[set].has(id)?"":"checked"} onchange="CS.${set}[this.checked?'delete':'add']('${id}');csRender()">`;
+  pvOv(`<div class="pvhead"><h3 style="margin:0">📄 Contra Statement · ${esc(o.c.name)}</h3><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
+  <div class="filters" style="margin:0 0 8px"><label class="f">Statement Date<input type="date" value="${CS.date}" onchange="CS.date=this.value||today();csRender()"></label>
+    <label class="f" style="align-self:flex-end;flex-direction:row;gap:6px;align-items:center"><input type="checkbox" ${CS.rec?"checked":""} onchange="CS.rec=this.checked"> ${L("同时记好 Contra（Contra 收款 + 对方的单标 Contra）","Also record the contra")}</label></div>
+  <p class="mute" style="font-size:12px;margin:0 0 6px">${L("取消勾选的不会放进 Contra Statement。","Unticked rows are left out.")}</p>
+  <div class="tw" style="max-height:50vh;overflow:auto"><table style="font-size:13px"><thead><tr><th></th><th>Date</th><th>Ref</th><th class="num">DR (Invoice)</th><th class="num">CR (Payment)</th></tr></thead><tbody>
+    <tr><td colspan="5"><b>${esc(coInfo(S.company).name||S.company)} Invoice</b> <span class="mute">${L("（我们开给对方、还没收齐的；金额 = 还欠的余额）","(our unpaid invoices — outstanding balance)")}</span></td></tr>
+    ${o.ours.map(i=>`<tr><td>${ck("offO",i.id)}</td><td>${dmy(i.invoice_date)}</td><td>${esc(i.invoice_no)}</td><td class="num">${money(balOf(i))}</td><td></td></tr>`).join("")}
+    <tr><td colspan="5"><b>${esc(o.su.name)} Invoice</b> <span class="mute">${L("（对方开给我们、还没付的）","(their unpaid invoices to us)")}</span></td></tr>
+    ${o.theirs.map(x=>`<tr><td>${ck("offT",x.id)}</td><td>${dmy(x.invoice_date)}</td><td>${esc(x.invoice_no)}</td><td></td><td class="num">${money(x.total)}</td></tr>`).join("")}
+    <tr><td></td><td colspan="2"><b>GRAND TOTAL</b></td><td class="num"><b>${money(K.dr)}</b></td><td class="num"><b>${money(K.cr)}</b></td></tr>
+    <tr><td></td><td colspan="2"><b>TOTAL OUTSTANDING</b></td><td colspan="2" class="num"><b>$${money(K.out)}</b></td></tr></tbody></table></div>
+  <div class="actions" style="margin-top:10px"><button class="btn sec" onclick="csGo('preview')">👁 ${L("预览","Preview")}</button><button class="btn" onclick="csGo('dl')">⬇ ${L("下载 PDF","Download PDF")}</button></div>`)}
+const coInfo=co=>({ETK:{name:"ETK Resources Pte Ltd"},L3H:{name:"L3H Resources Pte Ltd"}})[co]||{name:co};
+function csHTML(K,date){const s=settingsOf(S.company),c=K.o.c,ad=String(c.address||"").split("\n").map(x=>x.trim().replace(/[.,]\s*$/,"")).filter(Boolean),td=Number(c.payment_terms_days);
+  let b=0;const oursR=K.ours.map(i=>{const v=balOf(i);b=r2(b+v);return `<tr><td>${dmy(i.invoice_date)}</td><td class="ty">IN</td><td>${esc(i.invoice_no)}</td><td>Invoice</td><td class="m">${acc(v)}</td><td class="m"><div class="acc"><span>$</span><span>-</span></div></td><td class="m">${acc(b)}</td></tr>`}).join("");
+  b=0;const thR=K.theirs.map(x=>{const v=Number(x.total)||0;b=r2(b+v);return `<tr><td>${dmy(x.invoice_date)}</td><td class="ty">IN</td><td>${esc(x.invoice_no)}</td><td>Invoice</td><td class="m"><div class="acc"><span>$</span><span>-</span></div></td><td class="m">${acc(v)}</td><td class="m">${acc(b)}</td></tr>`}).join("");
+  const n=K.ours.length+K.theirs.length+4,fs=n<=27?9.5:Math.max(5.5,9.5*27/n);
+  return `<div class="doc pg soa">${coHeader(s,payeeOf(s))}<div class="st">CONTRA STATEMENT</div>
+  <div class="sh"><div>Debtor : <b>${esc(c.name||"")}</b>${ad.map((a,i)=>`<br>${i===0?"Address :&nbsp; ":""}${esc(a)}${i===0&&ad.length>1?" ,":i===ad.length-1?".":""}`).join("")}</div>
+    <div>Statement Date : ${date.split("-").reverse().join("/")}<br>Terms : ${td===0?"COD":(c.payment_terms_days??30)+" DAYS"}</div></div>
+  <div class="box"><table class="lg" style="font-size:${fs}pt"><colgroup><col style="width:13%"><col style="width:8%"><col style="width:21%"><col style="width:13%"><col style="width:16%"><col style="width:14%"><col style="width:15%"></colgroup>
+  <thead><tr><th>Date</th><th></th><th>Ref</th><th>Description</th><th>DR (Invoice)</th><th>CR (Payment)</th><th>Balance</th></tr></thead><tbody>
+  <tr><td></td><td></td><td colspan="5" style="text-align:center"><b>${esc(coInfo(S.company).name)} Invoice</b></td></tr>${oursR}
+  <tr><td></td><td></td><td colspan="5" style="text-align:center"><b>${esc(c.name||K.o.su.name)} Invoice</b></td></tr>${thR}
+  <tr><td colspan="4"><b>GRAND TOTAL</b></td><td class="m"><b>${acc(K.dr)}</b></td><td class="m"><b>${acc(K.cr)}</b></td><td class="m"><b>${acc(K.out)}</b></td></tr>
+  <tr><td colspan="6" style="text-align:right;padding-right:3mm"><b>TOTAL OUTSTANDING</b></td><td class="m"><b>${acc(K.out)}</b></td></tr>
+  </tbody></table></div>
+  <div class="nb2">- Invoices considered correct unless disputes notified to us within SEVEN (7) days from date of invoice<br>- Interest at the rate of 1.5% per month will be charged on all overdue amounts</div></div>`}
+const csFileName=(K,date)=>`${S.company} CONTRA STATEMENT - ${String(K.o.c.name||"").toUpperCase().replace(/\b(PTE\.?|LTD\.?|PRIVATE|LIMITED)\b/g,"").replace(/[^A-Z0-9&]+/g," ").trim()} ${K.out.toFixed(2)} ${date.slice(8,10)}-${date.slice(5,7)}-${date.slice(2,4)}`;
+async function csGo(mode){const K=csCalc();if(!K.ours.length&&!K.theirs.length)return toast(L("没有勾任何单","Nothing ticked"));const date=CS.date,fn=csFileName(K,date);
+  $("#print").innerHTML=csHTML(K,date);const blob=await makePdf(fn,{blob:1});if(!blob)return;
+  if(mode==="preview"){const u=URL.createObjectURL(blob);window.open(u,"_blank");return}
+  saveBlob(blob,fn+".pdf");
+  if(CS.rec&&K.theirs.length){const d={type:"own",name:fn,date,debtor:K.o.c.name,co:S.company,dr:K.ours.map(i=>({no:i.invoice_no,date:i.invoice_date,amt:r2(balOf(i))})),cr:K.theirs.map(x=>({no:x.invoice_no,date:x.invoice_date,amt:Number(x.total)||0})),ref:"Contra Statement"};d.rows=[...d.dr,...d.cr];
+    CC={docs:[d]};ccPlan();if(d.skip||d.dup){alert(L(`PDF 已下载，但 Contra 没记：${d.skip||"这笔已经记过"}`,`PDF saved; contra not recorded: ${d.skip||"already recorded"}`));return}
+    await ccApply()}else toast(L(`已下载 ${fn}.pdf`,`Downloaded ${fn}.pdf`))}
+function csAll(){const R=csList();pvOv(`<div class="pvhead"><h3 style="margin:0">📄 ${L("可以做 Contra 的客户","Customers you can contra")} · ${S.company}</h3><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
+  <p class="mute" style="font-size:13px;margin-top:0">${L("客户同时是供应商（同名），两边都有还没付的单。按「做」可以选单、预览、下载。","Customer is also a supplier with unpaid invoices both ways.")}</p>
+  ${R.length?`<div class="tw"><table style="font-size:13px"><thead><tr><th>${L("客户","Customer")}</th><th class="num">${L("我们的单（欠我们）","Ours")}</th><th class="num">${L("对方的单（我们欠）","Theirs")}</th><th class="num">${L("抵完对方还要付","Net")}</th><th></th></tr></thead><tbody>
+  ${R.map(({c,o})=>{const dr=r2(sum(o.ours,i=>balOf(i))),cr=r2(sum(o.theirs,x=>Number(x.total)||0));return `<tr><td>${esc(c.name)}</td><td class="num">${o.ours.length} · ${money(dr)}</td><td class="num">${o.theirs.length} · ${money(cr)}</td><td class="num"><b>${money(r2(dr-cr))}</b></td><td><button class="btn sm" onclick="csOpen('${c.id}')">📄 ${L("做","Make")}</button></td></tr>`}).join("")}</tbody></table></div>`:`<p class="mute">${L("现在没有可以 Contra 的客户。","No customers to contra right now.")}</p>`}`)}
 function soaView(){
   {const[,z]=dfRange("soa");if(z&&S._soaZ!==z){S.soaAsOf=z>today()?today():z;S._soaZ=z}}
   const cid=S.soaCust,asOf=S.soaAsOf;
   const head=`<div class="filters"><label class="f">${L("客户","Customer")}<select onchange="S.soaCust=this.value;render()">${custOpts(cid)}</select></label>
     <label class="f">${L("截至日期","As at")}<input type="date" value="${asOf}" onchange="S.soaAsOf=this.value;render()"></label>
-    <div class="f" style="align-self:flex-end"><button class="btn sec" onclick="soaBatch()">📑 ${L("全部客户 SOA / 逾期提醒","All statements / reminders")}</button></div></div>${dfBar("soa",yearsOf(S.d.invoices,"invoice_date"))}<p class="mute" style="font-size:12px;margin:-4px 0 8px">${L("选月份 / 年份 = SOA 截至那个月 / 年的最后一天。没付清的全部会列；那段时间已付清的 invoice 和付款也会列出来。","Pick a period: the statement date becomes its last day. All unpaid invoices are listed, plus invoices and payments settled in that period.")}</p>`;
+    <div class="f" style="align-self:flex-end"><button class="btn sec" onclick="soaBatch()">📑 ${L("全部客户 SOA / 逾期提醒","All statements / reminders")}</button>${(()=>{const n=csList().length;return n?` <button class="btn sec" onclick="csAll()">📄 ${L(`可以做 Contra 的（${n}）`,`Contra statements (${n})`)}</button>`:""})()}</div></div>${dfBar("soa",yearsOf(S.d.invoices,"invoice_date"))}<p class="mute" style="font-size:12px;margin:-4px 0 8px">${L("选月份 / 年份 = SOA 截至那个月 / 年的最后一天。没付清的全部会列；那段时间已付清的 invoice 和付款也会列出来。","Pick a period: the statement date becomes its last day. All unpaid invoices are listed, plus invoices and payments settled in that period.")}</p>`;
   if(!cid)return head+`<div class="panel empty">${L("选一个客户来看 SOA。","Choose a customer to see the statement.")}</div>`;
   const D=soaData(cid,asOf),DA=soaData(cid,asOf,1),off=soaOff(cid),sends=S.d.soa_sends.filter(s=>s.customer_id===cid),saved=S.d.attachments.filter(a=>a.entity_type==="soa"&&a.entity_id===cid).sort((a,b)=>String(b.created_at||"").localeCompare(String(a.created_at||"")));
   return head+`<div class="cards"><div class="card"><h3>${L("未付总额","Outstanding")}</h3><b style="font-size:22px">$${money(D.total)}</b>
       <div class="mute" style="font-size:13px">${L("余额","Balance")} $${money(D.bal)}${D.intr?` + Interest $${money(D.intr)}`:""}${D.credit>0.005?` − ${L("多付","Credit")} $${money(D.credit)}`:""}</div></div>
     <div class="card"><h3>Aging</h3><div class="kv"><div><span>${L("未到期","Current")}</span>${money(D.ag.cur)}</div><div><span>1–30</span>${money(D.ag.d30)}</div><div><span>31–60</span>${money(D.ag.d60)}</div><div><span>61–90</span>${money(D.ag.d90)}</div><div><span>&gt; 90</span>${money(D.ag.over)}</div></div></div></div>
   <div class="actions" style="margin:0 0 12px"><button class="btn sec" onclick="printSOA('preview')">👁 ${L("预览","Preview")}</button><button class="btn" onclick="printSOA()">⬇ ${L("下载 PDF","Download PDF")}</button><button class="btn sec" onclick="printSOA('print')">🖨 ${L("打印","Print")}</button>
-    <button class="btn sec" onclick="exportSOA()">⬇ Excel</button><button class="btn sec" onclick="sendSOA('WhatsApp')">WhatsApp</button><button class="btn sec" onclick="sendSOA('Email')">Email</button></div>
+    <button class="btn sec" onclick="exportSOA()">⬇ Excel</button><button class="btn sec" onclick="sendSOA('WhatsApp')">WhatsApp</button><button class="btn sec" onclick="sendSOA('Email')">Email</button>${(()=>{const o=csOpp(cid);return o&&o.su&&o.theirs.length?`<button class="btn sec" onclick="csOpen('${cid}')">📄 Contra Statement</button>`:""})()}</div>
   <div class="filters" style="margin:0 0 6px">${sqBox("soa",L("Invoice No / description / 金额","invoice no / description / amount"))}</div>
   ${off.size?`<p style="font-size:13px;margin:0 0 6px"><span class="tag warn">${L(`有 ${off.size} 张没勾，不会放进 SOA`,`${off.size} unticked, left out`)}</span> <a href="#" onclick="soaOff('${cid}').clear();render();return false">${L("全部放回","Include all")}</a></p>`:""}
   ${(()=>{const G=soaLedger(cid,asOf),rs=G.rows.filter(r=>sqHit(SQ.soa,r.inv?[r.inv.invoice_no,r.inv.description,invDesc(r.inv),r.inv.total,r.inv.invoice_date,r.inv.due_date,r.inv.customer_po]:[r.ref,r.desc,r.cr,r.date,r.pay?.remark]));
