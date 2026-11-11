@@ -358,7 +358,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-11-06d";
+const APP_VER="2026-11-11a";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -2333,7 +2333,10 @@ async function saveInv(){
   const f=S.modal.f,w=$("#invWarn");
   if(!f.customer_id||!f.invoice_no||!f.invoice_date){w.textContent=L("请填客户、Invoice No、Invoice Date","Customer, invoice no and date are required");return}
   if(!f.lines.length){w.textContent=L("至少要有一行明细","Add at least one line");return}
-  {const dup=S.d.invoices.find(i=>normNo(i.invoice_no)===normNo(f.invoice_no)&&i.id!==f.id);if(dup){w.textContent=L(`Invoice No 已经存在：${dup.invoice_no}（${dmy(dup.invoice_date)} · ${custName(dup.customer_id)} · $${money(dup.total)}）`,`Invoice number already exists: ${dup.invoice_no}`);return}}
+  {let dup=S.d.invoices.find(i=>normNo(i.invoice_no)===normNo(f.invoice_no)&&i.id!==f.id);
+    /* 先问一次资料库：如果那张其实已经删掉（这台电脑的资料旧了），就当没有 */
+    if(dup){try{const{data,error}=await sb.from("invoices").select("id").eq("id",dup.id);if(!error&&data&&!data.length){S.d.invoices=S.d.invoices.filter(i=>i.id!==dup.id);dup=null}}catch(e){}}
+    if(dup){w.innerHTML=L(`Invoice No 已经存在：<b>${esc(dup.invoice_no)}</b>（${esc(dup.company||"")} · ${dmy(dup.invoice_date)} · ${esc(custName(dup.customer_id))} · $${money(dup.total)}） <a href="#" onclick="openInv('${dup.id}');return false">打开那张看看</a>`,`Invoice number already exists: <b>${esc(dup.invoice_no)}</b> (${esc(dup.company||"")} · ${dmy(dup.invoice_date)} · ${esc(custName(dup.customer_id))} · $${money(dup.total)}) <a href="#" onclick="openInv('${dup.id}');return false">Open it</a>`);return}}
   const t=invTotals(f);
   {const warn=[];if(!(t.total>0.005))warn.push(L(`Total 是 $${money(t.total)}`,`Total is $${money(t.total)}`));
     if(Number(f.gst_rate)!==9&&Number(f.gst_rate)!==0)warn.push(L(`GST 是 ${f.gst_rate}%（一般 9%）`,`GST ${f.gst_rate}%`));
