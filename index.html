@@ -358,7 +358,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-11-11a";
+const APP_VER="2026-11-12a";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -1301,7 +1301,7 @@ function l3RecordsHTML(inv,dos){const c=custOf(inv.customer_id),no=inv.summary_n
     ${last?`<tr class="tt"><td colspan="10"></td><td class="lb">TOTAL</td><td class="u a">${acc(sum(lr,x=>x.amt))}</td><td></td></tr>`:""}</tbody></table>`,
     {cap:REC_CAP,tot:REC_TOT,h:x=>recRowH(Math.max(wrapN(x.t,40),wrapN(x.d.from_loc,22),wrapN(x.d.to_loc,22),wrapN(x.d.remark,10)))}));};
   /* 非 CHC：Lorry Crane 用 MGC 那种 Summary Report（一个表） */
-  const craneSum=!inv.project;
+  const craneSum=!inv.project&&!isCHC(inv.customer_id);/* CHC 一律用记录表（有 From / To / Description） */
   if(craneSum){const rows=ds.filter(d=>/^crane/.test(kindOf(d)||""));if(rows.length)out.push(craneSummaryHTML(inv,rows))}
   /* 跟 invoice 第一页同一个顺序 */
   for(const k of ["tipper","tipper_load","crane_sup","crane_night","excavator"]){if(craneSum&&/^crane/.test(k))continue;const rows=ds.filter(d=>kindOf(d)===k);if(!rows.length)continue;
