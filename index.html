@@ -317,7 +317,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 #print .rech{display:flex;justify-content:space-between;align-items:flex-end;font-family:Calibri,Carlito,Arial,sans-serif;font-size:11pt;margin:0 0 3mm}
 #print .rech div b{display:block;line-height:1.35}#print .sumlist{padding:22mm 16mm}#print .sumlist table.rec{font-size:10.5pt}#print .sumlist table.rec td{padding:2.4mm 1.6mm}#print .rech .no{font-size:11pt;padding-right:6mm}
 #print table.rec{font-size:9pt}#print table.rec th{padding:1.8mm 1mm}#print table.rec td{padding:1.4mm 1mm}
-#print table.rec th.y{background:#ffff00!important}#print table.rec th.o{background:#ffc000!important}#print table.rec th.s{background:#f4b183!important}
+#print table.rec th.y{background:#ffff00!important}#print table.rec th.o{background:#ffc000!important}#print table.rec th.s{background:#f4b183!important}#print table.rec th.g{background:#d9d9d9!important}
 #print .mtsp{font-family:Arial,Helvetica,sans-serif}#print .mts{font-size:11pt;line-height:1.8;margin-bottom:10px}#print .mtt{font-weight:700;font-size:10.5pt;margin:10px 0 2px}
 #print table.mt{width:100%;border-collapse:collapse;font-size:10pt}#print table.mt th,#print table.mt td{border:1px solid #000;padding:4px 3px;text-align:center}#print table.mt th{font-weight:700}
 #print table.mt tr.st td{border-left:none;border-right:none;border-bottom:none}
@@ -358,7 +358,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-11-12a";
+const APP_VER="2026-11-13a";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -1334,11 +1334,11 @@ function craneRow(d){const rr=findL3Rate(d.customer_id,"Lorry Crane",d.plate,d.d
 function craneSummaryHTML(inv,dos){const c=custOf(inv.customer_id),rows=dos.map(craneRow),per=18,a=inv.period_from||dos[0].do_date;
   const n=v=>v==null?"":String(r2(v)),A=v=>v==null?"":acc(v);
   return chunkPages(rows,per,(rs,pi,last)=>`<div class="crs"><div class="t">Hire Of Lorry Crane Summary Report For ${esc(monthLong(a.slice(0,7)))}</div><div>INV NO : ${esc(inv.invoice_no)}</div><div>Customer :&nbsp; ${esc(c.name||"")}</div></div>
-    <table class="sm rec crt"><colgroup><col style="width:3.5%"><col style="width:7%"><col style="width:7.5%"><col style="width:6%"><col style="width:6%"><col style="width:6%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:5.5%"><col style="width:8.5%"><col style="width:7.5%"><col style="width:7.5%"><col style="width:6.5%"><col style="width:6.5%"><col></colgroup>
-    <thead><tr><th class="y">S/N</th><th class="y">DATE</th><th class="y">VEHICLE NO</th><th class="y">DO NO</th><th class="y">START TIME</th><th class="y">END TIME</th><th class="y">TOTAL HR</th><th class="y">MAX HR</th><th class="y">OT HOUR</th><th class="y">RATE</th><th class="y">OT RATE</th><th class="y">AMOUNT</th><th class="s">OT AMT</th><th class="s">Diesel Surcharge</th><th class="s">TOTAL AMOUNT</th></tr></thead><tbody>
-    ${rs.map((r,i)=>`<tr><td>${pi*per+i+1}</td><td>${dNum(r.d.do_date)}</td><td>${esc(r.d.plate||"")}</td><td>${esc(r.d.do_no)}</td><td>${tShort(r.d.start_time)}</td><td>${tShort(r.d.end_time)}</td><td>${n(r.tot)}</td><td>${n(r.max)}</td><td>${n(r.ot)}</td>
+    <table class="sm rec crt"><colgroup><col style="width:3.5%"><col style="width:7%"><col style="width:7.5%"><col style="width:6%"><col style="width:6%"><col style="width:6%"><col style="width:6%"><col style="width:6%"><col style="width:9%"><col style="width:7.5%"><col style="width:7.5%"><col style="width:6.5%"><col style="width:6.5%"><col></colgroup>
+    <thead><tr><th class="y">S/N</th><th class="y">DATE</th><th class="y">VEHICLE NO</th><th class="y">DO NO</th><th class="y">START TIME</th><th class="y">END TIME</th><th class="y">TOTAL HR</th><th class="y">OT HOUR</th><th class="y">RATE</th><th class="y">OT RATE</th><th class="y">AMOUNT</th><th class="g">OT AMT</th><th class="g">Diesel Surcharge</th><th class="g">TOTAL AMOUNT</th></tr></thead><tbody>
+    ${rs.map((r,i)=>`<tr><td>${pi*per+i+1}</td><td>${dNum(r.d.do_date)}</td><td>${esc(r.d.plate||"")}</td><td>${esc(r.d.do_no)}</td><td>${tShort(r.d.start_time)}</td><td>${tShort(r.d.end_time)}</td><td>${n(r.tot)}</td><td>${r.ot==null?"0":n(r.ot)}</td>
       <td class="a">${A(r.rate)}</td><td class="a">${A(r.otr)}</td><td class="a">${A(r.amt)}</td><td class="a">${A(r.otAmt)}</td><td class="a">${A(r.sur)}</td><td class="a">${A(r.total)}</td></tr>`).join("")}
-    ${last?`<tr class="tt crtt"><td colspan="10"></td><td class="lb">Total</td><td class="u a"><b>${acc(sum(rows,r=>r.amt))}</b></td><td class="u a"><b>${acc(sum(rows,r=>r.otAmt||0))}</b></td><td class="u a"><b>${acc(sum(rows,r=>r.sur))}</b></td><td class="u a"><b>${acc(sum(rows,r=>r.total))}</b></td></tr>`:""}</tbody></table>`)}
+    ${last?`<tr class="tt crtt"><td colspan="9"></td><td class="lb">Total</td><td class="u a"><b>${acc(sum(rows,r=>r.amt))}</b></td><td class="u a"><b>${acc(sum(rows,r=>r.otAmt||0))}</b></td><td class="u a"><b>${acc(sum(rows,r=>r.sur))}</b></td><td class="u a"><b>${acc(sum(rows,r=>r.total))}</b></td></tr>`:""}</tbody></table>`)}
 
 /* ================= 第 1 批：日期筛选 / 排序 / 预览 / Excel / 多选 ================= */
 /* ---- 日期筛选（年 / 月 / 自定） ---- */
