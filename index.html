@@ -198,9 +198,9 @@ tr.ardrag{opacity:.45}tr.arover-a td{box-shadow:inset 0 3px 0 var(--amber,#f5a62
 #photoOv .qpages{max-height:calc(100vh - 170px);overflow:auto;background:#0b0f14;border-radius:6px;padding:6px}#photoOv .qpages img{width:100%;display:block;margin-bottom:6px;background:#fff}
 #photoOv .qright{max-height:calc(100vh - 120px);overflow:auto}#photoOv .qright table{font-size:13px}
 @media(max-width:760px){#photoOv.qov .pvbody{grid-template-columns:1fr}#photoOv .qpages{max-height:55vh}#photoOv .qright{max-height:none}}
-#photoOv .tl{border:1px solid var(--line);border-radius:8px;overflow:hidden}#photoOv .tlr{display:grid;grid-template-columns:62px 1fr;border-bottom:1px solid var(--line);font-size:12px}
+#photoOv .tl{border:1px solid var(--line);border-radius:8px;overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch}#photoOv .tlin{min-width:1400px}#photoOv .tlr>span{position:sticky;left:0;z-index:3;background:var(--panel,#1b2230)}#photoOv .tlr{display:grid;grid-template-columns:62px 1fr;border-bottom:1px solid var(--line);font-size:12px}
 #photoOv .tlr>span{padding:3px 6px;color:var(--mute);white-space:nowrap}#photoOv .tlr.sun>span{color:#e57373}#photoOv .tlr.hd{font-size:11px}
-#photoOv .tlr .bar{position:relative;min-height:22px;background:repeating-linear-gradient(90deg,transparent 0,transparent calc(25% - 1px),var(--line) calc(25% - 1px),var(--line) 25%)}
+#photoOv .tlr .bar{position:relative;min-height:22px;background:repeating-linear-gradient(90deg,transparent 0,transparent calc(12.5% - 1px),var(--line) calc(12.5% - 1px),var(--line) 12.5%)}
 #photoOv .tlr .bar.none{background-color:rgba(127,127,127,.08)}#photoOv .tlr.hd .bar{background:none}#photoOv .tlr.hd i{position:absolute;font-style:normal;color:var(--mute);transform:translateX(2px)}
 #photoOv .seg{position:absolute;top:2px;bottom:2px;background:#2e7d32;color:#fff;border-radius:4px;font-size:11px;line-height:18px;padding:0 4px;overflow:hidden;white-space:nowrap;cursor:pointer}
 #photoOv .seg.nt{background:#3949ab}#photoOv .seg.bad{background:#d32f2f;box-shadow:0 0 0 2px #ffcdd2}
@@ -358,7 +358,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-11-13a";
+const APP_VER="2026-11-13b";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -1046,6 +1046,12 @@ function gpsDetail(plate,date){const G=GPS?.v?.[normPlate(plate)];if(!G)return;c
     ${ev.map(x=>{const inDo=dos.filter(o=>o.sp&&x.b>Math.max(0,o.sp[0])&&x.a<Math.min(1440,o.sp[1])).map(o=>o.d.do_no);return `<tr${x.st==="run"&&!inDo.length?' style="background:rgba(245,179,1,.12)"':""}><td style="white-space:nowrap">${tHm(x.a)}–${tHm(x.b)}</td><td>${x.st==="run"?L("🚚 在跑","🚚 moving"):L("⏸ 停","⏸ stopped")}</td><td>${Math.round(x.b-x.a)} ${L("分钟","min")}</td><td class="wrap">${esc(x.from)}</td><td class="wrap">${x.st==="run"?esc(x.to):""}</td><td>${inDo.map(esc).join(", ")}</td></tr>`}).join("")}</tbody></table></div>
     <p class="mute" style="font-size:12px">${L("黄色 = 车在跑但不在任何 DO 时间里。只列在跑的和停超过 15 分钟的。","Yellow = moving outside any DO time.")}</p>`;
   box.onclick=e=>{if(e.target.closest("[data-x]"))box.remove()};document.querySelector("#photoOv .pvbox")?.appendChild(box);box.scrollIntoView({behavior:"smooth",block:"nearest"})}
+/* 每辆车这个月的 DO 列表（日期 / DO / 时间 / 几小时 / 地点 / 工作） */
+function tlList(p,list,ids){const rs=list.filter(d=>d.plate===p&&String(d.do_date).slice(0,7)===S.month).sort((a,b)=>a.do_date.localeCompare(b.do_date)||String(a.start_time||"").localeCompare(String(b.start_time||"")));
+  if(!rs.length)return"";const hrs=r2(sum(rs,d=>Number(d.billable_hours)||0));
+  return `<details class="tll" style="margin:6px 0 4px"><summary style="cursor:pointer;font-size:13px">📋 ${L(`DO 列表（${rs.length} 张 · ${hrs} 小时）`,`DO list (${rs.length} · ${hrs} hrs)`)}</summary>
+  <div class="tw" style="margin-top:6px"><table style="font-size:12px"><thead><tr><th>${L("日期","Date")}</th><th>DO</th><th>${L("时间","Time")}</th><th class="num">${L("小时","Hrs")}</th><th>${L("工程 / 客户","Project / customer")}</th><th>${L("从 → 到","From → To")}</th><th>${L("工作","Work")}</th></tr></thead><tbody>
+  ${rs.map(d=>`<tr class="click${ids.has(d.id)?" red":""}" data-did="${d.id}"><td style="white-space:nowrap">${dmy(d.do_date)} ${["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][new Date(d.do_date+"T00:00").getDay()]}</td><td>${esc(d.do_no||"")}${ids.has(d.id)?' <span class="tag bad">'+L("重叠","overlap")+"</span>":""}</td><td style="white-space:nowrap">${tShort(d.start_time)||"?"}–${tShort(d.end_time)||"?"}</td><td class="num">${d.billable_hours??""}</td><td>${esc(d.project||custName(d.customer_id)||"")}</td><td>${esc([d.from_loc,d.to_loc].filter(Boolean).join(" → "))}</td><td>${esc(d.description||"")}</td></tr>`).join("")}</tbody></table></div></details>`}
 /* ---- 每辆车的时间表 ---- */
 function vehicleTimeline(plate){gpsLoad();const list=S.d.delivery_orders.filter(d=>d.plate&&!d.record_only),plates=[...new Set(list.map(d=>d.plate))].sort();
   plate=plate??S.tlPlate??"";S.tlPlate=plate;const shown=plate?[plate]:plates,ids=monthOverlapIds(),days=+lastDayOf(S.month).slice(8),wd=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
@@ -1069,13 +1075,13 @@ function vehicleTimeline(plate){gpsLoad();const list=S.d.delivery_orders.filter(
     <span class="mute" style="font-size:12px"><span class="seg-k"></span>${L("白天","Day")} <span class="seg-k nt"></span>${L("晚上","Night")} <span class="seg-k bad"></span>${L("重叠","Overlap")}</span><span style="flex:1"></span><label class="btn sec sm file">📡 ${GPS?L(`GPS：${GPS.name}（换一份）`,`GPS: ${GPS.name} (replace)`):L("上传 GPS Daily Trip Report 对照","Upload GPS trip report")}<input type="file" hidden accept=".xlsx,.xls,.csv" onchange="gpsFile(this)"></label><button class="btn sec sm" data-a="x">✕ ${L("关闭","Close")}</button></div>
     ${GPS?`<p class="mute" style="font-size:12px;margin:4px 0">${L(`灰色细线 = GPS 显示车在跑。<b style="color:#f5b301">黄框</b> = DO 写的时间车没动。日期旁 ⚠ = 有问题（重叠 / 车没动 / GPS 有跑没 DO）。按日期可以看那天 GPS 几点在哪里。GPS 期间：${GPS.from} – ${GPS.to}`,`Grey line = GPS moving. Yellow outline = DO time but not moving. Click a date for GPS detail.`)}</p>`:""}
     ${shown.length?shown.map(p=>{const n=list.filter(d=>d.plate===p).length;return `<h3 style="margin:14px 0 6px">${esc(p)} <span class="mute" style="font-size:13px;font-weight:400">${n} DO</span></h3>
-      <div class="tl"><div class="tlr hd"><span></span><div class="bar">${[0,6,12,18].map(h=>`<i style="left:${h/24*100}%">${z2(h)}:00</i>`).join("")}</div></div>
+      <div class="tl"><div class="tlin"><div class="tlr hd"><span></span><div class="bar">${[0,3,6,9,12,15,18,21].map(h=>`<i style="left:${h/24*100}%">${z2(h)}:00</i>`).join("")}</div></div>
       ${Array.from({length:days},(_,i)=>{const day=i+1,dt=new Date(+S.month.slice(0,4),+S.month.slice(5,7)-1,day),sg=segs(p,day);
-        return `<div class="tlr ${dt.getDay()===0?"sun":""}"><span ${sg.runs?`class="gday" data-gp="${esc(p)}" data-gd="${S.month}-${z2(day)}" title="${L("看 GPS 那天去了哪里","GPS detail for this day")}"`:""}>${day} ${wd[dt.getDay()]}${sg.flags.length?` <b class="gflag" title="${esc(sg.flags.join("\n"))}">⚠</b>`:""}</span><div class="bar ${sg.html?"":"none"}" style="min-height:${4+sg.nl*21}px">${sg.html}</div></div>${sg.flags.length?`<div class="tlflag">${sg.flags.map(esc).join(" · ")}</div>`:""}`}).join("")}</div>`}).join("")
+        return `<div class="tlr ${dt.getDay()===0?"sun":""}"><span ${sg.runs?`class="gday" data-gp="${esc(p)}" data-gd="${S.month}-${z2(day)}" title="${L("看 GPS 那天去了哪里","GPS detail for this day")}"`:""}>${day} ${wd[dt.getDay()]}${sg.flags.length?` <b class="gflag" title="${esc(sg.flags.join("\n"))}">⚠</b>`:""}</span><div class="bar ${sg.html?"":"none"}" style="min-height:${4+sg.nl*21}px">${sg.html}</div></div>${sg.flags.length?`<div class="tlflag">${sg.flags.map(esc).join(" · ")}</div>`:""}`}).join("")}</div></div>${tlList(p,list,ids)}`}).join("")
       :`<div class="pvnone">${L("这个月还没有有车牌的 DO","No DOs with a vehicle this month")}</div>`}
     <p class="mute" style="font-size:12px">${L("红色 = 同一辆车时间重叠，要查清楚。空白的日子 = 那天这辆车没有 DO（如果车有出去，可能漏单）。点一下可以打开那张 DO。","Red = same vehicle overlapping. Blank days = no DO for that vehicle. Tap a bar to open the DO.")}</p></div>`;
   document.body.appendChild(ov);
-  ov.onclick=e=>{if(e.target.closest("[data-a=x]")||e.target===ov){ov.remove();return}const g=e.target.closest("[data-gd]");if(g){gpsDetail(g.dataset.gp,g.dataset.gd);return}const s=e.target.closest(".seg[data-id]");if(s){ov.remove();editDO(s.dataset.id)}};
+  ov.onclick=e=>{if(e.target.closest("[data-a=x]")||e.target===ov){ov.remove();return}const g=e.target.closest("[data-gd]");if(g){gpsDetail(g.dataset.gp,g.dataset.gd);return}const s=e.target.closest(".seg[data-id]");if(s){ov.remove();editDO(s.dataset.id);return}const r=e.target.closest("tr[data-did]");if(r){ov.remove();editDO(r.dataset.did)}};
   ov.querySelector("#tlSel").onchange=e=>vehicleTimeline(e.target.value)}
 
 /* ---- DO 断号：照 DO 本子顺序列出，缺的号码夹在前后几张中间 ---- */
