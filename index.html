@@ -358,7 +358,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-11-13b";
+const APP_VER="2026-11-18a";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -1034,7 +1034,7 @@ const ymdOf=d=>`${d.getFullYear()}-${z2(d.getMonth()+1)}-${z2(d.getDate())}`;
 function gpsDay(G,date){const d0=new Date(date+"T00:00:00"),d1=new Date(d0.getTime()+86400000),out=[];
   for(const x of G){if(x.e<=d0||x.t>=d1)continue;const a=Math.max(0,(x.t-d0)/60000),b=Math.min(1440,(x.e-d0)/60000);out.push({...x,a,b})}return out}
 async function gpsFile(input){const f=input.files?.[0];input.value="";if(!f)return;
-  try{const wb=XLSX.read(await f.arrayBuffer(),{cellDates:true}),g=gpsParse(wb);if(!g)return alert(L("看不懂这个文件（要是 GPS 的 Daily Trip Report）","Unrecognised file — needs the GPS Daily Trip Report"));
+  try{await needXLSX();const wb=XLSX.read(await f.arrayBuffer(),{cellDates:true}),g=gpsParse(wb);if(!g)return alert(L("看不懂这个文件（要是 GPS 的 Daily Trip Report）","Unrecognised file — needs the GPS Daily Trip Report"));
     GPS={...g,name:f.name.replace(/\.[a-z]+$/i,"").slice(0,30),co:S.company};gpsSave();const mine=[...new Set(S.d.delivery_orders.map(d=>normPlate(d.plate)).filter(Boolean))],hit=mine.filter(p=>GPS.v[p]);
     toast(L(`GPS：${Object.keys(GPS.v).length} 辆车，其中 ${hit.length} 辆有这个月的 DO`,`GPS: ${Object.keys(GPS.v).length} vehicles, ${hit.length} with DOs`));vehicleTimeline()}catch(e){alert(e.message)}}
 function gpsDetail(plate,date){const G=GPS?.v?.[normPlate(plate)];if(!G)return;const ev=gpsDay(G,date).filter(x=>x.st==="run"||x.b-x.a>=15);
@@ -1746,7 +1746,7 @@ function parseRecv(wb,file){const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.She
   const ds=out.map(x=>x.date).sort();return{kind:"AP",file,title:String(rows[1]?.[0]||"").trim(),rows:out,from:ds[0],to:ds.at(-1)}}
 function bulkUp(){BU={files:[],take:new Set()};buRender()}
 async function buFiles(input){const fs=[...input.files];input.value="";
-  for(const f of fs){try{const wb=XLSX.read(await f.arrayBuffer(),{cellDates:true});let r=parseRecv(wb,f.name)||parseARDB(wb,f.name)||parseARBLK(wb,f.name);
+  for(const f of fs){try{await needXLSX();const wb=XLSX.read(await f.arrayBuffer(),{cellDates:true});let r=parseRecv(wb,f.name)||parseARDB(wb,f.name)||parseARBLK(wb,f.name);
       if(!r){try{const rp=parseRep(wb,f.name);r={kind:"AR",file:f.name,title:rp.cust,rep:rp}}catch(e){}}
       if(!r){alert(L(`${f.name}：看不懂这个文件（要 Xero 的「Approved, sent and paid」、「Payable Invoice Detail」报告，或你的客户收款表）`,`${f.name}: unsupported file`));continue}
       BU.files=BU.files.filter(x=>x.file!==f.name);BU.files.push(r)}catch(e){alert(f.name+": "+e.message)}}
@@ -2149,7 +2149,7 @@ function excParseRows(wb){const out=[],toY=v=>{if(v instanceof Date&&!isNaN(v))r
         loc_from:String(r[ci.from]||"").trim()||null,loc_to:String(r[ci.to]||"").trim()||null,start_date:start,end_date:cancelled?null:toY(endRaw),cancelled,invoice_ref:inv||null,remark:remark||null,_raw:p})}}
   return out}
 async function excImportFile(input){const file=input.files[0];input.value="";if(!file)return;const box=$("#excImpOut");
-  try{const wb=XLSX.read(await file.arrayBuffer(),{cellDates:true});const rows=excParseRows(wb);
+  try{await needXLSX();const wb=XLSX.read(await file.arrayBuffer(),{cellDates:true});const rows=excParseRows(wb);
     const key=l=>[l.machine_code,l.start_date,l.project||"",l.status,l.loc_to||""].join("|").toLowerCase(),have=new Set(S.d.mlogs.map(key)),seen=new Set();
     const ins=rows.filter(r=>{const k=key(r);if(have.has(k)||seen.has(k))return false;seen.add(k);return true});
     const unknownM=[...new Set(ins.map(r=>r.machine_code).filter(c=>!mOf(c)))],unknownP=[...new Set(ins.filter(r=>r._raw&&!projOf(r.project)).map(r=>r._raw))];
@@ -3890,7 +3890,7 @@ async function bkFile(input){let fs=[...(input.files||[])];input.value="";if(!fs
     if(badZip.length)alert(L(`这个 zip 打不开，跳过：\n${badZip.join("\n")}\n\n可能没下载完整，或其实是 .rar / .7z。请重新下载，或先解压，再选里面的 PDF / Excel。`,`Couldn't open zip (skipped):\n${badZip.join("\n")}\n\nRe-download it, or unzip first and pick the PDF / Excel inside.`));
     if(!all.length)return;
     const pdfs=all.filter(f=>/\.pdf$/i.test(f.name)||/pdf/.test(f.type));
-    if(!pdfs.length){const f=all[0],buf=await f.arrayBuffer(),wb=XLSX.read(buf,{cellDates:true}),r=parseBank(wb);if(!r)return alert(L("看不懂这个银行文件（要有 Date / Debit / Credit 栏）","Unrecognised bank statement"));
+    if(!pdfs.length){await needXLSX();const f=all[0],buf=await f.arrayBuffer(),wb=XLSX.read(buf,{cellDates:true}),r=parseBank(wb);if(!r)return alert(L("看不懂这个银行文件（要有 Date / Debit / Credit 栏）","Unrecognised bank statement"));
       BK={file:f.name,buf,...r,pick:null};bkMatchAll();bkRender();return}
     pvOv(`<p>⏳ ${L(`读取 ${pdfs.length} 份 PDF 月结单…`,`Reading ${pdfs.length} PDF statement(s)…`)}</p>`);
     let rows=[],acct="",bad=[];for(const f of pdfs){try{const r=await bankPdfRows(f);acct=acct||r.acct;rows.push(...r.rows.map(x=>({...x,src:f.name})))}catch(e){bad.push(f.name)}}
@@ -3913,7 +3913,7 @@ async function bkApply(record){const R=BK.rows,co=S.company,go=record?R.filter(x
     pg(L("正在做 Excel…","Building Excel…"));await loadExcelJS();const wb=new ExcelJS.Workbook();let name;
     if(BK.pdf){bkPdfBook(wb,R);name=`${co} Bank ${BK.acct||""} ${BK.ms.length>1?`${BK.ms[0]} to ${BK.ms.at(-1)}`:BK.m} (Remark).xlsx`.replace(/\s+/g," ")}
     else{/* 旧 .xls / .csv：先转成 .xlsx 再写 Remark（ExcelJS 只读 .xlsx） */let src=BK.buf;const sig=new Uint8Array(src.slice?src.slice(0,2):src).subarray(0,2);
-      if(!(sig[0]===0x50&&sig[1]===0x4B)){const w0=XLSX.read(src,{cellDates:true});src=XLSX.write(w0,{bookType:"xlsx",type:"array",cellDates:true})}
+      if(!(sig[0]===0x50&&sig[1]===0x4B)){await needXLSX();const w0=XLSX.read(src,{cellDates:true});src=XLSX.write(w0,{bookType:"xlsx",type:"array",cellDates:true})}
       await wb.xlsx.load(src);const ws=wb.getWorksheet(BK.sheet)||wb.worksheets[0];
     let col=BK.rmCol>=0?BK.rmCol+1:0;if(!col){col=ws.getRow(BK.hdrRow).cellCount+1;ws.getRow(BK.hdrRow).getCell(col).value="Remark";ws.getRow(BK.hdrRow).getCell(col).font={bold:true}}
     ws.getColumn(col).width=Math.max(ws.getColumn(col).width||0,60);
@@ -4485,7 +4485,7 @@ function parseRep(wb,file){const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.Shee
     const e=map.get(k);if(!e||(rank[st]||0)>(rank[e.status]||0))map.set(k,{no:ref,tot:r2(numOr(r[C.tot],0)),status:st,date:toYMD(r[C.date]),lp:C.lp>=0?toYMD(r[C.lp]):null})}
   return{file,cust:title,ck:normCo(title),map}}
 async function aparRepFiles(input){const fs=[...input.files];input.value="";
-  try{for(const f of fs){const rp=parseRep(XLSX.read(await f.arrayBuffer(),{cellDates:true}),f.name);APAR.reps=APAR.reps.filter(x=>x.ck!==rp.ck);APAR.reps.push(rp)}aparAnalyse();aparShow()}
+  try{await needXLSX();for(const f of fs){const rp=parseRep(XLSX.read(await f.arrayBuffer(),{cellDates:true}),f.name);APAR.reps=APAR.reps.filter(x=>x.ck!==rp.ck);APAR.reps.push(rp)}aparAnalyse();aparShow()}
   catch(e){alert(e.message)}}
 function aparPanel(){return `<div class="panel"><h2>${L("导入你的 AP-AR Summary Excel","Import your AP-AR Summary Excel")}</h2>
   <p class="mute" style="font-size:14px;margin-top:0">${L("直接上传你平时用的 AP-AR SUMMARY 文件。AR 读「Sales invoices」，AP 读「Tax Invoice 23」（没有就读「TAX INVOICES」）。Invoice No 已经在系统里的不会重复新增；如果 Excel 现在写了 paid / received / 日期，而系统还没收 / 还没付，会帮你记收款 / 标已付。金额不同的会列出来。导入前会先给你看结果。","Upload your usual AP-AR SUMMARY file. AR reads 'Sales invoices', AP reads 'Tax Invoice 23' (or 'TAX INVOICES'). Invoice numbers already in the system are skipped. You'll see a preview first.")}</p>
@@ -4493,7 +4493,7 @@ function aparPanel(){return `<div class="panel"><h2>${L("导入你的 AP-AR Summ
   <button class="btn sec" data-drop="bulkUp" onclick="bulkUp()">⬆ ${L("批量上传供应商 / 客户报告（更新付款）","Bulk upload supplier / customer reports")}</button>
   <div id="aparOut" style="margin-top:12px"></div></div>`}
 async function aparFile(input){const file=input.files[0];input.value="";if(!file)return;const box=$("#aparOut");box.innerHTML=L("读取中…","Reading…");
-  try{const wb=XLSX.read(await file.arrayBuffer(),{cellDates:true});const find=rx=>wb.SheetNames.find(n=>rx.test(n.trim()));
+  try{await needXLSX();const wb=XLSX.read(await file.arrayBuffer(),{cellDates:true});const find=rx=>wb.SheetNames.find(n=>rx.test(n.trim()));
     APAR={file:file.name,arSheet:find(/^sales invoices$/i)||"",apSheet:find(/^tax invoice 23$/i)||find(/^tax invoices$/i)||"",wb,sheets:wb.SheetNames,assume:false,assumeTo:"",noMerge:new Set(),dupTake:new Set(),partAmt:{},reps:[]};
     aparAnalyse();aparShow()}catch(e){box.innerHTML=`<p class="err">${esc(e.message)}</p>`}}
 function aparAnalyse(){const A=APAR,co=S.company;
@@ -4636,7 +4636,7 @@ function masterView(){return `<div class="panel"><h2>${L("导入现有资料","I
 const TPL={Customers:["Name","Payment Terms (0=COD,7,14,30,60)","Attn","Email","WhatsApp","Tel","Fax","Address"],Vehicles:["Vehicle No","Type"],
   Rates:["Customer","Service","Unit","Price","Effective From","Effective To","Meal break if over (hrs)","Deduct (hrs)","Min hrs","OT per hr"],
   Invoices:["Invoice No","Invoice Date","Customer","Project","Description","Amt before GST","GST","Total","Paid so far","Customer PO"]};
-function downloadTemplate(){const wb=XLSX.utils.book_new();
+async function downloadTemplate(){await needXLSX();const wb=XLSX.utils.book_new();
   const info=[["怎样填 / How to fill"],["日期格式：2026-08-13 或 13/8/2026"],[`Service（Rates）：${rateSvcNames().join(" / ")}`],["Customer 名称要跟 Customers sheet 一样"],["Invoices：只填还没收完钱的；Paid so far = 已经收了多少"],["Rates 的 Unit：per hr（按小时）或 per 8 hrs（8 小时一个价 + OT，OT per hr 填 OT 每小时价钱）"],["这个 Instructions sheet 不会被导入"]];
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(info),"Instructions");
   for(const[n,h]of Object.entries(TPL)){const ws=XLSX.utils.aoa_to_sheet([h]);ws["!cols"]=h.map(x=>({wch:Math.max(14,x.length+2)}));XLSX.utils.book_append_sheet(wb,ws,n)}
@@ -4647,7 +4647,7 @@ function toYMD(v){if(v==null||v==="")return null;if(v instanceof Date)return ymd
 const numOr=(v,d=null)=>{if(v===""||v==null)return d;const n=Number(String(v).replace(/[$,\s]/g,""));return isNaN(n)?d:n};
 const termOr=v=>{const t=String(v??"").trim().toUpperCase();if(!t)return 30;if(t.includes("COD")||t.includes("CASH"))return 0;const n=parseInt(t.replace(/\D/g,""),10);return isNaN(n)?30:n};
 async function importExcel(input){const file=input.files[0];if(!file)return;input.value="";
-  try{const wb=XLSX.read(await file.arrayBuffer(),{cellDates:true});
+  try{await needXLSX();const wb=XLSX.read(await file.arrayBuffer(),{cellDates:true});
     const rows=n=>wb.Sheets[n]?XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,defval:""}).slice(1).filter(r=>r.some(v=>String(v).trim()!=="")):[];
     const co=S.company,rep=[];
     const cRows=rows("Customers"),have=new Set(S.d.customers.map(c=>c.name.trim().toLowerCase()));
@@ -4765,8 +4765,15 @@ async function scanBackup(m){m=m||prompt(L("要备份哪个月的扫描件？（
     for(const x of pick){toast(`${L("打包中","Zipping")} ${++n}/${pick.length}`);try{const ext=(String(x.a.file_name||x.a.file_path).match(/\.[a-z0-9]{2,5}$/i)||[".pdf"])[0];let fn=`${x.folder}/${String(x.nm).replace(/[\\/:*?"<>|]+/g,"-").trim()}${x.a.kind?" - "+x.a.kind:""}`;seen[fn]=(seen[fn]||0)+1;if(seen[fn]>1)fn+=` (${seen[fn]})`;
       z.file(fn+ext,await siBlob(x.a))}catch(e){fail++}}
     const blob=await z.generateAsync({type:"blob"});saveBlob(blob,`${co} scans ${m}.zip`);setPref("lastScanBk_"+co,m);toast(`${co} scans ${m}.zip · ${kb(blob.size)}${fail?` · ⚠ ${fail} ${L("个下载失败","failed")}`:""}`)}catch(e){toast(e.message||String(e))}}
+/* SheetJS：网页开头那个 CDN 没载到（网络 / 公司防火墙）就换别的 CDN 再载一次 */
+let _xlsxP=null;
+function needXLSX(){if(window.XLSX)return Promise.resolve();if(_xlsxP)return _xlsxP;
+  const urls=["https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js","https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js","https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"];
+  _xlsxP=(async()=>{for(const u of urls){try{await new Promise((ok,no)=>{const sc=document.createElement("script");sc.src=u;sc.onload=ok;sc.onerror=no;document.head.appendChild(sc)});if(window.XLSX)return}catch(e){}}
+    _xlsxP=null;throw new Error(L("Excel 工具载不到，请检查网络后重新整理再试","Couldn't load the Excel library — check the connection and reload"))})();return _xlsxP}
+window.addEventListener("load",()=>{if(!window.XLSX)needXLSX().catch(()=>{})});
 async function backupNow(){toast(L("备份中，请稍等…","Backing up…"));
-  try{const wb=XLSX.utils.book_new(),counts=[];
+  try{await needXLSX();const wb=XLSX.utils.book_new(),counts=[];
     for(const t of BK_TABLES){let rows;try{rows=await fetchAll(()=>sb.from(t).select("*"))}catch(e){continue}counts.push([t,rows.length]);
       const cols=rows.length?Object.keys(rows[0]):["id"];
       const ws=XLSX.utils.json_to_sheet(rows.map(r=>Object.fromEntries(cols.map(k=>[k,r[k]==null?"":r[k]]))),{header:cols});
@@ -4777,7 +4784,7 @@ async function backupNow(){toast(L("备份中，请稍等…","Backing up…"));
 async function restoreBackup(input){const file=input.files[0];input.value="";if(!file)return;
   if(!confirm(L("还原会把备份文件里的资料写回系统：\n· 同一笔资料会变回备份时的样子\n· 备份之后新增的资料会保留，不会被删掉\n\n确定继续？",
     "Restore writes the backup back into the system:\n· Records in the backup return to their backed-up state\n· Records added after the backup are kept\n\nContinue?")))return;
-  try{const wb=XLSX.read(await file.arrayBuffer(),{cellDates:false});
+  try{await needXLSX();const wb=XLSX.read(await file.arrayBuffer(),{cellDates:false});
     if(!wb.Sheets._info)throw new Error(L("这不是系统导出的备份文件","This is not a backup file from this system"));
     const rep=[];toast(L("还原中，请不要关闭网页…","Restoring, keep this page open…"));
     for(const t of BK_TABLES){const ws=wb.Sheets[t];if(!ws)continue;
