@@ -359,7 +359,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-11-19a";
+const APP_VER="2026-11-19b";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -2279,10 +2279,10 @@ function invFormView(f){
         ${(()=>{const st=lnSty(l.description);return `<label>${L("粗体","Bold")} <select class="inp" style="width:auto;padding:2px 4px;font-size:12px" onchange="invSty(${i},'b',+this.value)">${[[0,L("自动","Auto")],[1,L("全部粗","All bold")],[2,L("不粗","Not bold")]].map(([v,t])=>`<option value="${v}" ${st.b===v?"selected":""}>${t}</option>`).join("")}</select></label>
           <label>${L("字","Size")} <select class="inp" style="width:auto;padding:2px 4px;font-size:12px" onchange="invSty(${i},'s',+this.value)">${LN_SIZES.map((z,v)=>`<option value="${v}" ${st.s===v?"selected":""}>${v?z+"pt":L("自动","Auto")}</option>`).join("")}</select></label>
           <label class="chk" style="font-size:12px" title="${L("Qty / UOM / 单价 不印，只印金额（例：Admin Charges）","Print the amount only")}"><input type="checkbox" ${st.a?"checked":""} onchange="invSty(${i},'a',this.checked?1:0)">${L("只印金额","Amount only")}</label>`})()}</div></td>
-      <td style="width:90px"><input class="inp" type="number" step="0.01" data-li="${i}" data-lk="qty" value="${l.qty??""}"></td>
+      ${admPct(l)!=null?`<td colspan="3" class="mute" style="font-size:12px;vertical-align:middle;text-align:center">${L(`自动 = 其他行 × ${admPct(l)}%（Qty / UOM / 单价 不用填）`,`Auto = other lines × ${admPct(l)}% (no Qty / UOM / price needed)`)}</td>`:`<td style="width:90px"><input class="inp" type="number" step="0.01" data-li="${i}" data-lk="qty" value="${l.qty??""}"></td>
       <td style="width:80px"><input class="inp" list="uomList" data-li="${i}" data-lk="unit" value="${esc(l.unit||"")}">${i===0?`<datalist id="uomList">${["LS","hrs","hr","day","days","mth","trip","load","nos","lot"].map(u=>`<option value="${u}">`).join("")}</datalist>`:""}</td>
       <td style="width:120px"><input class="inp" type="number" step="0.01" data-li="${i}" data-lk="unit_price" value="${l.unit_price??""}" ${lineLS(l)?'style="opacity:.45"':""}>
-        <label class="chk" style="font-size:11px;white-space:nowrap" title="${L("打勾：单价那栏印「LS」，不印数字","Tick: print LS in the unit price column")}"><input type="checkbox" ${lineLS(l)?"checked":""} onchange="S.modal.f.lines[${i}]._ls=this.checked;render()">${L("单价写 LS","Price = LS")}</label></td>
+        <label class="chk" style="font-size:11px;white-space:nowrap" title="${L("打勾：单价那栏印「LS」，不印数字","Tick: print LS in the unit price column")}"><input type="checkbox" ${lineLS(l)?"checked":""} onchange="S.modal.f.lines[${i}]._ls=this.checked;render()">${L("单价写 LS","Price = LS")}</label></td>`}
       <td style="width:130px"><input class="inp" type="number" step="0.01" data-li="${i}" data-lk="amount" value="${l.amount??""}"></td>
       <td><button class="btn del sm" onclick="invDelLine(${i})">✕</button></td></tr>`).join("")||`<tr><td colspan="7" class="empty">${L("按「用已选 DO 生成明细」，或手动加一行。","Build from selected DOs, or add a line manually.")}</td></tr>`}</tbody></table></div>
   <button class="btn sec sm" onclick="invAddLine()">+ ${L("加一行","Add line")}</button>
@@ -2305,7 +2305,7 @@ function invIn(el,isChange){const f=S.modal?.f;if(!f)return;const k=el.dataset.k
     if(isL3()?(ln.unit!=="hrs"&&ln.unit!=="LS"):ln.unit!=="hrs"){if((lk==="qty"||lk==="unit_price")&&ln.qty!=null&&ln.unit_price!=null){ln.amount=r2(ln.qty*ln.unit_price);const a=document.querySelector(`[data-li="${li}"][data-lk="amount"]`);if(a)a.value=ln.amount}
       else if(lk==="amount"&&Number(ln.qty)){ln.unit_price=r2(ln.amount/ln.qty);const u=document.querySelector(`[data-li="${li}"][data-lk="unit_price"]`);if(u)u.value=ln.unit_price}}
     else if(lk==="amount"&&ln.unit!=="hrs")ln.unit_price=ln.amount;
-    if(!(lk==="amount"&&admPct(ln)!=null))admAuto(f)}
+    const isAdm=admPct(ln)!=null;if(!(lk==="amount"&&isAdm))admAuto(f);if(lk==="description"&&isChange&&isAdm===!!document.querySelector(`[data-li="${li}"][data-lk="qty"]`))render()}
   const tt=$("#invTot");if(tt)tt.innerHTML=invTotHTML(f);
 }
 function invSel(id,on){const f=S.modal.f;on?f.sel.add(id):f.sel.delete(id);$("#invTot").innerHTML=invTotHTML(f)}
@@ -2314,7 +2314,7 @@ function invMove(i,d){const L2=S.modal.f.lines,j=i+d;if(j<0||j>=L2.length)return
 /* Admin Charges x% → 自动算 = 其他行加起来 × x% */
 const admPct=l=>{const m=lnText(l.description).match(/admin(?:istrati(?:ve|on))?\s*(?:charges?|fees?)\b[^%\n]*?(\d+(?:\.\d+)?)\s*%/i);return m?Number(m[1]):null};
 function admAuto(f){const base=r2(sum(f.lines.filter(l=>admPct(l)==null),l=>Number(l.amount)||0));
-  f.lines.forEach((l,i)=>{const p=admPct(l);if(p==null)return;const v=r2(base*p/100);if(l.amount===v)return;l.amount=v;if(l.unit==="LS"||l.unit_price!=null)l.unit_price=v;
+  f.lines.forEach((l,i)=>{const p=admPct(l);if(p==null)return;const v=r2(base*p/100);const was=l.amount===v&&l.qty==null&&l.unit==="LS";l.qty=null;l.unit="LS";l.unit_price=v;l._ls=false;l.amount=v;if(was)return;
     if(l._admNew!==false&&!STYRX.test(String(l.description||""))){l.description=setSty(l.description,{...lnSty(l.description),a:1});l._admNew=false}
     const a=document.querySelector(`[data-li="${i}"][data-lk="amount"]`);if(a&&document.activeElement!==a)a.value=v;const u=document.querySelector(`[data-li="${i}"][data-lk="unit_price"]`);if(u&&l.unit_price===v&&document.activeElement!==u)u.value=v})}
 function invSty(i,k,v){const l=S.modal.f.lines[i];l.description=setSty(l.description,{...lnSty(l.description),[k]:v});S.dirty=true;if(k==="a")render()}
