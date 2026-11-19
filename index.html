@@ -276,6 +276,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 #print table.lines .d1{font-family:Arial,Helvetica,sans-serif;font-size:9.5pt;font-weight:700;line-height:1.6}
 #print .ul{display:inline-block;border-bottom:1px solid #000;line-height:1.2}
 #print table.lines .d2{font-family:Arial,Helvetica,sans-serif;line-height:1.6}
+#print table.lines .lsty .d1,#print table.lines .lsty .d2{font-size:inherit}#print table.lines .lb1 .d1,#print table.lines .lb1 .d2{font-weight:700}#print table.lines .lb2 .d1,#print table.lines .lb2 .d2,#print table.lines .lb2 b{font-weight:400}
 #print .inv .attx{margin:20mm 0 0 13mm}
 #print .inv .tot{margin:0 0 0 auto;font-size:10pt}
 #print .inv .tot td{padding:1.2mm 1.5mm}
@@ -358,7 +359,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-11-18b";
+const APP_VER="2026-11-19a";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -2273,8 +2274,11 @@ function invFormView(f){
   <h3>3. ${L("明细","Lines")}</h3>
   <div class="tw lines"><table><thead><tr><th>No</th><th>Description</th><th class="num">Qty</th><th>UOM</th><th class="num">${L("单价","Unit price")}</th><th class="num">${L("金额","Amount")}</th><th></th></tr></thead><tbody>
     ${f.lines.map((l,i)=>`<tr><td>${i+1})<div style="white-space:nowrap;margin-top:4px">${i?`<button class="btn sec sm ib" title="${L("上移","Up")}" onclick="invMove(${i},-1)">▲</button>`:""}${i<f.lines.length-1?`<button class="btn sec sm ib" title="${L("下移","Down")}" onclick="invMove(${i},1)">▼</button>`:""}</div></td>
-      <td style="min-width:280px"><textarea class="inp" data-li="${i}" data-lk="description">${esc(String(l.description||"").replace(NOUL,""))}</textarea>
-        <label class="chk" style="font-size:12px"><input type="checkbox" ${noUl(l.description)?"":"checked"} onchange="invUl(${i},this.checked)">${L("第一行加底线","Underline first line")}</label></td>
+      <td style="min-width:280px"><textarea class="inp" data-li="${i}" data-lk="description">${esc(lnText(l.description))}</textarea>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:12px"><label class="chk" style="font-size:12px"><input type="checkbox" ${noUl(l.description)?"":"checked"} onchange="invUl(${i},this.checked)">${L("第一行加底线","Underline first line")}</label>
+        ${(()=>{const st=lnSty(l.description);return `<label>${L("粗体","Bold")} <select class="inp" style="width:auto;padding:2px 4px;font-size:12px" onchange="invSty(${i},'b',+this.value)">${[[0,L("自动","Auto")],[1,L("全部粗","All bold")],[2,L("不粗","Not bold")]].map(([v,t])=>`<option value="${v}" ${st.b===v?"selected":""}>${t}</option>`).join("")}</select></label>
+          <label>${L("字","Size")} <select class="inp" style="width:auto;padding:2px 4px;font-size:12px" onchange="invSty(${i},'s',+this.value)">${LN_SIZES.map((z,v)=>`<option value="${v}" ${st.s===v?"selected":""}>${v?z+"pt":L("自动","Auto")}</option>`).join("")}</select></label>
+          <label class="chk" style="font-size:12px" title="${L("Qty / UOM / 单价 不印，只印金额（例：Admin Charges）","Print the amount only")}"><input type="checkbox" ${st.a?"checked":""} onchange="invSty(${i},'a',this.checked?1:0)">${L("只印金额","Amount only")}</label>`})()}</div></td>
       <td style="width:90px"><input class="inp" type="number" step="0.01" data-li="${i}" data-lk="qty" value="${l.qty??""}"></td>
       <td style="width:80px"><input class="inp" list="uomList" data-li="${i}" data-lk="unit" value="${esc(l.unit||"")}">${i===0?`<datalist id="uomList">${["LS","hrs","hr","day","days","mth","trip","load","nos","lot"].map(u=>`<option value="${u}">`).join("")}</datalist>`:""}</td>
       <td style="width:120px"><input class="inp" type="number" step="0.01" data-li="${i}" data-lk="unit_price" value="${l.unit_price??""}" ${lineLS(l)?'style="opacity:.45"':""}>
@@ -2297,15 +2301,23 @@ function invIn(el,isChange){const f=S.modal?.f;if(!f)return;const k=el.dataset.k
     if(k==="invoice_no")f._noTouched=true;if(k==="due_date")f._dueTouched=true;if(k==="gst_rate")f.gst_rate=Number(el.value)||0;
     if(k==="invoice_date"||k==="customer_id"){recalcDue(f);const dd=$('[data-k="due_date"]');if(dd)dd.value=f.due_date||""}
     if(k==="invoice_date"&&!f.id&&!f._noTouched&&f.invoice_date){f.invoice_no=nextInvNo(f.invoice_date);const n=$('[data-k="invoice_no"]');if(n)n.value=f.invoice_no}}
-  else if(li!=null){const ln=f.lines[li];const keepNu=lk==="description"&&noUl(ln.description);ln[lk]=["qty","amount","unit_price"].includes(lk)?(el.value===""?null:Number(el.value)):el.value;if(keepNu)ln.description=NOUL+String(ln.description).replace(NOUL,"");
+  else if(li!=null){const ln=f.lines[li];const keepNu=lk==="description"&&noUl(ln.description),keepSt=lk==="description"?lnSty(ln.description):null;ln[lk]=["qty","amount","unit_price"].includes(lk)?(el.value===""?null:Number(el.value)):el.value;if(keepNu)ln.description=NOUL+String(ln.description).replace(NOUL,"");if(keepSt)ln.description=setSty(ln.description,keepSt);
     if(isL3()?(ln.unit!=="hrs"&&ln.unit!=="LS"):ln.unit!=="hrs"){if((lk==="qty"||lk==="unit_price")&&ln.qty!=null&&ln.unit_price!=null){ln.amount=r2(ln.qty*ln.unit_price);const a=document.querySelector(`[data-li="${li}"][data-lk="amount"]`);if(a)a.value=ln.amount}
       else if(lk==="amount"&&Number(ln.qty)){ln.unit_price=r2(ln.amount/ln.qty);const u=document.querySelector(`[data-li="${li}"][data-lk="unit_price"]`);if(u)u.value=ln.unit_price}}
-    else if(lk==="amount"&&ln.unit!=="hrs")ln.unit_price=ln.amount}
+    else if(lk==="amount"&&ln.unit!=="hrs")ln.unit_price=ln.amount;
+    if(!(lk==="amount"&&admPct(ln)!=null))admAuto(f)}
   const tt=$("#invTot");if(tt)tt.innerHTML=invTotHTML(f);
 }
 function invSel(id,on){const f=S.modal.f;on?f.sel.add(id):f.sel.delete(id);$("#invTot").innerHTML=invTotHTML(f)}
 function invSelAll(on){const f=S.modal.f;f.sel=on?new Set(f.dos.map(d=>d.id)):new Set();render()}
 function invMove(i,d){const L2=S.modal.f.lines,j=i+d;if(j<0||j>=L2.length)return;[L2[i],L2[j]]=[L2[j],L2[i]];render()}
+/* Admin Charges x% → 自动算 = 其他行加起来 × x% */
+const admPct=l=>{const m=lnText(l.description).match(/admin(?:istrati(?:ve|on))?\s*(?:charges?|fees?)\b[^%\n]*?(\d+(?:\.\d+)?)\s*%/i);return m?Number(m[1]):null};
+function admAuto(f){const base=r2(sum(f.lines.filter(l=>admPct(l)==null),l=>Number(l.amount)||0));
+  f.lines.forEach((l,i)=>{const p=admPct(l);if(p==null)return;const v=r2(base*p/100);if(l.amount===v)return;l.amount=v;if(l.unit==="LS"||l.unit_price!=null)l.unit_price=v;
+    if(l._admNew!==false&&!STYRX.test(String(l.description||""))){l.description=setSty(l.description,{...lnSty(l.description),a:1});l._admNew=false}
+    const a=document.querySelector(`[data-li="${i}"][data-lk="amount"]`);if(a&&document.activeElement!==a)a.value=v;const u=document.querySelector(`[data-li="${i}"][data-lk="unit_price"]`);if(u&&l.unit_price===v&&document.activeElement!==u)u.value=v})}
+function invSty(i,k,v){const l=S.modal.f.lines[i];l.description=setSty(l.description,{...lnSty(l.description),[k]:v});S.dirty=true;if(k==="a")render()}
 function invUl(i,on){const l=S.modal.f.lines[i],t=String(l.description||"").replace(NOUL,"");l.description=on?t:NOUL+t;S.dirty=true}
 function invAddLine(){S.modal.f.lines.push({description:"",qty:1,unit:"LS",amount:null});render()}
 function invDelLine(i){S.modal.f.lines.splice(i,1);render()}
@@ -2437,7 +2449,7 @@ function openInv(id){S.modal={kind:"inv",id,edits:null,dos:null};render();
   sb.from("delivery_orders").select("id,do_no,do_date").eq("invoice_id",id).then(({data})=>{if(S.modal?.id===id){S.modal.dos=data||[];render()}});
   sb.from("invoice_edits").select("*").eq("invoice_id",id).order("created_at",{ascending:false}).then(({data})=>{if(S.modal?.id===id){S.modal.edits=data||[];render()}})}
 /* ---- 🔄 旧 invoice 按最新资料重算（价钱 / Service 设定 / 客户 Terms） ---- */
-const lnKey=l=>[String(l.description||"").replace(NOUL,"").trim(),r2(Number(l.qty)||0),String(l.unit||lineUnit(l)),l.unit_price==null?"":r2(l.unit_price),r2(Number(l.amount)||0)].join("|");
+const lnKey=l=>[lnText(l.description).trim(),r2(Number(l.qty)||0),String(l.unit||lineUnit(l)),l.unit_price==null?"":r2(l.unit_price),r2(Number(l.amount)||0)].join("|");
 async function invRecalc(id,dosPre){const inv=invById(id);if(!inv)return{skip:"—"};
   if(isMachInv(inv))return{inv,skip:L("机械租用单，请用「修改」","machine rental invoice — use Edit")};
   if(invOrig(inv))return{inv,skip:L("导入的旧单（用你上传的原本 PDF）","imported invoice")};
@@ -4021,6 +4033,11 @@ const dmyz=d=>d?`${d.slice(8,10)}/${d.slice(5,7)}/${d.slice(0,4)}`:"";
 const nightsOf=f=>f.do_date&&f.end_date?Math.max(1,daysBetween(f.do_date,f.end_date)):1;
 const unitWord=d=>/night/i.test(d.unit)?"Night":/day/i.test(d.unit)?"Day":/trip/i.test(d.unit)?"Trip":/load/i.test(d.unit)?"Load":"LS";
 const NOUL="\u200B";const noUl=t=>String(t||"").startsWith(NOUL);
+/* 每行字体设定：藏在 description 最后面的隐形字（粗体 自动/粗/不粗、字号、只印金额） */
+const STYRX=/\u2060([\u200C\u200D]{6})$/,LN_SIZES=[0,8,8.5,9,9.5,10,10.5,11];
+function lnSty(t){const m=String(t||"").match(STYRX);if(!m)return{b:0,s:0,a:0};const v=[...m[1]].map(c=>c==="\u200D"?1:0);return{b:v[0]*2+v[1],s:v[2]*4+v[3]*2+v[4],a:v[5]}}
+function setSty(t,o){t=String(t||"").replace(STYRX,"");if(!o.b&&!o.s&&!o.a)return t;const v=[o.b>>1&1,o.b&1,o.s>>2&1,o.s>>1&1,o.s&1,o.a?1:0];return t+"\u2060"+v.map(x=>x?"\u200D":"\u200C").join("")}
+const lnText=t=>String(t||"").replace(NOUL,"").replace(STYRX,"");
 const svcTitle=(d,n)=>String(d.line_title||d.name).replace(/\{n\}/g,n??1);
 function recomputeSvc(f,d){const k=svcKind(d),rate=findRate(f.customer_id,f.service,f.do_date)||(isL3()?findRate(null,f.service,f.do_date):null);f._priceChanged=false;f._tipLoad=false;f._rateRow=rate;f.shift=null;f._otHours=null;f._otRate=null;
   if(!f._rateTouched)f.rate=rate?Number(rate.price):null;if(!f._surTouched)f.surcharge=0;
@@ -5484,7 +5501,8 @@ function invoiceHTML(inv,hasBd){const s=settingsOf(inv.company),c=custOf(inv.cus
   const td=Number(c.payment_terms_days),terms=td===0?(l3?"COD":"C.O.D"):`${c.payment_terms_days??30} ${l3?"Days":"days"}`;
   const mg=l3&&!inv.project&&!isMachInv(inv)&&!isCHC(inv.customer_id);
   const meta=mg?[["No",inv.invoice_no],["D.O. No",""],["Your PO No",inv.customer_po||""],["Terms",td===0?"C.O.D":terms],["Date",dmy(inv.invoice_date)]]:[["Invoice No.",inv.invoice_no],["Our Ref No.",inv.our_ref||""],["Terms",terms],["Date",dmy(inv.invoice_date)],["Your PO",inv.customer_po||""]];
-  const desc=t=>{const nu=noUl(t);const xs=String(t||"").replace(NOUL,"").split("\n").filter(x=>x.trim()!=="");
+  const desc=t=>{const st=lnSty(t),h=desc0(t);if(!st.b&&!st.s)return h;return `<div class="lsty ${st.b===1?"lb1":st.b===2?"lb2":""}" ${st.s?`style="font-size:${LN_SIZES[st.s]}pt"`:""}>${h}</div>`};
+  const desc0=t=>{const nu=noUl(t);const xs=lnText(t).split("\n").filter(x=>x.trim()!=="");
     if(nu)return xs.map((x,i)=>`<div class="${i===0?"d1":"d2"}">${i===0?`<b>${esc(x)}</b>`:esc(x)}</div>`).join("");if(mg&&xs[0]==="Lorry Crane Transport Charges")return xs.map(x=>`<div class="d1"><span class="ul">${esc(x)}</span></div>`).join("");return xs.map((x,i)=>l3?(i===0&&xs.length>1?`<div class="d1"><span class="ul">${esc(x)}</span></div>`:`<div class="d2">${esc(x)}</div>`):(i>0&&/^(Location|Date|DO|Customer)\s*:/i.test(x)?`<div class="d2">${esc(x)}</div>`:`<div class="d1"><span class="ul">${esc(x)}</span></div>`)).join("")};
   const cnD=isCNDoc(inv),dnD=isDNDoc(inv);if(cnD||dnD){meta[0]=[cnD?"Credit Note No.":"Debit Note No.",inv.invoice_no];if(!mg)meta[1]=["Our Ref No.",inv.our_ref||""]}
   const A=v=>v==null||v===""?v:cnD?Math.abs(Number(v)):v;
@@ -5493,7 +5511,7 @@ function invoiceHTML(inv,hasBd){const s=settingsOf(inv.company),c=custOf(inv.cus
   <div class="body"><table class="lines"><colgroup><col style="width:10mm"><col><col style="width:13mm"><col style="width:13mm"><col style="width:28mm"><col style="width:31mm"></colgroup>
   <thead><tr><th>No.</th><th class="c">Description</th><th class="c">Qty</th><th class="c">UOM</th><th class="r">Unit Price $</th><th class="r">Total Amount $</th></tr></thead><tbody>
   ${inv.description?`<tr><td></td><td ${l3?'colspan="5" style="white-space:nowrap"':""}>${String(inv.description).split("\n").filter(Boolean).map(x=>`<div class="d1"><span class="ul">${esc(x)}</span></div>`).join("")}</td>${l3?"":`<td colspan="4"></td>`}</tr>`:""}
-  ${lines.map((l,i)=>{const u=lineUnit(l),nu=(l3||u!=="LS")&&u!=="hrs"&&u!=="LS"&&l.unit_price!=null;if(l.unit_price==null&&u!=="hrs")return `<tr><td>${i+1})</td><td>${desc(l.description)}</td><td class="c">${l.qty==null||l.qty===""?1:Number(l.qty)%1?Number(l.qty).toFixed(2):l.qty}</td><td class="c">${esc(u)}</td><td><div class="c">LS</div></td><td>${acc(A(l.amount))}</td></tr>`;return nu?`<tr><td>${i+1})</td><td>${desc(l.description)}</td><td class="c">${Number(l.qty)%1?Number(l.qty).toFixed(2):l.qty}</td><td class="c">${esc(u)}</td>
+  ${lines.map((l,i)=>{if(lnSty(l.description).a)return `<tr><td>${i+1})</td><td>${desc(l.description)}</td><td></td><td></td><td></td><td>${acc(A(l.amount))}</td></tr>`;const u=lineUnit(l),nu=(l3||u!=="LS")&&u!=="hrs"&&u!=="LS"&&l.unit_price!=null;if(l.unit_price==null&&u!=="hrs")return `<tr><td>${i+1})</td><td>${desc(l.description)}</td><td class="c">${l.qty==null||l.qty===""?1:Number(l.qty)%1?Number(l.qty).toFixed(2):l.qty}</td><td class="c">${esc(u)}</td><td><div class="c">LS</div></td><td>${acc(A(l.amount))}</td></tr>`;return nu?`<tr><td>${i+1})</td><td>${desc(l.description)}</td><td class="c">${Number(l.qty)%1?Number(l.qty).toFixed(2):l.qty}</td><td class="c">${esc(u)}</td>
     <td>${acc(A(l.unit_price))}</td><td>${acc(A(l.amount))}</td></tr>`:`<tr><td>${i+1})</td><td>${desc(l.description)}</td><td class="c">${u==="hrs"?Number(l.qty||0).toFixed(2):(l.qty??1)}</td><td class="c">${u==="hrs"?"hrs":"LS"}</td>
     <td>${u==="hrs"||l.unit_price==null?`<div class="c">LS</div>`:acc(A(l.unit_price))}</td><td>${acc(A(l.amount))}</td></tr>`}).join("")}</tbody></table>
   ${l3&&inv.summary_no?`<div class="attx">Refer to summary list No: ${esc(inv.summary_no)}</div>`:""}
