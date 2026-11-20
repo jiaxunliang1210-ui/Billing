@@ -361,7 +361,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-11-20f";
+const APP_VER="2026-11-20g";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -2927,7 +2927,7 @@ let CS=null;
 function csOpp(cid,sid){const c=custOf(cid);if(!c||!c.name)return null;const k=normCo(c.name);let su=null,bs=0;
   if(sid)su=S.d.suppliers.find(x=>x.id===sid)||null;else{for(const x of S.d.suppliers){const v=normCo(x.name)===k?1:simCo(k,normCo(x.name));if(v>bs){bs=v;su=x}}if(bs<0.86)su=null}
   const ours=S.d.invoices.filter(i=>i.company===S.company&&i.customer_id===cid&&i.status!=="Cancelled"&&!isCNDoc(i)&&balOf(i)>0.005).sort((a,b)=>String(a.invoice_date).localeCompare(String(b.invoice_date))||String(a.invoice_no).localeCompare(String(b.invoice_no),undefined,{numeric:true}));
-  const theirs=su?S.d.supplier_invoices.filter(x=>siMine(x)&&x.supplier_id===su.id&&!x.payment_date&&!/contra|paid/i.test(x.status||"")).sort((a,b)=>String(a.invoice_date).localeCompare(String(b.invoice_date))):[];
+  const theirs=su?S.d.supplier_invoices.filter(x=>siMine(x)&&x.supplier_id===su.id&&!x.payment_date&&!/^\s*(contra|paid)/i.test(x.status||"")).sort((a,b)=>String(a.invoice_date).localeCompare(String(b.invoice_date))):[];
   return{c,su,ours,theirs}}
 const csList=()=>S.d.customers.filter(c=>(!c.company||c.company===S.company)).map(c=>({c,o:csOpp(c.id)})).filter(x=>x.o&&x.o.su&&x.o.ours.length&&x.o.theirs.length);
 function csOpen(cid){const o=csOpp(cid);if(!o)return;
