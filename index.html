@@ -361,7 +361,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-11-20e";
+const APP_VER="2026-11-20f";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -1549,7 +1549,7 @@ const pcRoman=n=>["i","ii","iii","iv","v","vi","vii","viii","ix","x","xi","xii",
 const pcItemTot=x=>r2((Number(x.amt)||0)+(Number(x.gst)||0));
 const pcSqlMsg=e=>/is_staff|petty/i.test(e?.message||"")?L("请先在 Supabase 跑「补充-PettyCash-Supabase.sql」，跑完重新整理再试","Run 补充-PettyCash-Supabase.sql in Supabase first, then reload"):(e?.message||String(e));
 function pcForm(id){const p=id?pvById(id):null,P=p?.petty||{};const lm=new Date();lm.setDate(1);lm.setMonth(lm.getMonth()-1);
-  PCF={id:p?.id||null,staff:p?.supplier_id||"",newName:"",period:P.period||lm.toLocaleString("en-GB",{month:"short",year:"numeric"}).replace(" ","-"),date:p?(P.date||""):today(),
+  PCF={id:p?.id||null,staff:p?.supplier_id||"",newName:"",period:P.period||lm.toLocaleString("en-GB",{month:"short",year:"numeric"}).replace(" ","-"),date:P.date||"",
     accounts:P.accounts||p?.prepared_by||signName(settingsOf(S.company))||"",items:(P.items||[]).map(x=>({...x}))};const su=supById(PCF.staff);PCF.bank=su?.bank_name||"";PCF.acno=su?.bank_account||"";pcRender()}
 function pcRender(){const f=PCF,st=pcStaff(),tot=r2(sum(f.items,pcItemTot)),inp=(i,k,attr)=>`<input class="inp" ${attr||""} value="${esc(f.items[i][k]??"")}" onchange="pcSet(${i},'${k}',this.value)">`;
   pvOv(`<div class="pvhead"><h3 style="margin:0">💵 Petty Cash Claim · ${S.company}</h3><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
