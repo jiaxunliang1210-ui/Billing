@@ -361,7 +361,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-11-20d";
+const APP_VER="2026-11-20e";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -1549,7 +1549,7 @@ const pcRoman=n=>["i","ii","iii","iv","v","vi","vii","viii","ix","x","xi","xii",
 const pcItemTot=x=>r2((Number(x.amt)||0)+(Number(x.gst)||0));
 const pcSqlMsg=e=>/is_staff|petty/i.test(e?.message||"")?L("请先在 Supabase 跑「补充-PettyCash-Supabase.sql」，跑完重新整理再试","Run 补充-PettyCash-Supabase.sql in Supabase first, then reload"):(e?.message||String(e));
 function pcForm(id){const p=id?pvById(id):null,P=p?.petty||{};const lm=new Date();lm.setDate(1);lm.setMonth(lm.getMonth()-1);
-  PCF={id:p?.id||null,staff:p?.supplier_id||"",newName:"",period:P.period||lm.toLocaleString("en-GB",{month:"short",year:"numeric"}).replace(" ","-"),date:P.date||today(),
+  PCF={id:p?.id||null,staff:p?.supplier_id||"",newName:"",period:P.period||lm.toLocaleString("en-GB",{month:"short",year:"numeric"}).replace(" ","-"),date:p?(P.date||""):today(),
     accounts:P.accounts||p?.prepared_by||signName(settingsOf(S.company))||"",items:(P.items||[]).map(x=>({...x}))};const su=supById(PCF.staff);PCF.bank=su?.bank_name||"";PCF.acno=su?.bank_account||"";pcRender()}
 function pcRender(){const f=PCF,st=pcStaff(),tot=r2(sum(f.items,pcItemTot)),inp=(i,k,attr)=>`<input class="inp" ${attr||""} value="${esc(f.items[i][k]??"")}" onchange="pcSet(${i},'${k}',this.value)">`;
   pvOv(`<div class="pvhead"><h3 style="margin:0">💵 Petty Cash Claim · ${S.company}</h3><span style="flex:1"></span><button class="btn sec sm" data-a="x">✕</button></div>
@@ -1557,7 +1557,7 @@ function pcRender(){const f=PCF,st=pcStaff(),tot=r2(sum(f.items,pcItemTot)),inp=
     <label class="f">${L("员工","Staff")}<select class="inp" onchange="PCF.staff=this.value;const su=supById(this.value);PCF.bank=su?.bank_name||'';PCF.acno=su?.bank_account||'';pcRender()"><option value="">${L("— 选员工 —","— choose —")}</option>${st.map(s=>`<option value="${s.id}" ${f.staff===s.id?"selected":""}>${esc(s.name)}</option>`).join("")}<option value="_new" ${f.staff==="_new"?"selected":""}>＋ ${L("新员工","New staff")}</option></select></label>
     ${f.staff==="_new"?`<label class="f">${L("新员工名字","New staff name")}<input class="inp" value="${esc(f.newName)}" onchange="PCF.newName=this.value.trim()" placeholder="Lum Chiang Yi"></label>`:""}
     <label class="f">Month<input class="inp" value="${esc(f.period)}" onchange="PCF.period=this.value.trim()" placeholder="Sep-2026 / Nov-2025 to Feb-2026"></label>
-    <label class="f">${L("Claim 日期","Claim date")}<input type="date" class="inp" value="${f.date}" onchange="PCF.date=this.value||today()"></label>
+    <label class="f">${L("Claim 日期","Claim date")}<input type="date" class="inp" value="${f.date}" onchange="PCF.date=this.value"></label>
     <label class="f">${L("银行","Bank")}<input class="inp" value="${esc(f.bank||"")}" onchange="PCF.bank=this.value.trim()" placeholder="OCBC / DBS / POSB"></label>
     <label class="f">${L("户口号码（印在 PV 的 A/C）","Account no. (PV A/C)")}<input class="inp" value="${esc(f.acno||"")}" onchange="PCF.acno=this.value.trim()" placeholder="123-456789-001"></label>
     <label class="f">Accounts<input class="inp" value="${esc(f.accounts)}" onchange="PCF.accounts=this.value"></label></div>
@@ -1565,7 +1565,7 @@ function pcRender(){const f=PCF,st=pcStaff(),tot=r2(sum(f.items,pcItemTot)),inp=
   ${f.items.map((x,i)=>`<tr><td><select class="inp" style="width:150px" onchange="pcSet(${i},'cat',this.value)">${PC_CATS.map(c=>`<option ${x.cat===c?"selected":""}>${c}</option>`).join("")}</select></td>
     <td><textarea class="inp" rows="2" style="min-width:260px" onchange="pcSet(${i},'desc',this.value)">${esc(x.desc||"")}</textarea></td>
     <td class="num">${inp(i,"amt",'type="number" step="0.01" style="width:90px;text-align:right"')}</td>
-    <td class="num">${inp(i,"gst",'type="number" step="0.01" style="width:80px;text-align:right"')}<div style="font-size:11px;white-space:nowrap"><a href="#" onclick="pcSet(${i},'gst',r2((Number(PCF.items[${i}].amt)||0)*gstRateOn(PCF.date)/100));return false">${gstRateOn(f.date)}%</a> · <a href="#" onclick="pcSet(${i},'gst',0);return false">0</a></div></td>
+    <td class="num">${inp(i,"gst",'type="number" step="0.01" style="width:80px;text-align:right"')}<div style="font-size:11px;white-space:nowrap"><a href="#" onclick="pcSet(${i},'gst',r2((Number(PCF.items[${i}].amt)||0)*gstRateOn(PCF.date||today())/100));return false">${gstRateOn(f.date||today())}%</a> · <a href="#" onclick="pcSet(${i},'gst',0);return false">0</a></div></td>
     <td class="num">${money(pcItemTot(x))}</td><td>${inp(i,"proj",'style="width:110px"')}</td><td>${inp(i,"rmk",'style="width:120px"')}</td>
     <td><button class="btn del sm" onclick="PCF.items.splice(${i},1);pcRender()">✕</button></td></tr>`).join("")||`<tr><td colspan="8" class="empty">${L("按「＋ 加一项」开始","Add an item")}</td></tr>`}
   <tr><td colspan="8"><button class="btn sec sm" onclick="PCF.items.push({cat:PCF.items.at(-1)?.cat||PC_CATS[0],desc:'',amt:'',gst:'',proj:'',rmk:''});pcRender()">＋ ${L("加一项","Add item")}</button></td></tr></tbody>
@@ -1574,7 +1574,7 @@ function pcRender(){const f=PCF,st=pcStaff(),tot=r2(sum(f.items,pcItemTot)),inp=
   <p id="pcWarn" style="color:var(--bad)"></p>
   <div class="actions"><button class="btn" onclick="pcSave()">✓ ${L("保存 + 开 PV","Save + PV")}</button><button class="btn sec" data-a="x">${L("取消","Cancel")}</button></div>`)}
 function pcSet(i,k,v){const x=PCF.items[i];if(!x)return;x[k]=["amt","gst"].includes(k)?(v===""?"":r2(Number(v))):v;
-  if(k==="amt"&&(x.gst===""||x.gst==null||x._gAuto)){x.gst=r2((Number(v)||0)*gstRateOn(PCF.date)/100);x._gAuto=true}if(k==="gst")x._gAuto=false;pcRender()}
+  if(k==="amt"&&(x.gst===""||x.gst==null||x._gAuto)){x.gst=r2((Number(v)||0)*gstRateOn(PCF.date||today())/100);x._gAuto=true}if(k==="gst")x._gAuto=false;pcRender()}
 async function pcSave(){const f=PCF,w=$("#pcWarn");let sid=f.staff;
   if(sid==="_new"){if(!f.newName)return w.textContent=L("请写员工名字","Enter the staff name");
     const ex=S.d.suppliers.find(s=>normCo(s.name)===normCo(f.newName));
@@ -1585,7 +1585,7 @@ async function pcSave(){const f=PCF,w=$("#pcWarn");let sid=f.staff;
   const items=f.items.filter(x=>String(x.desc||"").trim()||Number(x.amt)).map(({_gAuto,...x})=>({...x,amt:r2(Number(x.amt)||0),gst:r2(Number(x.gst)||0)}));
   if(!items.length)return w.textContent=L("至少加一项","Add at least one item");
   const tot=r2(sum(items,pcItemTot)),desc=`Petty Cash Claim For ${f.period}`,petty={period:f.period,date:f.date,accounts:f.accounts,items};
-  const row={company:S.company,supplier_id:sid,pv_date:f.date,account:supAcct(supById(sid))||null,cheque_no:(f.id&&pvById(f.id)?.cheque_no)||defCheque(),prepared_by:f.accounts||null,total:tot,petty};
+  const row={company:S.company,supplier_id:sid,pv_date:f.date||(f.id&&pvById(f.id)?.pv_date)||today(),date_blank:!f.date,account:supAcct(supById(sid))||null,cheque_no:(f.id&&pvById(f.id)?.cheque_no)||defCheque(),prepared_by:f.accounts||null,total:tot,petty};
   let id=f.id;
   if(id){const old=pvById(id);if(old&&(old.status||"Pending")!=="Pending"){const why=prompt(L(`这张 PV 已经是「${old.status}」。修改原因：`,`PV is ${old.status}. Reason:`),"");if(!why)return;row.remark=[old.remark||"",`[${dmy(today())} ${L("修改","edited")}: ${why}]`].filter(Boolean).join(" ")}
     const{error}=await sb.from("payment_vouchers").update(row).eq("id",id);if(error)return w.textContent=pcSqlMsg(error);
