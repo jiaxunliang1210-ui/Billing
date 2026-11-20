@@ -361,7 +361,7 @@ html,body{-webkit-text-size-adjust:100%;-moz-text-size-adjust:100%;text-size-adj
 <div id="toast"></div>
 <script>
 /* ================= 设定 ================= */
-const APP_VER="2026-11-19d";
+const APP_VER="2026-11-20a";
 const SUPABASE_URL="https://kmaztlooqgeyllxfwhzv.supabase.co";
 const SUPABASE_KEY="sb_publishable_NE6-Y5kX5zBcoP2vV7pEyQ_Xtm2ulir";
 const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -846,7 +846,13 @@ const doFileName=d=>`DO_${String(d.do_no||"x").replace(/[\\/:*?"<>|\s]+/g,"-")}_
 async function doSelPdf(mode){const ds=S.d.delivery_orders.filter(d=>S.doSel?.has(d.id)).sort((a,b)=>String(a.do_date).localeCompare(String(b.do_date))||String(a.do_no).localeCompare(String(b.do_no),undefined,{numeric:true}));
   const ok=ds.filter(d=>doPhotos(d.id).length),skip=ds.filter(d=>!doPhotos(d.id).length);if(!ok.length)return alert(L("选的 DO 都没有照片","None of the selected DOs has a photo"));
   try{await loadPdfLibs();const{jsPDF}=window.jspdf,save=(b,n)=>{const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download=n;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},3000)};
-    if(mode==="merge"){const pdf=new jsPDF({unit:"mm",format:"a4"});let fst=true,i=0;for(const d of ok){toast(L(`做 PDF… ${++i}/${ok.length}`,`Building PDF… ${i}/${ok.length}`));fst=await doAddPages(pdf,doPhotos(d.id),fst)}
+    const per=Number(pref("doSelPer","6"))||6;
+    if(mode==="merge"&&per>1){const pdf=new jsPDF({unit:"mm",format:"a4"}),pics=ok.flatMap(d=>doPhotos(d.id)),cols=2,rows=per/cols,M=8,G=4,cw=(210-2*M-(cols-1)*G)/cols,ch=(297-2*M-(rows-1)*G)/rows;
+      for(let i=0;i<pics.length;i++){if(i%per===0){toast(L(`做 PDF… ${i+1}/${pics.length}`,`Building PDF… ${i+1}/${pics.length}`));if(i)pdf.addPage("a4","portrait")}
+        const src=await attDataURL(pics[i]),[w,h]=await imgSize(src),pos=i%per,cx=M+(pos%cols)*(cw+G),cy=M+Math.floor(pos/cols)*(ch+G),k=Math.min(cw/w,ch/h),dw=w*k,dh=h*k;
+        pdf.addImage(src,"JPEG",cx+(cw-dw)/2,cy+(ch-dh)/2,dw,dh,undefined,"FAST");pdf.setDrawColor(190);pdf.setLineWidth(0.2);pdf.rect(cx+(cw-dw)/2,cy+(ch-dh)/2,dw,dh)}
+      const f=ok.length===1?doFileName(ok[0]):`DO_${dmy(ok[0].do_date).replace(/\//g,"-")}_to_${dmy(ok.at(-1).do_date).replace(/\//g,"-")}_${ok.length}DO`;save(pdf.output("blob"),f+".pdf")}
+    else if(mode==="merge"){const pdf=new jsPDF({unit:"mm",format:"a4"});let fst=true,i=0;for(const d of ok){toast(L(`做 PDF… ${++i}/${ok.length}`,`Building PDF… ${i}/${ok.length}`));fst=await doAddPages(pdf,doPhotos(d.id),fst)}
       const f=ok.length===1?doFileName(ok[0]):`DO_${dmy(ok[0].do_date).replace(/\//g,"-")}_to_${dmy(ok.at(-1).do_date).replace(/\//g,"-")}_${ok.length}DO`;save(pdf.output("blob"),f+".pdf")}
     else{await loadJSZip();const z=new JSZip(),used=new Set();let i=0;for(const d of ok){toast(L(`做 PDF… ${++i}/${ok.length}`,`Building PDFs… ${i}/${ok.length}`));const pdf=new jsPDF({unit:"mm",format:"a4"});await doAddPages(pdf,doPhotos(d.id),true);
         let n=doFileName(d),k=2;while(used.has(n))n=doFileName(d)+"_"+k++;used.add(n);z.file(n+".pdf",pdf.output("blob"))}
@@ -861,7 +867,7 @@ function doList(){
   ${doFilterBar()}${rows.length!==S.d.delivery_orders.length?`<p class="mute" style="margin:0 0 8px;font-size:13px">${L(`显示 ${rows.length} / ${S.d.delivery_orders.length} 张`,`Showing ${rows.length} of ${S.d.delivery_orders.length}`)}</p>`:""}
   ${(()=>{S.doSel=S.doSel||new Set();const ids=new Set(rows.map(d=>d.id));[...S.doSel].forEach(x=>{if(!S.d.delivery_orders.some(d=>d.id===x))S.doSel.delete(x)});const n=S.doSel.size;
     return n?`<div class="selbar" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 8px;padding:8px 10px;border:1px solid var(--line);border-radius:8px"><b>${L(`已选 ${n} 张 DO`,`${n} DOs selected`)}</b><span style="flex:1"></span>
-      <button class="btn sm" onclick="doSelPdf('merge')">⬇ ${L("合并成一个 PDF","One merged PDF")}</button><button class="btn sec sm" onclick="doSelPdf('zip')">⬇ ${L("Zip（每张一个 PDF）","Zip (one PDF each)")}</button><button class="btn sec sm" onclick="S.doSel.clear();render()">✕ ${L("清除","Clear")}</button></div>`:""})()}
+      <label style="font-size:13px">${L("每页","Per page")} <select onchange="setPref('doSelPer',this.value)">${[1,4,6,8].map(k=>`<option value="${k}" ${Number(pref("doSelPer","6"))===k?"selected":""}>${k} ${L("张","DO")}</option>`).join("")}</select></label><button class="btn sm" onclick="doSelPdf('merge')">⬇ ${L("合并成一个 PDF","One merged PDF")}</button><button class="btn sec sm" onclick="doSelPdf('zip')">⬇ ${L("Zip（每张一个 PDF）","Zip (one PDF each)")}</button><button class="btn sec sm" onclick="S.doSel.clear();render()">✕ ${L("清除","Clear")}</button></div>`:""})()}
   ${rows.length?`<div class="tw"><table><thead><tr><th onclick="event.stopPropagation()"><input type="checkbox" title="${L("全选（筛选出来的）","Select all (filtered)")}" ${rows.length&&rows.every(d=>S.doSel.has(d.id))?"checked":""} onchange="${esc(`doSelAll(${JSON.stringify(rows.map(d=>d.id))},this.checked)`)}"></th><th>${L("日期","Date")}</th><th>DO No</th><th>${L("客户","Customer")}</th><th>Project</th><th>Service</th><th>${L("车牌","Vehicle")}</th>${l3?`<th>${L("司机","Driver")}</th>`:""}
     <th>In</th><th>Out</th><th>Day/Night</th><th>From</th><th>To</th><th class="num">${L("计费小时","Hrs")}</th><th class="num">Rate</th><th class="num">Surcharge</th><th class="num">${L("金额","Amount")}</th><th>Invoice</th><th>📷</th></tr></thead><tbody>
   ${rows.map(d=>`<tr class="click${S.doSel.has(d.id)?" sel":""}" onclick="editDO('${d.id}')"><td onclick="event.stopPropagation()"><input type="checkbox" ${S.doSel.has(d.id)?"checked":""} onchange="S.doSel[this.checked?'add':'delete']('${d.id}');render()"></td><td>${dmy(d.do_date)}</td><td>${esc(d.do_no)}${ovIds.has(d.id)?` <span class="tag bad" title="${L("同一辆车时间重叠 / 可能重复","Overlap / duplicate")}">⚠</span>`:""}${l3&&lateInvOf(d)?` <span class="tag warn" title="${L("这个月已开单，这张是补单","Late entry")}">${L("补单","Late")}</span>`:""}${d.price_note?` <span class="tag warn" title="${esc(d.price_note)}">${L("改价","Price")}</span>`:""}${d.record_only?` <span class="tag mute">NIL</span>`:""}${(d.edit_log||[]).length?` <span class="tag mute" title="${esc(d.edit_log.map(x=>dmy(x.at.slice(0,10))+" "+x.reason).join(" / "))}">${L("改过","Edited")}</span>`:""}</td><td>${esc(custName(d.customer_id))}</td><td>${esc(d.project)}</td><td>${esc(d.service)}${(d.charges||[]).length?` <span class="tag mute">+${d.charges.length}</span>`:""}</td>
